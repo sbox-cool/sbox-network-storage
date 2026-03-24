@@ -29,6 +29,7 @@ public static class SyncToolApi
 
 		var request = new HttpRequestMessage( new HttpMethod( method ), url );
 		request.Headers.Add( "x-api-key", SyncToolConfig.SecretKey );
+		request.Headers.Add( "x-public-key", SyncToolConfig.PublicApiKey );
 		request.Headers.Add( "User-Agent", "SyncTool-sbox/1.0" );
 
 		if ( body.HasValue )

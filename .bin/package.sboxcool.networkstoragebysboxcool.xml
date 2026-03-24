@@ -1,0 +1,161 @@
+<?xml version="1.0"?>
+<doc>
+    <assembly>
+        <name>package.sboxcool.networkstoragebysboxcool</name>
+    </assembly>
+    <members>
+        <member name="T:Sandbox.JsonHelpers">
+            <summary>
+            Shared JSON deserialization helpers for Network Storage responses.
+            Handles type coercion (string → number), missing keys, and fallback defaults.
+            </summary>
+        </member>
+        <member name="M:Sandbox.JsonHelpers.GetInt(System.Text.Json.JsonElement,System.String,System.Int32)">
+            <summary>Get an integer from a JSON element, with fallback.</summary>
+        </member>
+        <member name="M:Sandbox.JsonHelpers.GetFloat(System.Text.Json.JsonElement,System.String,System.Single)">
+            <summary>Get a float from a JSON element, with fallback.</summary>
+        </member>
+        <member name="M:Sandbox.JsonHelpers.GetString(System.Text.Json.JsonElement,System.String,System.String)">
+            <summary>Get a string from a JSON element, with fallback.</summary>
+        </member>
+        <member name="M:Sandbox.JsonHelpers.GetBool(System.Text.Json.JsonElement,System.String,System.Boolean)">
+            <summary>Get a bool from a JSON element, with fallback.</summary>
+        </member>
+        <member name="T:Sandbox.NetLog">
+            <summary>
+            Static ring buffer that captures Network Storage events for in-game debug windows.
+            Used internally by NetworkStorage and available for game code to log custom events.
+            </summary>
+        </member>
+        <member name="T:Sandbox.NetworkStorage">
+             <summary>
+             Network Storage client for sboxcool.com.
+             Call Configure() once at startup, then use the static methods to interact with your project.
+            
+             Example:
+               NetworkStorage.Configure( "your-project-id", "sbox_ns_your_key" );
+               var player = await NetworkStorage.CallEndpoint( "load-player" );
+               var values = await NetworkStorage.GetGameValues();
+               var doc = await NetworkStorage.GetDocument( "players", steamId );
+             </summary>
+        </member>
+        <member name="P:Sandbox.NetworkStorage.BaseUrl">
+            <summary>Base API URL (no trailing slash).</summary>
+        </member>
+        <member name="P:Sandbox.NetworkStorage.ApiVersion">
+            <summary>API version prefix.</summary>
+        </member>
+        <member name="P:Sandbox.NetworkStorage.ProjectId">
+            <summary>Your project ID from the sboxcool.com dashboard.</summary>
+        </member>
+        <member name="P:Sandbox.NetworkStorage.ApiKey">
+            <summary>Your public API key (sbox_ns_ prefix).</summary>
+        </member>
+        <member name="P:Sandbox.NetworkStorage.IsConfigured">
+            <summary>True after Configure() has been called with valid credentials.</summary>
+        </member>
+        <member name="P:Sandbox.NetworkStorage.ApiRoot">
+            <summary>The full versioned API root, e.g. https://api.sboxcool.com/v3</summary>
+        </member>
+        <member name="M:Sandbox.NetworkStorage.Configure(System.String,System.String,System.String,System.String)">
+            <summary>
+            Configure the client. Call once at game startup.
+            </summary>
+        </member>
+        <member name="M:Sandbox.NetworkStorage.CallEndpoint(System.String,System.Object)">
+            <summary>
+            Call a server endpoint by slug.
+            URL: {ApiRoot}/endpoints/{ProjectId}/{slug}
+            </summary>
+        </member>
+        <member name="M:Sandbox.NetworkStorage.GetGameValues">
+            <summary>
+            Load all game values (groups + tables).
+            URL: {ApiRoot}/values/{ProjectId}
+            </summary>
+        </member>
+        <member name="M:Sandbox.NetworkStorage.GetDocument(System.String,System.String)">
+            <summary>
+            Read a document from a collection.
+            URL: {ApiRoot}/storage/{ProjectId}/{collectionId}/{documentId}
+            If documentId is null, uses the current player's Steam ID.
+            </summary>
+        </member>
+        <member name="T:Sandbox.NetworkStorageExtensions">
+             <summary>
+             Extension helpers for working with Network Storage JSON responses.
+             Reduces boilerplate when parsing endpoint responses into game objects.
+            
+             Usage:
+               var ores = response.ReadDictionary( "ores", prop => (float)prop.GetDouble() );
+               var upgrades = response.ReadStringList( "purchasedUpgrades" );
+               var level = response.Int( "level", 1 );
+             </summary>
+        </member>
+        <member name="M:Sandbox.NetworkStorageExtensions.Int(System.Text.Json.JsonElement,System.String,System.Int32)">
+            <summary>Get an int from a JsonElement, with fallback.</summary>
+        </member>
+        <member name="M:Sandbox.NetworkStorageExtensions.Float(System.Text.Json.JsonElement,System.String,System.Single)">
+            <summary>Get a float from a JsonElement, with fallback.</summary>
+        </member>
+        <member name="M:Sandbox.NetworkStorageExtensions.Str(System.Text.Json.JsonElement,System.String,System.String)">
+            <summary>Get a string from a JsonElement, with fallback.</summary>
+        </member>
+        <member name="M:Sandbox.NetworkStorageExtensions.Bool(System.Text.Json.JsonElement,System.String,System.Boolean)">
+            <summary>Get a bool from a JsonElement, with fallback.</summary>
+        </member>
+        <member name="M:Sandbox.NetworkStorageExtensions.ReadStringList(System.Text.Json.JsonElement,System.String)">
+            <summary>
+            Read a JSON array property as a List of strings.
+            Returns empty list if property missing or wrong type.
+            </summary>
+        </member>
+        <member name="M:Sandbox.NetworkStorageExtensions.ReadDictionary``1(System.Text.Json.JsonElement,System.String,System.Func{System.Text.Json.JsonElement,``0})">
+            <summary>
+            Read a JSON object property as a Dictionary with a value converter.
+            Useful for ore inventories: response.ReadDictionary("ores", v => (float)v.GetDouble())
+            </summary>
+        </member>
+        <member name="M:Sandbox.NetworkStorageExtensions.ReadList``1(System.Text.Json.JsonElement,System.String,System.Func{System.Text.Json.JsonElement,``0})">
+            <summary>
+            Read a JSON array property as a List with a row converter.
+            Useful for tables: response.ReadList("rows", row => new OreInfo(row))
+            </summary>
+        </member>
+        <member name="M:Sandbox.NetworkStorageExtensions.FindMismatches(System.Text.Json.JsonElement,System.Collections.Generic.Dictionary{System.String,System.ValueTuple{System.Object,System.Func{System.Text.Json.JsonElement,System.Object}}})">
+            <summary>
+            Compare local state against a server response and return a list of mismatches.
+            Fields is a dictionary of fieldName → (localValue, serverExtractor).
+            </summary>
+        </member>
+        <member name="T:Sandbox.SaveStateTracker">
+             <summary>
+             Tracks the save state of endpoint calls for HUD feedback.
+             Wraps NetworkStorage.CallEndpoint with automatic state management and logging.
+            
+             Usage:
+               var tracker = new SaveStateTracker();
+               var result = await tracker.Call( "mine-ore", new { ore_id = "moon_ore", kg = 5 } );
+               if ( result.HasValue ) Apply( result.Value );
+            
+             Properties:
+               tracker.State     → Idle, Saving, Saved, Error
+               tracker.IsBusy    → true while any call is in progress
+               tracker.LastError → error message from last failure
+             </summary>
+        </member>
+        <member name="M:Sandbox.SaveStateTracker.Call(System.String,System.Object)">
+            <summary>
+            Call an endpoint with automatic save state tracking and logging.
+            Sets State to Saving → Saved/Error. Logs to NetLog.
+            </summary>
+        </member>
+        <member name="M:Sandbox.SaveStateTracker.CallAndApply(System.String,System.Object,System.Action,System.Action{System.Text.Json.JsonElement},System.Action)">
+            <summary>
+            Call an endpoint, apply the result to a callback on success, revert on failure.
+            Handles the optimistic update → server confirm → revert pattern.
+            </summary>
+        </member>
+    </members>
+</doc>

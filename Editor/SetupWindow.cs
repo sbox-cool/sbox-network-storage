@@ -511,10 +511,12 @@ public class SetupWindow : DockWindow
 		return key switch
 		{
 			KeyCode.Minus => shift ? '_' : '-',
+			KeyCode.Underscore => '_',
 			KeyCode.Period => '.',
 			KeyCode.Slash => '/',
 			KeyCode.Semicolon => shift ? ':' : ';',
 			KeyCode.Space => ' ',
+			KeyCode.Equal => shift ? '+' : '=',
 			_ => null
 		};
 	}
