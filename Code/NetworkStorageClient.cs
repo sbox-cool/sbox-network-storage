@@ -139,6 +139,7 @@ public static class NetworkStorage
 				result = await Http.RequestStringAsync( url );
 			}
 
+			Log.Info( $"[NetworkStorage] {slug} → {result}" );
 			var parsed = ParseResponse( slug, result );
 			if ( parsed.HasValue )
 				NetLog.Response( slug, TruncateJson( parsed.Value ) );
@@ -165,6 +166,7 @@ public static class NetworkStorage
 			var url = await BuildUrl( $"/values/{ProjectId}" );
 			NetLog.Request( "game-values", $"GET {ApiRoot}/values/{ProjectId}" );
 			var result = await Http.RequestStringAsync( url );
+			Log.Info( $"[NetworkStorage] game-values → {TruncateJson( result, 300 )}" );
 			var parsed = ParseResponse( "game-values", result );
 			if ( parsed.HasValue )
 				NetLog.Response( "game-values", $"OK ({result.Length} bytes)" );
@@ -196,6 +198,7 @@ public static class NetworkStorage
 
 			NetLog.Request( "storage", $"GET {collectionId}/{docId}" );
 			var result = await Http.RequestStringAsync( url );
+			Log.Info( $"[NetworkStorage] storage → {TruncateJson( result, 300 )}" );
 			var parsed = ParseResponse( "storage", result );
 			if ( parsed.HasValue )
 				NetLog.Response( "storage", $"OK ({result.Length} bytes)" );
@@ -357,9 +360,8 @@ public static class NetworkStorage
 		NetLog.Error( slug, $"{code}: {message}" );
 	}
 
-	private static string TruncateJson( JsonElement el )
-	{
-		var s = el.ToString() ?? "";
-		return s.Length > 120 ? s[..120] + "..." : s;
-	}
+	private static string TruncateJson( JsonElement el ) => TruncateJson( el.ToString() ?? "", 120 );
+
+	private static string TruncateJson( string s, int max = 120 )
+		=> s.Length > max ? s[..max] + "..." : s;
 }
