@@ -70,18 +70,24 @@ public class SyncToolWindow : DockWindow
 		window.Show();
 	}
 
+	private static string ResolvePath( string relativePath )
+		=> Editor.FileSystem.Root.GetFullPath( relativePath );
+
 	private void RefreshFileList()
 	{
-		_endpointFiles = Directory.Exists( SyncToolConfig.EndpointsPath )
-			? Directory.GetFiles( SyncToolConfig.EndpointsPath, "*.json" ).OrderBy( f => f ).ToArray()
+		var epDir = ResolvePath( SyncToolConfig.EndpointsPath );
+		_endpointFiles = Directory.Exists( epDir )
+			? Directory.GetFiles( epDir, "*.json" ).OrderBy( f => f ).ToArray()
 			: Array.Empty<string>();
 
-		_collectionFiles = Directory.Exists( SyncToolConfig.CollectionsPath )
-			? Directory.GetFiles( SyncToolConfig.CollectionsPath, "*.json" ).OrderBy( f => f ).ToArray()
+		var colDir = ResolvePath( SyncToolConfig.CollectionsPath );
+		_collectionFiles = Directory.Exists( colDir )
+			? Directory.GetFiles( colDir, "*.json" ).OrderBy( f => f ).ToArray()
 			: Array.Empty<string>();
 
-		_workflowFiles = Directory.Exists( SyncToolConfig.WorkflowsPath )
-			? Directory.GetFiles( SyncToolConfig.WorkflowsPath, "*.json" ).OrderBy( f => f ).ToArray()
+		var wfDir = ResolvePath( SyncToolConfig.WorkflowsPath );
+		_workflowFiles = Directory.Exists( wfDir )
+			? Directory.GetFiles( wfDir, "*.json" ).OrderBy( f => f ).ToArray()
 			: Array.Empty<string>();
 	}
 
@@ -962,14 +968,9 @@ public class SyncToolWindow : DockWindow
 			ok = false;
 		}
 
-		// Clear diff state and invalidate cached remote data so next check is fresh
+		// Clear diff state for this item only — keep other items' state intact
 		SetItemState( id, result: ok ? "OK" : "FAIL", remoteDiffers: false, diffSummary: "",
 			status: ok ? SyncStatus.InSync : null );
-
-		_remoteEndpoints = null;
-		_remoteCollections = null;
-		_remoteWorkflows = null;
-		_hasCheckedRemote = false;
 		_status = ok ? $"Pushed {id}" : $"Push failed for {id}";
 		_busy = false;
 		_busyItem = null;
@@ -1028,14 +1029,10 @@ public class SyncToolWindow : DockWindow
 
 		if ( ok )
 		{
-			SetItemState( id, result: "OK", remoteDiffers: false, diffSummary: "" );
+			SetItemState( id, result: "OK", remoteDiffers: false, diffSummary: "",
+				status: SyncStatus.InSync );
 			RefreshFileList();
-			// Invalidate cached remote data
-
-			_remoteEndpoints = null;
-			_remoteCollections = null;
-			_remoteWorkflows = null;
-			_hasCheckedRemote = false;
+			// Don't invalidate cached remote data — other items still need their state
 		}
 		else
 		{
@@ -1160,7 +1157,7 @@ public class SyncToolWindow : DockWindow
 				if ( epSlug != slug ) continue;
 
 				var localDict = SyncToolTransforms.ServerEndpointToLocal( ep );
-				var dir = SyncToolConfig.EndpointsPath;
+				var dir = ResolvePath( SyncToolConfig.EndpointsPath );
 				if ( !Directory.Exists( dir ) ) Directory.CreateDirectory( dir );
 
 				var json = JsonSerializer.Serialize( localDict, new JsonSerializerOptions { WriteIndented = true } );
@@ -1437,8 +1434,6 @@ public class SyncToolWindow : DockWindow
 					File.WriteAllText( localFile, json );
 
 					SetItemState( id, result: "OK", remoteDiffers: false, status: SyncStatus.InSync, diffSummary: "" );
-					_remoteCollections = null;
-					_hasCheckedRemote = false;
 					_status = $"Merged metadata for {colName}";
 					Update();
 				}

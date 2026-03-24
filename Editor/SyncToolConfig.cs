@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
 using System.Text.Json;
 using Sandbox;
@@ -55,45 +54,45 @@ public static class SyncToolConfig
 
 	// ── Paths ──
 
-	private static string ProjectRoot => Project.Current?.GetRootPath() ?? "";
+	private static BaseFileSystem Fs => Editor.FileSystem.Root;
 
 	/// <summary>Root path for all sync data: {project}/Editor/{DataFolder}/</summary>
-	public static string SyncToolsPath => Path.Combine( ProjectRoot, "Editor", DataFolder );
+	public static string SyncToolsPath => $"Editor/{DataFolder}";
 
 	/// <summary>Path to config/ directory.</summary>
-	public static string ConfigPath => Path.Combine( SyncToolsPath, "config" );
+	public static string ConfigPath => $"{SyncToolsPath}/config";
 
 	/// <summary>Path to config/public/ — safe to commit, ships with game.</summary>
-	public static string PublicConfigPath => Path.Combine( ConfigPath, "public" );
+	public static string PublicConfigPath => $"{ConfigPath}/public";
 
 	/// <summary>Path to config/secret/ — gitignored, editor-only, NEVER published.</summary>
-	public static string SecretConfigPath => Path.Combine( ConfigPath, "secret" );
+	public static string SecretConfigPath => $"{ConfigPath}/secret";
 
 	/// <summary>Path to the public project config file.</summary>
-	public static string ProjectConfigFile => Path.Combine( PublicConfigPath, "projectConfig.json" );
+	public static string ProjectConfigFile => $"{PublicConfigPath}/projectConfig.json";
 
 	/// <summary>Path to the secret key file.</summary>
-	public static string SecretKeyFile => Path.Combine( SecretConfigPath, "secret_key.json" );
+	public static string SecretKeyFile => $"{SecretConfigPath}/secret_key.json";
 
 	/// <summary>Path to the runtime credentials file in Assets/ (shipped with game).</summary>
-	public static string RuntimeCredentialsFile => Path.Combine( ProjectRoot, "Assets", "network-storage.credentials.json" );
+	public static string RuntimeCredentialsFile => "Assets/network-storage.credentials.json";
 
 	/// <summary>Path to collections/ directory.</summary>
-	public static string CollectionsPath => Path.Combine( SyncToolsPath, "collections" );
+	public static string CollectionsPath => $"{SyncToolsPath}/collections";
 
 	/// <summary>Path to the endpoints directory.</summary>
-	public static string EndpointsPath => Path.Combine( SyncToolsPath, "endpoints" );
+	public static string EndpointsPath => $"{SyncToolsPath}/endpoints";
 
 	/// <summary>Path to the workflows directory.</summary>
-	public static string WorkflowsPath => Path.Combine( SyncToolsPath, "workflows" );
+	public static string WorkflowsPath => $"{SyncToolsPath}/workflows";
 
 	/// <summary>Legacy paths for auto-migration.</summary>
-	public static string LegacyCollectionSchemaPath => Path.Combine( SyncToolsPath, "collection_schema.json" );
+	public static string LegacyCollectionSchemaPath => $"{SyncToolsPath}/collection_schema.json";
 
 	// Legacy .env locations for migration
-	private static string LegacyEnvInConfig => Path.Combine( ConfigPath, ".env" );
-	private static string LegacyEnvInRoot => Path.Combine( SyncToolsPath, ".env" );
-	private static string LegacyEnvInSyncTools => Path.Combine( ProjectRoot, "Editor", "SyncTools", ".env" );
+	private static string LegacyEnvInConfig => $"{ConfigPath}/.env";
+	private static string LegacyEnvInRoot => $"{SyncToolsPath}/.env";
+	private static string LegacyEnvInSyncTools => "Editor/SyncTools/.env";
 
 	// ── JSON options ──
 	private static readonly JsonSerializerOptions _jsonOptions = new() { WriteIndented = true };
@@ -117,21 +116,21 @@ public static class SyncToolConfig
 		DataFolder = "Network Storage";
 
 		// ── Try new split config first ──
-		if ( File.Exists( ProjectConfigFile ) )
+		if ( Fs.FileExists( ProjectConfigFile ) )
 		{
 			LoadPublicConfig( ProjectConfigFile );
-			if ( File.Exists( SecretKeyFile ) )
+			if ( Fs.FileExists( SecretKeyFile ) )
 				LoadSecretConfig( SecretKeyFile );
 			return;
 		}
 
 		// ── Try legacy .env locations for migration ──
 		string legacyEnv = null;
-		if ( File.Exists( LegacyEnvInConfig ) )
+		if ( Fs.FileExists( LegacyEnvInConfig ) )
 			legacyEnv = LegacyEnvInConfig;
-		else if ( File.Exists( LegacyEnvInRoot ) )
+		else if ( Fs.FileExists( LegacyEnvInRoot ) )
 			legacyEnv = LegacyEnvInRoot;
-		else if ( File.Exists( LegacyEnvInSyncTools ) )
+		else if ( Fs.FileExists( LegacyEnvInSyncTools ) )
 			legacyEnv = LegacyEnvInSyncTools;
 
 		if ( legacyEnv != null )
@@ -147,7 +146,7 @@ public static class SyncToolConfig
 
 	private static void LoadPublicConfig( string path )
 	{
-		var json = JsonSerializer.Deserialize<JsonElement>( File.ReadAllText( path ) );
+		var json = JsonSerializer.Deserialize<JsonElement>( Fs.ReadAllText( path ) );
 		ProjectId = json.TryGetProperty( "projectId", out var pid ) ? pid.GetString() ?? "" : "";
 		PublicApiKey = json.TryGetProperty( "publicKey", out var pk ) ? pk.GetString() ?? "" : "";
 		BaseUrl = json.TryGetProperty( "baseUrl", out var bu ) ? bu.GetString()?.TrimEnd( '/' ) ?? "https://api.sboxcool.com" : "https://api.sboxcool.com";
@@ -166,13 +165,13 @@ public static class SyncToolConfig
 
 	private static void LoadSecretConfig( string path )
 	{
-		var json = JsonSerializer.Deserialize<JsonElement>( File.ReadAllText( path ) );
+		var json = JsonSerializer.Deserialize<JsonElement>( Fs.ReadAllText( path ) );
 		SecretKey = json.TryGetProperty( "secretKey", out var sk ) ? sk.GetString() ?? "" : "";
 	}
 
 	private static void LoadLegacyEnv( string envPath )
 	{
-		foreach ( var line in File.ReadAllLines( envPath ) )
+		foreach ( var line in Fs.ReadAllText( envPath ).Split( '\n' ) )
 		{
 			var trimmed = line.Trim();
 			if ( string.IsNullOrEmpty( trimmed ) || trimmed.StartsWith( '#' ) ) continue;
@@ -238,12 +237,12 @@ public static class SyncToolConfig
 				_ => "api_then_json"
 			}
 		};
-		File.WriteAllText( ProjectConfigFile, JsonSerializer.Serialize( publicConfig, _jsonOptions ) );
+		Fs.WriteAllText( ProjectConfigFile, JsonSerializer.Serialize( publicConfig, _jsonOptions ) );
 		Log.Info( "[SyncTool] Public config saved to config/public/projectConfig.json" );
 
 		// ── Write secret key (gitignored, NEVER published) ──
 		var secretConfig = new Dictionary<string, string> { ["secretKey"] = SecretKey };
-		File.WriteAllText( SecretKeyFile, JsonSerializer.Serialize( secretConfig, _jsonOptions ) );
+		Fs.WriteAllText( SecretKeyFile, JsonSerializer.Serialize( secretConfig, _jsonOptions ) );
 		Log.Info( "[SyncTool] Secret key saved to config/secret/secret_key.json" );
 
 		// ── Write runtime credentials (ships with game, NO secret key) ──
@@ -259,15 +258,14 @@ public static class SyncToolConfig
 			var credsJson = JsonSerializer.Serialize( runtimeCreds, _jsonOptions );
 
 			// Write to Assets/ (s&box mounts this for runtime FileSystem access)
-			var assetsPath = Path.Combine( ProjectRoot, "Assets", "network-storage.credentials.json" );
-			File.WriteAllText( assetsPath, credsJson );
+			Fs.WriteAllText( RuntimeCredentialsFile, credsJson );
 			Log.Info( "[SyncTool] Runtime credentials written to Assets/network-storage.credentials.json" );
 		}
 
 		// ── Write .gitignore in secret/ to protect the key ──
-		var secretGitignore = Path.Combine( SecretConfigPath, ".gitignore" );
-		if ( !File.Exists( secretGitignore ) )
-			File.WriteAllText( secretGitignore, "*\n!.gitignore\n" );
+		var secretGitignore = $"{SecretConfigPath}/.gitignore";
+		if ( !Fs.FileExists( secretGitignore ) )
+			Fs.WriteAllText( secretGitignore, "*\n!.gitignore\n" );
 	}
 
 	/// <summary>
@@ -281,7 +279,7 @@ public static class SyncToolConfig
 	public static void SetDataSource( DataSourceMode mode )
 	{
 		DataSource = mode;
-		if ( File.Exists( ProjectConfigFile ) )
+		if ( Fs.FileExists( ProjectConfigFile ) )
 			Save( SecretKey, PublicApiKey, ProjectId, BaseUrl, mode );
 	}
 
@@ -294,21 +292,22 @@ public static class SyncToolConfig
 	{
 		var list = new List<(string, Dictionary<string, object>)>();
 
-		if ( Directory.Exists( CollectionsPath ) )
+		if ( Fs.DirectoryExists( CollectionsPath ) )
 		{
-			foreach ( var file in Directory.GetFiles( CollectionsPath, "*.json" ).OrderBy( f => f ) )
+			foreach ( var file in Fs.FindFile( CollectionsPath, "*.json" ).OrderBy( f => f ) )
 			{
-				var text = File.ReadAllText( file );
+				var fullPath = $"{CollectionsPath}/{file}";
+				var text = Fs.ReadAllText( fullPath );
 				var dict = JsonSerializer.Deserialize<Dictionary<string, object>>( text,
 					new JsonSerializerOptions { PropertyNameCaseInsensitive = true } );
 				var name = dict?.GetValueOrDefault( "name" )?.ToString()
-					?? Path.GetFileNameWithoutExtension( file );
+					?? System.IO.Path.GetFileNameWithoutExtension( file );
 				list.Add( (name, dict) );
 			}
 		}
-		else if ( File.Exists( LegacyCollectionSchemaPath ) )
+		else if ( Fs.FileExists( LegacyCollectionSchemaPath ) )
 		{
-			var text = File.ReadAllText( LegacyCollectionSchemaPath );
+			var text = Fs.ReadAllText( LegacyCollectionSchemaPath );
 			var schema = JsonSerializer.Deserialize<JsonElement>( text );
 			var dict = new Dictionary<string, object>
 			{
@@ -325,16 +324,17 @@ public static class SyncToolConfig
 	public static List<JsonElement> LoadEndpoints()
 	{
 		var list = new List<JsonElement>();
-		if ( !Directory.Exists( EndpointsPath ) ) return list;
+		if ( !Fs.DirectoryExists( EndpointsPath ) ) return list;
 
-		foreach ( var file in Directory.GetFiles( EndpointsPath, "*.json" ).OrderBy( f => f ) )
+		foreach ( var file in Fs.FindFile( EndpointsPath, "*.json" ).OrderBy( f => f ) )
 		{
-			var text = File.ReadAllText( file );
+			var fullPath = $"{EndpointsPath}/{file}";
+			var text = Fs.ReadAllText( fullPath );
 			var ep = JsonSerializer.Deserialize<JsonElement>( text );
 
 			if ( !ep.TryGetProperty( "slug", out _ ) )
 			{
-				var slug = Path.GetFileNameWithoutExtension( file );
+				var slug = System.IO.Path.GetFileNameWithoutExtension( file );
 				var dict = JsonSerializer.Deserialize<Dictionary<string, object>>( text );
 				dict["slug"] = slug;
 				ep = JsonSerializer.Deserialize<JsonElement>( JsonSerializer.Serialize( dict ) );
@@ -350,16 +350,17 @@ public static class SyncToolConfig
 	public static List<JsonElement> LoadWorkflows()
 	{
 		var list = new List<JsonElement>();
-		if ( !Directory.Exists( WorkflowsPath ) ) return list;
+		if ( !Fs.DirectoryExists( WorkflowsPath ) ) return list;
 
-		foreach ( var file in Directory.GetFiles( WorkflowsPath, "*.json" ).OrderBy( f => f ) )
+		foreach ( var file in Fs.FindFile( WorkflowsPath, "*.json" ).OrderBy( f => f ) )
 		{
-			var text = File.ReadAllText( file );
+			var fullPath = $"{WorkflowsPath}/{file}";
+			var text = Fs.ReadAllText( fullPath );
 			var wf = JsonSerializer.Deserialize<JsonElement>( text );
 
 			if ( !wf.TryGetProperty( "id", out _ ) )
 			{
-				var id = Path.GetFileNameWithoutExtension( file );
+				var id = System.IO.Path.GetFileNameWithoutExtension( file );
 				var dict = JsonSerializer.Deserialize<Dictionary<string, object>>( text );
 				dict["id"] = id;
 				wf = JsonSerializer.Deserialize<JsonElement>( JsonSerializer.Serialize( dict ) );
@@ -385,17 +386,19 @@ public static class SyncToolConfig
 	public static void SaveEndpoints( List<Dictionary<string, object>> endpoints )
 	{
 		EnsureSyncToolsDir();
-		if ( !Directory.Exists( EndpointsPath ) )
-			Directory.CreateDirectory( EndpointsPath );
 
-		foreach ( var file in Directory.GetFiles( EndpointsPath, "*.json" ) )
-			File.Delete( file );
+		if ( !Fs.DirectoryExists( EndpointsPath ) )
+			Fs.CreateDirectory( EndpointsPath );
+
+		// Clear existing endpoint files
+		foreach ( var file in Fs.FindFile( EndpointsPath, "*.json" ) )
+			Fs.DeleteFile( $"{EndpointsPath}/{file}" );
 
 		foreach ( var ep in endpoints )
 		{
 			var slug = ep.TryGetValue( "slug", out var s ) ? s?.ToString() ?? "unknown" : "unknown";
-			var path = Path.Combine( EndpointsPath, $"{slug}.json" );
-			File.WriteAllText( path, JsonSerializer.Serialize( ep, _writeOptions ) );
+			var path = $"{EndpointsPath}/{slug}.json";
+			Fs.WriteAllText( path, JsonSerializer.Serialize( ep, _writeOptions ) );
 		}
 
 		Log.Info( $"[SyncTool] Saved {endpoints.Count} endpoint files to endpoints/" );
@@ -405,17 +408,19 @@ public static class SyncToolConfig
 	public static void SaveWorkflows( List<Dictionary<string, object>> workflows )
 	{
 		EnsureSyncToolsDir();
-		if ( !Directory.Exists( WorkflowsPath ) )
-			Directory.CreateDirectory( WorkflowsPath );
 
-		foreach ( var file in Directory.GetFiles( WorkflowsPath, "*.json" ) )
-			File.Delete( file );
+		if ( !Fs.DirectoryExists( WorkflowsPath ) )
+			Fs.CreateDirectory( WorkflowsPath );
+
+		// Clear existing workflow files
+		foreach ( var file in Fs.FindFile( WorkflowsPath, "*.json" ) )
+			Fs.DeleteFile( $"{WorkflowsPath}/{file}" );
 
 		foreach ( var wf in workflows )
 		{
 			var id = wf.TryGetValue( "id", out var s ) ? s?.ToString() ?? "unknown" : "unknown";
-			var path = Path.Combine( WorkflowsPath, $"{id}.json" );
-			File.WriteAllText( path, JsonSerializer.Serialize( wf, _writeOptions ) );
+			var path = $"{WorkflowsPath}/{id}.json";
+			Fs.WriteAllText( path, JsonSerializer.Serialize( wf, _writeOptions ) );
 		}
 
 		Log.Info( $"[SyncTool] Saved {workflows.Count} workflow files to workflows/" );
@@ -425,11 +430,11 @@ public static class SyncToolConfig
 	public static void SaveWorkflow( string id, Dictionary<string, object> data )
 	{
 		EnsureSyncToolsDir();
-		if ( !Directory.Exists( WorkflowsPath ) )
-			Directory.CreateDirectory( WorkflowsPath );
+		if ( !Fs.DirectoryExists( WorkflowsPath ) )
+			Fs.CreateDirectory( WorkflowsPath );
 
-		var path = Path.Combine( WorkflowsPath, $"{id}.json" );
-		File.WriteAllText( path, JsonSerializer.Serialize( data, _writeOptions ) );
+		var path = $"{WorkflowsPath}/{id}.json";
+		Fs.WriteAllText( path, JsonSerializer.Serialize( data, _writeOptions ) );
 		Log.Info( $"[SyncTool] Saved workflows/{id}.json" );
 	}
 
@@ -437,11 +442,11 @@ public static class SyncToolConfig
 	public static void SaveCollection( string name, Dictionary<string, object> data )
 	{
 		EnsureSyncToolsDir();
-		if ( !Directory.Exists( CollectionsPath ) )
-			Directory.CreateDirectory( CollectionsPath );
+		if ( !Fs.DirectoryExists( CollectionsPath ) )
+			Fs.CreateDirectory( CollectionsPath );
 
-		var path = Path.Combine( CollectionsPath, $"{name}.json" );
-		File.WriteAllText( path, JsonSerializer.Serialize( data, _writeOptions ) );
+		var path = $"{CollectionsPath}/{name}.json";
+		Fs.WriteAllText( path, JsonSerializer.Serialize( data, _writeOptions ) );
 		Log.Info( $"[SyncTool] Saved collections/{name}.json" );
 	}
 
@@ -455,28 +460,28 @@ public static class SyncToolConfig
 	/// <summary>Check if local data files exist.</summary>
 	public static bool HasLocalData()
 	{
-		return File.Exists( LegacyCollectionSchemaPath )
-			|| ( Directory.Exists( CollectionsPath ) && Directory.GetFiles( CollectionsPath, "*.json" ).Length > 0 )
-			|| ( Directory.Exists( EndpointsPath ) && Directory.GetFiles( EndpointsPath, "*.json" ).Length > 0 )
-			|| ( Directory.Exists( WorkflowsPath ) && Directory.GetFiles( WorkflowsPath, "*.json" ).Length > 0 );
+		return Fs.FileExists( LegacyCollectionSchemaPath )
+			|| ( Fs.DirectoryExists( CollectionsPath ) && Fs.FindFile( CollectionsPath, "*.json" ).Any() )
+			|| ( Fs.DirectoryExists( EndpointsPath ) && Fs.FindFile( EndpointsPath, "*.json" ).Any() )
+			|| ( Fs.DirectoryExists( WorkflowsPath ) && Fs.FindFile( WorkflowsPath, "*.json" ).Any() );
 	}
 
 	private static void EnsureSyncToolsDir()
 	{
-		if ( !Directory.Exists( SyncToolsPath ) )
-			Directory.CreateDirectory( SyncToolsPath );
-		if ( !Directory.Exists( ConfigPath ) )
-			Directory.CreateDirectory( ConfigPath );
-		if ( !Directory.Exists( PublicConfigPath ) )
-			Directory.CreateDirectory( PublicConfigPath );
-		if ( !Directory.Exists( SecretConfigPath ) )
-			Directory.CreateDirectory( SecretConfigPath );
-		if ( !Directory.Exists( CollectionsPath ) )
-			Directory.CreateDirectory( CollectionsPath );
-		if ( !Directory.Exists( EndpointsPath ) )
-			Directory.CreateDirectory( EndpointsPath );
-		if ( !Directory.Exists( WorkflowsPath ) )
-			Directory.CreateDirectory( WorkflowsPath );
+		if ( !Fs.DirectoryExists( SyncToolsPath ) )
+			Fs.CreateDirectory( SyncToolsPath );
+		if ( !Fs.DirectoryExists( ConfigPath ) )
+			Fs.CreateDirectory( ConfigPath );
+		if ( !Fs.DirectoryExists( PublicConfigPath ) )
+			Fs.CreateDirectory( PublicConfigPath );
+		if ( !Fs.DirectoryExists( SecretConfigPath ) )
+			Fs.CreateDirectory( SecretConfigPath );
+		if ( !Fs.DirectoryExists( CollectionsPath ) )
+			Fs.CreateDirectory( CollectionsPath );
+		if ( !Fs.DirectoryExists( EndpointsPath ) )
+			Fs.CreateDirectory( EndpointsPath );
+		if ( !Fs.DirectoryExists( WorkflowsPath ) )
+			Fs.CreateDirectory( WorkflowsPath );
 	}
 
 	// ──────────────────────────────────────────────────────
@@ -502,17 +507,17 @@ public static class SyncToolConfig
 			["dataFolder"] = "Network Storage",
 			["dataSource"] = "api_then_json"
 		};
-		File.WriteAllText( ProjectConfigFile, JsonSerializer.Serialize( publicConfig, _jsonOptions ) );
+		Fs.WriteAllText( ProjectConfigFile, JsonSerializer.Serialize( publicConfig, _jsonOptions ) );
 
 		// ── Secret key with placeholder ──
 		var secretConfig = new Dictionary<string, string>
 		{
 			["secretKey"] = "sbox_sk_your_secret_key_here"
 		};
-		File.WriteAllText( SecretKeyFile, JsonSerializer.Serialize( secretConfig, _jsonOptions ) );
+		Fs.WriteAllText( SecretKeyFile, JsonSerializer.Serialize( secretConfig, _jsonOptions ) );
 
 		// ── .gitignore in secret/ — ignore everything ──
-		File.WriteAllText( Path.Combine( SecretConfigPath, ".gitignore" ), "*\n!.gitignore\n" );
+		Fs.WriteAllText( $"{SecretConfigPath}/.gitignore", "*\n!.gitignore\n" );
 
 		// ── Sample collection ──
 		var sampleCollection = @"{
@@ -524,7 +529,7 @@ public static class SyncToolConfig
     ""level"": { ""type"": ""number"", ""default"": 1 }
   }
 }";
-		File.WriteAllText( Path.Combine( CollectionsPath, "players.json" ), sampleCollection );
+		Fs.WriteAllText( $"{CollectionsPath}/players.json", sampleCollection );
 
 		// ── Sample endpoint ──
 		var sampleEndpoint = @"{
@@ -553,7 +558,7 @@ public static class SyncToolConfig
     }
   ]
 }";
-		File.WriteAllText( Path.Combine( EndpointsPath, "init-player.json" ), sampleEndpoint );
+		Fs.WriteAllText( $"{EndpointsPath}/init-player.json", sampleEndpoint );
 
 		Log.Info( "[NetworkStorage] Scaffolding complete. Open Editor → Network Storage → Setup to enter your API keys." );
 	}
