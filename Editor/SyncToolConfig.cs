@@ -52,14 +52,20 @@ public static class SyncToolConfig
 	/// <summary>Root path for all sync data: {project}/Editor/{DataFolder}/</summary>
 	public static string SyncToolsPath => Path.Combine( ProjectRoot, "Editor", DataFolder );
 
+	/// <summary>Path to config/ directory (contains .env and other config).</summary>
+	public static string ConfigPath => Path.Combine( SyncToolsPath, "config" );
+
 	/// <summary>Path to the .env file with credentials (gitignored, never published).</summary>
-	public static string EnvFilePath => Path.Combine( SyncToolsPath, ".env" );
+	public static string EnvFilePath => Path.Combine( ConfigPath, ".env" );
 
 	/// <summary>Path to collections/ directory (one JSON file per collection).</summary>
 	public static string CollectionsPath => Path.Combine( SyncToolsPath, "collections" );
 
 	/// <summary>Path to the endpoints directory.</summary>
 	public static string EndpointsPath => Path.Combine( SyncToolsPath, "endpoints" );
+
+	/// <summary>Path to the workflows directory.</summary>
+	public static string WorkflowsPath => Path.Combine( SyncToolsPath, "workflows" );
 
 	/// <summary>Legacy paths for auto-migration.</summary>
 	public static string LegacyCollectionSchemaPath => Path.Combine( SyncToolsPath, "collection_schema.json" );
@@ -82,19 +88,27 @@ public static class SyncToolConfig
 		DataSource = DataSourceMode.ApiThenJson;
 		DataFolder = "Network Storage";
 
-		// Try current path first, fall back to legacy Editor/SyncTools/
+		// Try current path first, then old root location, then legacy Editor/SyncTools/
 		var envPath = EnvFilePath;
 		if ( !File.Exists( envPath ) )
 		{
+			// Check old location (root of Network Storage folder, before config/ subfolder)
+			var oldRootEnv = Path.Combine( SyncToolsPath, ".env" );
 			var legacyEnv = Path.Combine( LegacySyncToolsPath, ".env" );
-			if ( File.Exists( legacyEnv ) )
+
+			if ( File.Exists( oldRootEnv ) )
+			{
+				Log.Info( "[SyncTool] Found .env at root — will migrate to config/ on next save" );
+				envPath = oldRootEnv;
+			}
+			else if ( File.Exists( legacyEnv ) )
 			{
 				Log.Info( "[SyncTool] Found legacy .env at Editor/SyncTools/ — will migrate on next save" );
 				envPath = legacyEnv;
 			}
 			else
 			{
-				Log.Warning( $"[SyncTool] .env file not found at {envPath}" );
+				ScaffoldProject();
 				return;
 			}
 		}
@@ -141,9 +155,7 @@ public static class SyncToolConfig
 		if ( dataFolder != null )
 			DataFolder = dataFolder;
 
-		var dir = SyncToolsPath;
-		if ( !Directory.Exists( dir ) )
-			Directory.CreateDirectory( dir );
+		EnsureSyncToolsDir();
 
 		SecretKey = secretKey ?? "";
 		PublicApiKey = publicApiKey ?? "";
@@ -257,6 +269,31 @@ public static class SyncToolConfig
 		return list;
 	}
 
+	/// <summary>Load all workflow definitions from the workflows/ directory.</summary>
+	public static List<JsonElement> LoadWorkflows()
+	{
+		var list = new List<JsonElement>();
+		if ( !Directory.Exists( WorkflowsPath ) ) return list;
+
+		foreach ( var file in Directory.GetFiles( WorkflowsPath, "*.json" ).OrderBy( f => f ) )
+		{
+			var text = File.ReadAllText( file );
+			var wf = JsonSerializer.Deserialize<JsonElement>( text );
+
+			if ( !wf.TryGetProperty( "id", out _ ) )
+			{
+				var id = Path.GetFileNameWithoutExtension( file );
+				var dict = JsonSerializer.Deserialize<Dictionary<string, object>>( text );
+				dict["id"] = id;
+				wf = JsonSerializer.Deserialize<JsonElement>( JsonSerializer.Serialize( dict ) );
+			}
+
+			list.Add( wf );
+		}
+
+		return list;
+	}
+
 	// ──────────────────────────────────────────────────────
 	//  Data file writers (for Pull)
 	// ──────────────────────────────────────────────────────
@@ -293,6 +330,44 @@ public static class SyncToolConfig
 		Log.Info( $"[SyncTool] Saved {endpoints.Count} endpoint files to endpoints/" );
 	}
 
+	/// <summary>
+	/// Save workflow definitions as individual JSON files in workflows/ directory.
+	/// </summary>
+	public static void SaveWorkflows( List<Dictionary<string, object>> workflows )
+	{
+		EnsureSyncToolsDir();
+
+		if ( !Directory.Exists( WorkflowsPath ) )
+			Directory.CreateDirectory( WorkflowsPath );
+
+		// Clear existing workflow files
+		foreach ( var file in Directory.GetFiles( WorkflowsPath, "*.json" ) )
+			File.Delete( file );
+
+		foreach ( var wf in workflows )
+		{
+			var id = wf.TryGetValue( "id", out var s ) ? s?.ToString() ?? "unknown" : "unknown";
+			var path = Path.Combine( WorkflowsPath, $"{id}.json" );
+			var json = JsonSerializer.Serialize( wf, _writeOptions );
+			File.WriteAllText( path, json );
+		}
+
+		Log.Info( $"[SyncTool] Saved {workflows.Count} workflow files to workflows/" );
+	}
+
+	/// <summary>Save a single workflow to workflows/{id}.json.</summary>
+	public static void SaveWorkflow( string id, Dictionary<string, object> data )
+	{
+		EnsureSyncToolsDir();
+		if ( !Directory.Exists( WorkflowsPath ) )
+			Directory.CreateDirectory( WorkflowsPath );
+
+		var path = Path.Combine( WorkflowsPath, $"{id}.json" );
+		var json = JsonSerializer.Serialize( data, _writeOptions );
+		File.WriteAllText( path, json );
+		Log.Info( $"[SyncTool] Saved workflows/{id}.json ({json.Length} bytes)" );
+	}
+
 	/// <summary>Save a collection to collections/{name}.json.</summary>
 	public static void SaveCollection( string name, Dictionary<string, object> data )
 	{
@@ -318,12 +393,118 @@ public static class SyncToolConfig
 	{
 		return File.Exists( LegacyCollectionSchemaPath )
 			|| ( Directory.Exists( CollectionsPath ) && Directory.GetFiles( CollectionsPath, "*.json" ).Length > 0 )
-			|| ( Directory.Exists( EndpointsPath ) && Directory.GetFiles( EndpointsPath, "*.json" ).Length > 0 );
+			|| ( Directory.Exists( EndpointsPath ) && Directory.GetFiles( EndpointsPath, "*.json" ).Length > 0 )
+			|| ( Directory.Exists( WorkflowsPath ) && Directory.GetFiles( WorkflowsPath, "*.json" ).Length > 0 );
 	}
 
 	private static void EnsureSyncToolsDir()
 	{
 		if ( !Directory.Exists( SyncToolsPath ) )
 			Directory.CreateDirectory( SyncToolsPath );
+		if ( !Directory.Exists( ConfigPath ) )
+			Directory.CreateDirectory( ConfigPath );
+		if ( !Directory.Exists( CollectionsPath ) )
+			Directory.CreateDirectory( CollectionsPath );
+		if ( !Directory.Exists( EndpointsPath ) )
+			Directory.CreateDirectory( EndpointsPath );
+		if ( !Directory.Exists( WorkflowsPath ) )
+			Directory.CreateDirectory( WorkflowsPath );
+	}
+
+	// ──────────────────────────────────────────────────────
+	//  First-install scaffolding
+	// ──────────────────────────────────────────────────────
+
+	/// <summary>
+	/// Creates the full Editor/Network Storage/ folder structure with sample files
+	/// on first install when no .env exists.
+	/// </summary>
+	private static void ScaffoldProject()
+	{
+		Log.Info( "[NetworkStorage] First install detected — scaffolding Editor/Network Storage/ ..." );
+
+		EnsureSyncToolsDir();
+
+		// ── .env with placeholder keys ──
+		var envLines = new[]
+		{
+			"# Network Storage credentials",
+			"# Stored in Editor/ — excluded from publishing, safe for secrets",
+			"# NEVER commit this file to version control",
+			"#",
+			"# Get your keys from https://sbox.cool → Dashboard → API Keys",
+			"",
+			"# Project identifier from your sbox.cool dashboard",
+			"SBOXCOOL_PROJECT_ID=your-project-id-here",
+			"",
+			"# Public API key (sbox_ns_ prefix) — used by the game client at runtime",
+			"SBOXCOOL_PUBLIC_KEY=sbox_ns_your_public_key_here",
+			"",
+			"# Secret key (sbox_sk_ prefix) — used by editor sync tool only, NEVER ships",
+			"SBOXCOOL_SECRET_KEY=sbox_sk_your_secret_key_here",
+			"",
+			"# Base URL (default: https://api.sboxcool.com)",
+			"SBOXCOOL_BASE_URL=https://api.sboxcool.com",
+			"",
+			"# API version (default: v3)",
+			"SBOXCOOL_API_VERSION=v3",
+			"",
+			"# Editor subfolder for sync data (default: Network Storage)",
+			"SBOXCOOL_DATA_FOLDER=Network Storage",
+			"",
+			"# Data source for GET requests: api_then_json, api_only, json_only",
+			"SBOXCOOL_DATA_SOURCE=api_then_json"
+		};
+		File.WriteAllLines( EnvFilePath, envLines );
+
+		// ── Sample collection: players.json ──
+		var sampleCollection = @"{
+  ""name"": ""players"",
+  ""scope"": ""user"",
+  ""schema"": {
+    ""currency"": { ""type"": ""number"", ""default"": 0 },
+    ""xp"": { ""type"": ""number"", ""default"": 0 },
+    ""level"": { ""type"": ""number"", ""default"": 1 }
+  }
+}";
+		File.WriteAllText( Path.Combine( CollectionsPath, "players.json" ), sampleCollection );
+
+		// ── Sample endpoint: init-player.json ──
+		var sampleEndpoint = @"{
+  ""slug"": ""init-player"",
+  ""description"": ""Initialize a new player with default values"",
+  ""steps"": [
+    {
+      ""type"": ""read"",
+      ""collection"": ""players"",
+      ""as"": ""player""
+    },
+    {
+      ""type"": ""condition"",
+      ""field"": ""player"",
+      ""operator"": ""is_null"",
+      ""onFail"": ""return""
+    },
+    {
+      ""type"": ""write"",
+      ""collection"": ""players"",
+      ""data"": {
+        ""currency"": 0,
+        ""xp"": 0,
+        ""level"": 1
+      }
+    }
+  ]
+}";
+		File.WriteAllText( Path.Combine( EndpointsPath, "init-player.json" ), sampleEndpoint );
+
+		// ── .gitignore for .env in config/ ──
+		var gitignorePath = Path.Combine( ConfigPath, ".gitignore" );
+		if ( !File.Exists( gitignorePath ) )
+		{
+			File.WriteAllText( gitignorePath, ".env\n" );
+		}
+
+		Log.Info( "[NetworkStorage] Scaffolding complete. Open Editor → Network Storage → Setup to enter your API keys." );
 	}
 }

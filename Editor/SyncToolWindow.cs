@@ -28,10 +28,12 @@ public class SyncToolWindow : DockWindow
 	// Cached file lists
 	private string[] _endpointFiles = Array.Empty<string>();
 	private string[] _collectionFiles = Array.Empty<string>(); // collections/{name}.json
+	private string[] _workflowFiles = Array.Empty<string>(); // workflows/{id}.json
 
 	// Remote data cache (from last check)
 	private JsonElement? _remoteEndpoints;
 	private JsonElement? _remoteCollections;
+	private JsonElement? _remoteWorkflows;
 
 	private struct ClickRegion
 	{
@@ -76,6 +78,10 @@ public class SyncToolWindow : DockWindow
 
 		_collectionFiles = Directory.Exists( SyncToolConfig.CollectionsPath )
 			? Directory.GetFiles( SyncToolConfig.CollectionsPath, "*.json" ).OrderBy( f => f ).ToArray()
+			: Array.Empty<string>();
+
+		_workflowFiles = Directory.Exists( SyncToolConfig.WorkflowsPath )
+			? Directory.GetFiles( SyncToolConfig.WorkflowsPath, "*.json" ).OrderBy( f => f ).ToArray()
 			: Array.Empty<string>();
 	}
 
@@ -196,6 +202,37 @@ public class SyncToolWindow : DockWindow
 			Paint.SetDefaultFont( size: 10 );
 			Paint.SetPen( Color.White.WithAlpha( 0.3f ) );
 			Paint.DrawText( new Rect( pad + 8, y, w, 16 ), "No collections found", TextFlag.LeftCenter );
+			y += 22;
+		}
+
+		DrawSeparator( ref y, w, pad );
+
+		// ── Workflows ──
+		var localWfIds = _workflowFiles.Select( f => Path.GetFileNameWithoutExtension( f ) ).ToHashSet();
+		var remoteWfIds = GetRemoteWorkflowIds();
+		var allWfIds = new HashSet<string>( localWfIds );
+		foreach ( var id2 in remoteWfIds ) allWfIds.Add( id2 );
+
+		DrawSectionHeader( ref y, pad, w, $"WORKFLOWS ({allWfIds.Count})" );
+
+		if ( allWfIds.Count > 0 )
+		{
+			foreach ( var wfId in allWfIds.OrderBy( n => n ) )
+			{
+				var itemId = $"wf_{wfId}";
+				var hasLocal = localWfIds.Contains( wfId );
+				var info = hasLocal ? GetWorkflowInfo( _workflowFiles.FirstOrDefault( f => Path.GetFileNameWithoutExtension( f ) == wfId ) ) : "remote only";
+
+				DrawResourceRow( ref y, pad, w, $"{wfId}.json", info, itemId,
+					hasLocal ? () => PushItem( itemId ) : null,
+					() => PullItem( itemId ) );
+			}
+		}
+		else
+		{
+			Paint.SetDefaultFont( size: 10 );
+			Paint.SetPen( Color.White.WithAlpha( 0.3f ) );
+			Paint.DrawText( new Rect( pad + 8, y, w, 16 ), "No workflow files found", TextFlag.LeftCenter );
 			y += 22;
 		}
 
@@ -478,6 +515,33 @@ public class SyncToolWindow : DockWindow
 		return collections.Select( c => c.Name ).ToList();
 	}
 
+	private List<string> GetRemoteWorkflowIds()
+	{
+		if ( !_remoteWorkflows.HasValue ) return new List<string>();
+		var data = _remoteWorkflows.Value;
+		if ( data.TryGetProperty( "data", out var d ) ) data = d;
+		if ( data.ValueKind != JsonValueKind.Array ) return new List<string>();
+
+		var ids = new List<string>();
+		foreach ( var wf in data.EnumerateArray() )
+		{
+			if ( wf.TryGetProperty( "id", out var id ) )
+				ids.Add( id.GetString() );
+		}
+		return ids;
+	}
+
+	private string GetWorkflowInfo( string filePath )
+	{
+		try
+		{
+			var text = File.ReadAllText( filePath );
+			var wf = JsonSerializer.Deserialize<JsonElement>( text );
+			return wf.TryGetProperty( "name", out var n ) ? n.GetString() : "workflow";
+		}
+		catch { return ""; }
+	}
+
 	private string GetEndpointInfo( string filePath )
 	{
 		try
@@ -663,6 +727,61 @@ public class SyncToolWindow : DockWindow
 			}
 		}
 
+		// ── Check workflows ──
+		var remoteWfIds = new HashSet<string>();
+		_remoteWorkflows = await SyncToolApi.GetWorkflows();
+		if ( _remoteWorkflows.HasValue )
+		{
+			var workflows = SyncToolTransforms.ServerToWorkflows( _remoteWorkflows.Value );
+			foreach ( var (wfId, remoteLocal) in workflows )
+			{
+				remoteWfIds.Add( wfId );
+				var id = $"wf_{wfId}";
+				var remoteJson = JsonSerializer.Serialize( remoteLocal, new JsonSerializerOptions { WriteIndented = true } );
+				var localFile = _workflowFiles.FirstOrDefault( f => Path.GetFileNameWithoutExtension( f ) == wfId );
+
+				if ( localFile == null )
+				{
+					SetItemState( id, remoteDiffers: true, status: SyncStatus.RemoteOnly,
+						diffSummary: "Remote only — no local file",
+						localJson: "", remoteJson: PrettyJson( remoteJson ) );
+					diffs++;
+				}
+				else
+				{
+					var localJson = File.ReadAllText( localFile );
+					var differs = NormalizeJson( remoteJson ) != NormalizeJson( localJson );
+
+					if ( differs )
+					{
+						SetItemState( id, remoteDiffers: true, status: SyncStatus.Differs, diffSummary: "Content differs",
+							localJson: PrettyJson( localJson ), remoteJson: PrettyJson( remoteJson ) );
+						diffs++;
+					}
+					else
+					{
+						SetItemState( id, remoteDiffers: false, status: SyncStatus.InSync,
+							localJson: PrettyJson( localJson ), remoteJson: PrettyJson( remoteJson ) );
+					}
+				}
+			}
+		}
+
+		// Detect local-only workflows
+		foreach ( var file in _workflowFiles )
+		{
+			var wfId = Path.GetFileNameWithoutExtension( file );
+			if ( !remoteWfIds.Contains( wfId ) )
+			{
+				var id = $"wf_{wfId}";
+				var localJson = File.ReadAllText( file );
+				SetItemState( id, remoteDiffers: false, status: SyncStatus.LocalOnly,
+					diffSummary: "Local only — not pushed to server",
+					localJson: PrettyJson( localJson ), remoteJson: "" );
+				localOnlyCount++;
+			}
+		}
+
 		_hasCheckedRemote = true;
 		var parts = new List<string>();
 		if ( diffs > 0 ) parts.Add( $"{diffs} remote diff(s)" );
@@ -749,7 +868,8 @@ public class SyncToolWindow : DockWindow
 			foreach ( var f in _endpointFiles )
 			{
 				var slug = Path.GetFileNameWithoutExtension( f );
-				SetItemState( $"ep_{slug}", result: ok ? "OK" : "FAIL" );
+				SetItemState( $"ep_{slug}", result: ok ? "OK" : "FAIL",
+					remoteDiffers: false, diffSummary: "", status: ok ? SyncStatus.InSync : null );
 			}
 		}
 
@@ -760,7 +880,19 @@ public class SyncToolWindow : DockWindow
 			Update();
 			var ok = await DoPushCollections();
 			foreach ( var f in _collectionFiles )
-				SetItemState( $"col_{Path.GetFileNameWithoutExtension( f )}", result: ok ? "OK" : "FAIL" );
+				SetItemState( $"col_{Path.GetFileNameWithoutExtension( f )}", result: ok ? "OK" : "FAIL",
+					remoteDiffers: false, diffSummary: "", status: ok ? SyncStatus.InSync : null );
+		}
+
+		// Push workflows
+		if ( _workflowFiles.Length > 0 )
+		{
+			_busyItem = "push_wf";
+			Update();
+			var ok = await DoPushAllWorkflows();
+			foreach ( var f in _workflowFiles )
+				SetItemState( $"wf_{Path.GetFileNameWithoutExtension( f )}", result: ok ? "OK" : "FAIL",
+					remoteDiffers: false, diffSummary: "", status: ok ? SyncStatus.InSync : null );
 		}
 
 		// Invalidate cached remote data — next check will fetch fresh
@@ -768,6 +900,7 @@ public class SyncToolWindow : DockWindow
 
 		_remoteEndpoints = null;
 		_remoteCollections = null;
+		_remoteWorkflows = null;
 		_hasCheckedRemote = false;
 
 		var okCount = _items.Values.Count( s => s.SyncResult == "OK" );
@@ -785,6 +918,7 @@ public class SyncToolWindow : DockWindow
 		_items.TryGetValue( id, out var state );
 		var label = id.StartsWith( "ep_" ) ? $"endpoint '{id[3..]}'"
 			: id.StartsWith( "col_" ) ? $"collection '{id[4..]}'"
+			: id.StartsWith( "wf_" ) ? $"workflow '{id[3..]}'"
 			: "resource";
 
 		if ( state.RemoteDiffers )
@@ -819,16 +953,22 @@ public class SyncToolWindow : DockWindow
 		{
 			ok = await DoPushCollections();
 		}
+		else if ( id.StartsWith( "wf_" ) )
+		{
+			ok = await DoPushAllWorkflows();
+		}
 		else
 		{
 			ok = false;
 		}
 
 		// Clear diff state and invalidate cached remote data so next check is fresh
-		SetItemState( id, result: ok ? "OK" : "FAIL", remoteDiffers: false, diffSummary: "" );
+		SetItemState( id, result: ok ? "OK" : "FAIL", remoteDiffers: false, diffSummary: "",
+			status: ok ? SyncStatus.InSync : null );
 
 		_remoteEndpoints = null;
 		_remoteCollections = null;
+		_remoteWorkflows = null;
 		_hasCheckedRemote = false;
 		_status = ok ? $"Pushed {id}" : $"Push failed for {id}";
 		_busy = false;
@@ -846,12 +986,13 @@ public class SyncToolWindow : DockWindow
 
 		var label = id.StartsWith( "ep_" ) ? $"endpoint '{id[3..]}'"
 			: id.StartsWith( "col_" ) ? $"collection '{id[4..]}'"
+			: id.StartsWith( "wf_" ) ? $"workflow '{id[3..]}'"
 			: "resource";
 		_items.TryGetValue( id, out var pullState );
 
 		ConfirmDialog.Show(
 			"Pull from Web",
-			$"This will replace your local {label} in Editor/SyncTools/ with the version from the project dashboard.",
+			$"This will replace your local {label} in Editor/{SyncToolConfig.DataFolder}/ with the version from the project dashboard.",
 			() => _ = DoPullItem( id ),
 			detail: pullState.DiffSummary
 		);
@@ -875,6 +1016,11 @@ public class SyncToolWindow : DockWindow
 			var colName = id[4..];
 			ok = await DoPullSingleCollection( colName );
 		}
+		else if ( id.StartsWith( "wf_" ) )
+		{
+			var wfId = id[3..];
+			ok = await DoPullSingleWorkflow( wfId );
+		}
 		else
 		{
 			ok = false;
@@ -885,9 +1031,10 @@ public class SyncToolWindow : DockWindow
 			SetItemState( id, result: "OK", remoteDiffers: false, diffSummary: "" );
 			RefreshFileList();
 			// Invalidate cached remote data
-	
+
 			_remoteEndpoints = null;
 			_remoteCollections = null;
+			_remoteWorkflows = null;
 			_hasCheckedRemote = false;
 		}
 		else
@@ -981,6 +1128,16 @@ public class SyncToolWindow : DockWindow
 		return resp.HasValue;
 	}
 
+	private async Task<bool> DoPushAllWorkflows()
+	{
+		var localWfs = SyncToolConfig.LoadWorkflows();
+		if ( localWfs.Count == 0 ) return false;
+		var existing = await SyncToolApi.GetWorkflows();
+		var serverFmt = SyncToolTransforms.WorkflowsToServer( localWfs, existing );
+		var resp = await SyncToolApi.PushWorkflows( serverFmt );
+		return resp.HasValue;
+	}
+
 	// ──────────────────────────────────────────────────────
 	//  Pull implementation
 	// ──────────────────────────────────────────────────────
@@ -1052,6 +1209,25 @@ public class SyncToolWindow : DockWindow
 		catch ( Exception ex )
 		{
 			Log.Warning( $"[SyncTool] Pull collection {colName} failed: {ex.Message}" );
+			return false;
+		}
+	}
+
+	private async Task<bool> DoPullSingleWorkflow( string wfId )
+	{
+		var resp = _remoteWorkflows ?? await SyncToolApi.GetWorkflows();
+		if ( !resp.HasValue ) return false;
+		try
+		{
+			var workflows = SyncToolTransforms.ServerToWorkflows( resp.Value );
+			var match = workflows.FirstOrDefault( w => w.Id == wfId );
+			if ( match.Local == null ) return false;
+			SyncToolConfig.SaveWorkflow( wfId, match.Local );
+			return true;
+		}
+		catch ( Exception ex )
+		{
+			Log.Warning( $"[SyncTool] Pull workflow {wfId} failed: {ex.Message}" );
 			return false;
 		}
 	}
@@ -1309,6 +1485,7 @@ public class SyncToolWindow : DockWindow
 
 		_remoteEndpoints = null;
 		_remoteCollections = null;
+		_remoteWorkflows = null;
 		_status = SyncToolConfig.IsValid ? "Refreshed" : "Config invalid — check .env";
 		Update();
 	}

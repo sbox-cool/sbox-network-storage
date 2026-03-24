@@ -189,6 +189,101 @@ public static class SyncToolTransforms
 		return JsonSerializer.Deserialize<JsonElement>( JsonSerializer.Serialize( payload ) );
 	}
 
+	// ──────────────────────────────────────────────────────
+	//  Workflows
+	// ──────────────────────────────────────────────────────
+
+	/// <summary>
+	/// Parse server workflows GET response into a list of (Id, LocalDict) tuples.
+	/// </summary>
+	public static List<(string Id, Dictionary<string, object> Local)> ServerToWorkflows( JsonElement serverResponse )
+	{
+		var result = new List<(string, Dictionary<string, object>)>();
+
+		var data = serverResponse;
+		if ( serverResponse.TryGetProperty( "data", out var d ) )
+			data = d;
+
+		if ( data.ValueKind != JsonValueKind.Array ) return result;
+
+		foreach ( var wf in data.EnumerateArray() )
+		{
+			var local = ServerWorkflowToLocal( wf );
+			var id = local["id"]?.ToString() ?? "unknown";
+			result.Add( (id, local) );
+		}
+
+		return result;
+	}
+
+	/// <summary>
+	/// Convert a single server workflow to local file format.
+	/// Copies all user-defined fields, strips server-managed fields (createdAt, updatedAt, versionHash).
+	/// </summary>
+	public static Dictionary<string, object> ServerWorkflowToLocal( JsonElement wf )
+	{
+		var local = new Dictionary<string, object>();
+
+		foreach ( var prop in wf.EnumerateObject() )
+		{
+			// Skip server-managed fields
+			if ( prop.Name is "createdAt" or "versionHash" or "updatedAt" )
+				continue;
+
+			local[prop.Name] = prop.Value.ValueKind switch
+			{
+				JsonValueKind.String => (object)prop.Value.GetString(),
+				JsonValueKind.Number => prop.Value.TryGetInt32( out var i ) ? i : prop.Value.GetDouble(),
+				JsonValueKind.True => true,
+				JsonValueKind.False => false,
+				_ => prop.Value // Objects and arrays stay as JsonElement (serializes correctly)
+			};
+		}
+
+		return local;
+	}
+
+	/// <summary>
+	/// Convert local workflow definitions to server format, preserving IDs.
+	/// Passes through all fields — the backend validates what it needs.
+	/// </summary>
+	public static JsonElement WorkflowsToServer( List<JsonElement> localWorkflows, JsonElement? existingServer = null )
+	{
+		var idToExisting = new Dictionary<string, JsonElement>();
+		if ( existingServer.HasValue )
+		{
+			var data = existingServer.Value;
+			if ( data.TryGetProperty( "data", out var d ) ) data = d;
+			if ( data.ValueKind == JsonValueKind.Array )
+			{
+				foreach ( var wf in data.EnumerateArray() )
+				{
+					if ( wf.TryGetProperty( "id", out var wfId ) )
+						idToExisting[wfId.GetString()] = wf;
+				}
+			}
+		}
+
+		var result = new List<Dictionary<string, object>>();
+
+		foreach ( var wf in localWorkflows )
+		{
+			var entry = ServerWorkflowToLocal( wf );
+
+			// Preserve server-managed fields from existing if available
+			var wfIdStr = wf.TryGetProperty( "id", out var id ) ? id.GetString() : "";
+			if ( !string.IsNullOrEmpty( wfIdStr ) && idToExisting.TryGetValue( wfIdStr, out var existing ) )
+			{
+				if ( existing.TryGetProperty( "createdAt", out var ca ) )
+					entry["createdAt"] = ca.GetString();
+			}
+
+			result.Add( entry );
+		}
+
+		return JsonSerializer.Deserialize<JsonElement>( JsonSerializer.Serialize( result ) );
+	}
+
 	/// <summary>
 	/// Extract a JsonElement value to a plain .NET object for serialization.
 	/// </summary>

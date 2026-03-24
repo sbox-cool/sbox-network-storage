@@ -79,6 +79,12 @@ public static class SyncToolApi
 	/// <summary>Push collection schemas to server.</summary>
 	public static Task<JsonElement?> PushCollections( JsonElement data ) => Request( "PUT", "collections", data );
 
+	/// <summary>Fetch current server workflows.</summary>
+	public static Task<JsonElement?> GetWorkflows() => Request( "GET", "workflows" );
+
+	/// <summary>Push workflows to server.</summary>
+	public static Task<JsonElement?> PushWorkflows( JsonElement data ) => Request( "PUT", "workflows", data );
+
 	/// <summary>
 	/// Validate credentials against the server.
 	/// Sends secret key via x-api-key header and optionally public key via x-public-key header.

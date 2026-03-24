@@ -2,7 +2,7 @@
   "Title": "Network Storage by sbox.cool",
   "Type": "library",
   "Org": "sboxcool",
-  "Ident": "networkstoragebysboxcool",
+  "Ident": "network-storage",
   "Schema": 1,
   "IncludeSourceFiles": false,
   "Resources": null,

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Text.Json;
 using System.Threading.Tasks;
@@ -54,8 +55,8 @@ public class SetupWindow : DockWindow
 	public SetupWindow()
 	{
 		Title = "Network Storage Setup";
-		Size = new Vector2( 480, 520 );
-		MinimumSize = new Vector2( 400, 460 );
+		Size = new Vector2( 480, 620 );
+		MinimumSize = new Vector2( 400, 520 );
 
 		// Load existing config
 		SyncToolConfig.Load();
@@ -206,9 +207,18 @@ public class SetupWindow : DockWindow
 		Paint.DrawText( new Rect( pad, y, w, 16 ), label, TextFlag.LeftCenter );
 		y += 18;
 
-		// Input box
+		// Paste + Clear buttons on the right
+		var btnW = 42f;
+		var btnH = 22f;
+		var btnGap = 4f;
+		var btnY = y + 2;
+		var clearBtnRect = new Rect( pad + w - btnW, btnY, btnW, btnH );
+		var pasteBtnRect = new Rect( pad + w - btnW * 2 - btnGap, btnY, btnW, btnH );
+		var fieldW = w - btnW * 2 - btnGap * 2 - 4;
+
+		// Input box (narrower to make room for buttons)
 		var fieldH = 26f;
-		var fieldRect = new Rect( pad, y, w, fieldH );
+		var fieldRect = new Rect( pad, y, fieldW, fieldH );
 		var focused = _focusedField == fieldIndex;
 		var hovered = fieldRect.IsInside( _mousePos );
 
@@ -224,23 +234,48 @@ public class SetupWindow : DockWindow
 		if ( string.IsNullOrEmpty( value ) )
 		{
 			Paint.SetPen( Color.White.WithAlpha( 0.25f ) );
-			Paint.DrawText( new Rect( pad + 8, y, w - 16, fieldH ), hint, TextFlag.LeftCenter );
+			Paint.DrawText( new Rect( pad + 8, y, fieldW - 16, fieldH ), hint, TextFlag.LeftCenter );
 		}
 		else
 		{
 			Paint.SetPen( Color.White.WithAlpha( 0.9f ) );
-			Paint.DrawText( new Rect( pad + 8, y, w - 16, fieldH ), value, TextFlag.LeftCenter );
+			Paint.DrawText( new Rect( pad + 8, y, fieldW - 16, fieldH ), value, TextFlag.LeftCenter );
 		}
 
 		// Cursor blink when focused
 		if ( focused )
 		{
 			var cursorX = pad + 8 + MeasureTextWidth( value ?? "" );
+			if ( cursorX > pad + fieldW - 8 ) cursorX = pad + fieldW - 8;
 			Paint.SetPen( Color.Cyan.WithAlpha( 0.8f ) );
 			Paint.DrawLine( new Vector2( cursorX, y + 5 ), new Vector2( cursorX, y + fieldH - 5 ) );
 		}
 
 		_fields.Add( new FieldRect { Rect = fieldRect, Index = fieldIndex } );
+
+		// ── Paste button ──
+		var pasteHovered = pasteBtnRect.IsInside( _mousePos );
+		Paint.SetBrush( Color.Cyan.WithAlpha( pasteHovered ? 0.2f : 0.08f ) );
+		Paint.SetPen( Color.Cyan.WithAlpha( pasteHovered ? 0.5f : 0.2f ) );
+		Paint.DrawRect( pasteBtnRect, 3 );
+		Paint.SetDefaultFont( size: 9, weight: 600 );
+		Paint.SetPen( Color.Cyan.WithAlpha( pasteHovered ? 1f : 0.7f ) );
+		Paint.DrawText( pasteBtnRect, "Paste", TextFlag.Center );
+
+		var fi = fieldIndex; // capture for lambda
+		_buttons.Add( new ButtonRect { Rect = pasteBtnRect, Id = $"paste_{fieldIndex}", OnClick = () => PasteIntoField( fi ) } );
+
+		// ── Clear button ──
+		var clearHovered = clearBtnRect.IsInside( _mousePos );
+		Paint.SetBrush( Color.Red.WithAlpha( clearHovered ? 0.2f : 0.08f ) );
+		Paint.SetPen( Color.Red.WithAlpha( clearHovered ? 0.5f : 0.2f ) );
+		Paint.DrawRect( clearBtnRect, 3 );
+		Paint.SetDefaultFont( size: 9, weight: 600 );
+		Paint.SetPen( Color.Red.WithAlpha( clearHovered ? 1f : 0.7f ) );
+		Paint.DrawText( clearBtnRect, "Clear", TextFlag.Center );
+
+		_buttons.Add( new ButtonRect { Rect = clearBtnRect, Id = $"clear_{fieldIndex}", OnClick = () => { SetFieldValue( fi, "" ); Update(); } } );
+
 		y += fieldH + 4;
 
 		// Hint below (for key validation)
@@ -317,8 +352,47 @@ public class SetupWindow : DockWindow
 
 	private float MeasureTextWidth( string text )
 	{
-		// Approximate — 6px per character at size 10
 		return text.Length * 6.5f;
+	}
+
+	// ──────────────────────────────────────────────────────
+	//  Clipboard (via PowerShell — bypasses s&box sandbox)
+	// ──────────────────────────────────────────────────────
+
+	private static string GetClipboardText()
+	{
+		try
+		{
+			var psi = new ProcessStartInfo
+			{
+				FileName = "powershell.exe",
+				Arguments = "-NoProfile -Command \"Get-Clipboard\"",
+				RedirectStandardOutput = true,
+				UseShellExecute = false,
+				CreateNoWindow = true
+			};
+
+			using var proc = Process.Start( psi );
+			var text = proc?.StandardOutput.ReadToEnd()?.Trim();
+			proc?.WaitForExit();
+			return text ?? "";
+		}
+		catch
+		{
+			return "";
+		}
+	}
+
+	private void PasteIntoField( int fieldIndex )
+	{
+		var clip = GetClipboardText();
+		if ( !string.IsNullOrEmpty( clip ) )
+		{
+			// Replace the field entirely with clipboard content (paste replaces)
+			SetFieldValue( fieldIndex, clip );
+			_focusedField = fieldIndex;
+			Update();
+		}
 	}
 
 	// ──────────────────────────────────────────────────────
@@ -369,7 +443,15 @@ public class SetupWindow : DockWindow
 
 		var handled = true;
 
-		if ( e.Key == KeyCode.Backspace )
+		if ( e.HasCtrl && e.Key == KeyCode.V )
+		{
+			PasteIntoField( _focusedField );
+		}
+		else if ( e.HasCtrl && e.Key == KeyCode.A )
+		{
+			// Select all = no-op visually, but next paste/type will replace
+		}
+		else if ( e.Key == KeyCode.Backspace )
 		{
 			RemoveChar();
 		}
@@ -385,13 +467,17 @@ public class SetupWindow : DockWindow
 		{
 			SaveConfig();
 		}
-		else
+		else if ( !e.HasCtrl )
 		{
 			var c = KeyToChar( e.Key, e.HasShift );
 			if ( c.HasValue )
 				AppendChar( c.Value );
 			else
 				handled = false;
+		}
+		else
+		{
+			handled = false;
 		}
 
 		if ( handled )
@@ -454,6 +540,28 @@ public class SetupWindow : DockWindow
 			case 2: if ( _secretKey.Length > 0 ) _secretKey = _secretKey[..^1]; break;
 			case 3: if ( _baseUrl.Length > 0 ) _baseUrl = _baseUrl[..^1]; break;
 			case 4: if ( _dataFolder.Length > 0 ) _dataFolder = _dataFolder[..^1]; break;
+		}
+	}
+
+	private string GetFieldValue( int field ) => field switch
+	{
+		0 => _projectId,
+		1 => _publicKey,
+		2 => _secretKey,
+		3 => _baseUrl,
+		4 => _dataFolder,
+		_ => ""
+	};
+
+	private void SetFieldValue( int field, string value )
+	{
+		switch ( field )
+		{
+			case 0: _projectId = value; break;
+			case 1: _publicKey = value; break;
+			case 2: _secretKey = value; break;
+			case 3: _baseUrl = value; break;
+			case 4: _dataFolder = value; break;
 		}
 	}
 
