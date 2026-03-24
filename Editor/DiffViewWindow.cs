@@ -224,7 +224,16 @@ public class DiffViewWindow : DockWindow
 		}
 	}
 
-	// ── Scrolling via keyboard and mouse drag ──
+	// ── Scrolling via keyboard, mouse wheel, and drag ──
+
+	protected override void OnWheel( WheelEvent e )
+	{
+		var direction = e.Delta > 0 ? -1 : 1;
+		_scroll = Math.Clamp( _scroll + direction * LineH * 3, 0, MaxScroll );
+		_dragging = false;
+		Update();
+		e.Accept();
+	}
 
 	protected override void OnKeyPress( KeyEvent e )
 	{
