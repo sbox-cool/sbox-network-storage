@@ -2,62 +2,86 @@
 
 The runtime client (`NetworkStorageClient`) is what your game code uses to interact with the sbox.cool backend at runtime. It ships with your game (unlike the editor tools).
 
-## Setup
+## Auto-Configuration (Recommended)
 
-In your game, create a configuration class that provides credentials:
+The client **automatically reads credentials from your `.env` file** on first use. No setup code needed.
+
+Just call any API method and it works:
 
 ```csharp
-using Sandbox;
-
-public class NetworkStorageConfig : Component, Component.INetworkListener
-{
-    public static NetworkStorageConfig Instance { get; private set; }
-
-    // Public key only — secret key is NEVER used at runtime
-    private const string PublicKey = "sbox_ns_your_public_key_here";
-    private const string ProjectId = "your-project-id";
-
-    protected override void OnStart()
-    {
-        Instance = this;
-    }
-}
+// No Configure() call needed — reads from Editor/Network Storage/config/.env automatically
+var player = await NetworkStorage.CallEndpoint( "load-player" );
+var values = await NetworkStorage.GetGameValues();
 ```
+
+The auto-config searches for `.env` in these locations (first match wins):
+1. `Editor/Network Storage/config/.env` (current)
+2. `Editor/Network Storage/.env` (legacy)
+3. `Editor/SyncTools/.env` (legacy)
+
+It reads **only** the public key and project ID — the secret key is **never** loaded at runtime.
+
+## Manual Configuration (Optional Override)
+
+If you need to override the `.env` values (e.g., for testing against a different project), call `Configure()` before any API use:
+
+```csharp
+NetworkStorage.Configure( "your-project-id", "sbox_ns_your_key" );
+```
+
+Once `Configure()` is called, it takes precedence over auto-config.
 
 ## Making Requests
 
 ### Call an Endpoint
 
 ```csharp
-// POST to an endpoint
+// POST to an endpoint with input
 var input = new Dictionary<string, object>
 {
     ["oreType"] = "iron",
     ["amount"] = 50
 };
 
-var response = await NetworkStorage.Post( "sell-ore", input );
+var response = await NetworkStorage.CallEndpoint( "sell-ore", input );
 if ( response.HasValue )
 {
-    // Success — parse response
-    var data = response.Value;
+    // Success — response.Value is the parsed JSON body
 }
+
+// GET endpoint (no input)
+var leaderboard = await NetworkStorage.CallEndpoint( "get-leaderboard" );
 ```
 
-### Read a Collection
+### Get Game Values
 
 ```csharp
-// GET player data
-var playerData = await NetworkStorage.Get( "players" );
+// Fetch all game config (constants + tables) from the server
+var values = await NetworkStorage.GetGameValues();
 ```
 
-## Classes
+### Read a Document
 
-### `NetworkStorageClient`
-The main HTTP client. Handles:
-- Authenticated requests to the sbox.cool API using the public key
-- JSON serialization/deserialization
-- Error handling and logging
+```csharp
+// Read the current player's document (uses their Steam ID)
+var playerData = await NetworkStorage.GetDocument( "players" );
+
+// Read a specific document by ID
+var doc = await NetworkStorage.GetDocument( "players", "76561198012345678" );
+```
+
+## Properties
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `IsConfigured` | bool | True after auto-config or manual `Configure()` loads valid credentials |
+| `ProjectId` | string | The active project ID |
+| `ApiKey` | string | The active public API key |
+| `BaseUrl` | string | API base URL (default: `https://api.sboxcool.com`) |
+| `ApiVersion` | string | API version (default: `v3`) |
+| `ApiRoot` | string | Full versioned root, e.g. `https://api.sboxcool.com/v3` |
+
+## Helper Classes
 
 ### `NetworkStorageExtensions`
 Helper extension methods for common patterns like extracting values from JSON responses.
@@ -77,8 +101,25 @@ The client respects the data source preference set in the Setup window:
 
 | Mode | Runtime Behavior |
 |------|-----------------|
-| **API + Fallback** | Calls the API; if it fails, reads from local JSON files in `Editor/Network Storage/` |
+| **API + Fallback** | Calls the API; if it fails, reads from local JSON files |
 | **API Only** | Always calls the API; returns null on failure |
 | **JSON Only** | Reads from local JSON files only; never makes HTTP calls |
 
-JSON Only mode is useful for offline development and testing without hitting the server.
+## Error Handling
+
+All methods return `JsonElement?` — `null` on failure, a parsed JSON element on success.
+
+The client automatically:
+- Logs errors to the s&box console with `[NetworkStorage]` prefix
+- Parses server error responses (`{ ok: false, error: "...", message: "..." }`)
+- Returns `null` on network failures, parse errors, or server rejections
+
+```csharp
+var result = await NetworkStorage.CallEndpoint( "buy-upgrade", input );
+if ( result == null )
+{
+    // Server rejected or network failed — check console for details
+    return;
+}
+// Success — use result.Value
+```

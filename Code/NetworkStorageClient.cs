@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Net.Http;
 using System.Text;
 using System.Text.Json;
@@ -8,13 +9,17 @@ namespace Sandbox;
 
 /// <summary>
 /// Network Storage client for sboxcool.com.
-/// Call Configure() once at startup, then use the static methods to interact with your project.
+///
+/// Auto-configures from Editor/Network Storage/config/.env on first use.
+/// You can also call Configure() manually to override.
 ///
 /// Example:
-///   NetworkStorage.Configure( "your-project-id", "sbox_ns_your_key" );
+///   // Auto-config from .env (no setup needed):
 ///   var player = await NetworkStorage.CallEndpoint( "load-player" );
 ///   var values = await NetworkStorage.GetGameValues();
-///   var doc = await NetworkStorage.GetDocument( "players", steamId );
+///
+///   // Or manual config:
+///   NetworkStorage.Configure( "your-project-id", "sbox_ns_your_key" );
 /// </summary>
 public static class NetworkStorage
 {
@@ -32,14 +37,17 @@ public static class NetworkStorage
 	/// <summary>Your public API key (sbox_ns_ prefix).</summary>
 	public static string ApiKey { get; private set; }
 
-	/// <summary>True after Configure() has been called with valid credentials.</summary>
+	/// <summary>True after Configure() or auto-config has loaded valid credentials.</summary>
 	public static bool IsConfigured => !string.IsNullOrEmpty( ProjectId ) && !string.IsNullOrEmpty( ApiKey );
 
 	/// <summary>The full versioned API root, e.g. https://api.sboxcool.com/v3</summary>
 	public static string ApiRoot => $"{BaseUrl}/{ApiVersion}";
 
+	private static bool _autoConfigAttempted;
+
 	/// <summary>
-	/// Configure the client. Call once at game startup.
+	/// Configure the client manually. Call once at game startup.
+	/// If not called, the client auto-configures from .env on first use.
 	/// </summary>
 	public static void Configure( string projectId, string apiKey, string baseUrl = null, string apiVersion = null )
 	{
@@ -47,7 +55,79 @@ public static class NetworkStorage
 		ApiKey = apiKey;
 		if ( !string.IsNullOrEmpty( baseUrl ) ) BaseUrl = baseUrl.TrimEnd( '/' );
 		if ( !string.IsNullOrEmpty( apiVersion ) ) ApiVersion = apiVersion.Trim( '/' );
+		_autoConfigAttempted = true;
 		NetLog.Info( "config", $"NetworkStorage ready — {ApiRoot}" );
+	}
+
+	/// <summary>
+	/// Auto-configure from the .env file. Called automatically on first API use.
+	/// Searches for .env in: Editor/Network Storage/config/.env, Editor/Network Storage/.env, Editor/SyncTools/.env
+	/// Only reads SBOXCOOL_PROJECT_ID, SBOXCOOL_PUBLIC_KEY, SBOXCOOL_BASE_URL, SBOXCOOL_API_VERSION.
+	/// The secret key is NEVER loaded at runtime.
+	/// </summary>
+	public static void AutoConfigure()
+	{
+		if ( _autoConfigAttempted ) return;
+		_autoConfigAttempted = true;
+
+		var root = Project.Current?.GetRootPath();
+		if ( string.IsNullOrEmpty( root ) ) return;
+
+		// Search for .env in known locations
+		var candidates = new[]
+		{
+			Path.Combine( root, "Editor", "Network Storage", "config", ".env" ),
+			Path.Combine( root, "Editor", "Network Storage", ".env" ),
+			Path.Combine( root, "Editor", "SyncTools", ".env" ),
+		};
+
+		string envPath = null;
+		foreach ( var path in candidates )
+		{
+			if ( File.Exists( path ) )
+			{
+				envPath = path;
+				break;
+			}
+		}
+
+		if ( envPath == null )
+		{
+			NetLog.Info( "config", "No .env found — call NetworkStorage.Configure() manually" );
+			return;
+		}
+
+		string projectId = null, publicKey = null, baseUrl = null, apiVersion = null;
+
+		foreach ( var line in File.ReadAllLines( envPath ) )
+		{
+			var trimmed = line.Trim();
+			if ( string.IsNullOrEmpty( trimmed ) || trimmed.StartsWith( '#' ) ) continue;
+			var eq = trimmed.IndexOf( '=' );
+			if ( eq < 0 ) continue;
+
+			var key = trimmed[..eq].Trim();
+			var val = trimmed[( eq + 1 )..].Trim();
+
+			switch ( key )
+			{
+				case "SBOXCOOL_PROJECT_ID": projectId = val; break;
+				case "SBOXCOOL_PUBLIC_KEY": publicKey = val; break;
+				case "SBOXCOOL_BASE_URL": baseUrl = val; break;
+				case "SBOXCOOL_API_VERSION": apiVersion = val; break;
+				// SBOXCOOL_SECRET_KEY is intentionally NEVER read at runtime
+			}
+		}
+
+		if ( !string.IsNullOrEmpty( projectId ) && !string.IsNullOrEmpty( publicKey ) )
+		{
+			Configure( projectId, publicKey, baseUrl, apiVersion );
+			NetLog.Info( "config", $"Auto-configured from {envPath}" );
+		}
+		else
+		{
+			NetLog.Info( "config", $"Found .env but missing PROJECT_ID or PUBLIC_KEY" );
+		}
 	}
 
 	// ── Endpoints ──
@@ -166,7 +246,10 @@ public static class NetworkStorage
 	private static void EnsureConfigured()
 	{
 		if ( !IsConfigured )
-			throw new InvalidOperationException( "NetworkStorage.Configure() must be called before use." );
+			AutoConfigure();
+
+		if ( !IsConfigured )
+			throw new InvalidOperationException( "NetworkStorage not configured. Add credentials to Editor/Network Storage/config/.env or call NetworkStorage.Configure() manually." );
 	}
 
 	private static async Task<string> BuildUrl( string path )

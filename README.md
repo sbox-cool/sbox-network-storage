@@ -1,16 +1,10 @@
 # Network Storage for s&box
 Persistent cloud storage, server-side endpoints, and an editor sync tool for s&box games — powered by the [sboxcool.com](https://sboxcool.com) API.
 
-
-<img width="488" height="647" alt="Screenshot 2026-03-24 153432" src="https://github.com/user-attachments/assets/cdd10f39-e757-45da-858a-dbefd14b206e" />
-
-
-<img width="489" height="540" alt="Screenshot 2026-03-24 153341" src="https://github.com/user-attachments/assets/24ce6892-8df6-4b68-857f-b1e2d43703e9" />
-
 ## Useful Links
 - Network Storage: https://sbox.cool/tools/network-storage
 - Documentation & Tutorials: http://sbox.cool/wiki/network-storage-v3
-- s&box editor Library: https://sbox.game/sboxcool/network-storage
+- s&box editor Library: https://sbox.game/sboxcool/networkstoragebysboxcool
    - Search `Network Storage by sbox.cool` with author name: `sboxcool`
 - sbox.cool and sboxcool.com are both operated the same group. `SboxCool.com` is our LTS url, e.g. `api.sboxcool.com`.
 
@@ -29,7 +23,7 @@ Persistent cloud storage, server-side endpoints, and an editor sync tool for s&b
 
 Install directly from the s&box asset browser:
 
-**https://sbox.game/sboxcool/network-storage**
+**[sbox.game/sboxcool/networkstoragebysboxcool](https://sbox.game/sboxcool/networkstoragebysboxcool)**
 
 Or find it in the editor:
 
