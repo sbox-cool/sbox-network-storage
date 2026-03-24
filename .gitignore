@@ -1,0 +1,21 @@
+# s&box auto-generated
+.vs/
+.vscode/
+*.csproj
+obj/
+bin/
+Properties/
+*.generated.*
+*.*_c
+!*.shader_c
+*.los
+*.vpk
+*launchSettings.json
+*.sln
+*.slnx
+.sbox/
+*idea/
+Exports/
+
+# Network Storage credentials (NEVER commit)
+**/.env
