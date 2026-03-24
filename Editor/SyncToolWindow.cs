@@ -70,22 +70,19 @@ public class SyncToolWindow : DockWindow
 		window.Show();
 	}
 
-	private static string ResolvePath( string relativePath )
-		=> Editor.FileSystem.Root.GetFullPath( relativePath );
-
 	private void RefreshFileList()
 	{
-		var epDir = ResolvePath( SyncToolConfig.EndpointsPath );
+		var epDir = SyncToolConfig.Abs( SyncToolConfig.EndpointsPath );
 		_endpointFiles = Directory.Exists( epDir )
 			? Directory.GetFiles( epDir, "*.json" ).OrderBy( f => f ).ToArray()
 			: Array.Empty<string>();
 
-		var colDir = ResolvePath( SyncToolConfig.CollectionsPath );
+		var colDir = SyncToolConfig.Abs( SyncToolConfig.CollectionsPath );
 		_collectionFiles = Directory.Exists( colDir )
 			? Directory.GetFiles( colDir, "*.json" ).OrderBy( f => f ).ToArray()
 			: Array.Empty<string>();
 
-		var wfDir = ResolvePath( SyncToolConfig.WorkflowsPath );
+		var wfDir = SyncToolConfig.Abs( SyncToolConfig.WorkflowsPath );
 		_workflowFiles = Directory.Exists( wfDir )
 			? Directory.GetFiles( wfDir, "*.json" ).OrderBy( f => f ).ToArray()
 			: Array.Empty<string>();
@@ -593,22 +590,61 @@ public class SyncToolWindow : DockWindow
 		_busyItem = "check_updates";
 		_status = "Checking remote for changes...";
 		_items.Clear();
+		RefreshFileList();
 		Update();
 
+		try
+		{
+			await DoCheckForUpdates();
+		}
+		catch ( Exception ex )
+		{
+			Log.Warning( $"[SyncTool] Check for updates failed: {ex.Message}" );
+			_status = $"Check failed: {ex.Message}";
+		}
+		finally
+		{
+			_busy = false;
+			_busyItem = null;
+			Update();
+		}
+	}
+
+	private async Task DoCheckForUpdates()
+	{
 		var diffs = 0;
 		var localOnlyCount = 0;
-		var remoteSlugs = new HashSet<string>();
-		var remoteColNames = new HashSet<string>();
+
+		// ── Load local files via SyncToolConfig (uses System.IO with correct project root) ──
+		var localEndpoints = SyncToolConfig.LoadEndpoints();
+		var localCollections = SyncToolConfig.LoadCollections();
+		var localWorkflows = SyncToolConfig.LoadWorkflows();
+
+		var localEpBySlug = new Dictionary<string, JsonElement>();
+		foreach ( var ep in localEndpoints )
+		{
+			var slug = ep.TryGetProperty( "slug", out var s ) ? s.GetString() : "";
+			if ( !string.IsNullOrEmpty( slug ) ) localEpBySlug[slug] = ep;
+		}
+
+		var localColByName = new Dictionary<string, string>();
+		foreach ( var (name, data) in localCollections )
+			localColByName[name] = JsonSerializer.Serialize( data, new JsonSerializerOptions { WriteIndented = true } );
+
+		var localWfById = new Dictionary<string, JsonElement>();
+		foreach ( var wf in localWorkflows )
+		{
+			var wfId = wf.TryGetProperty( "id", out var id ) ? id.GetString() : "";
+			if ( !string.IsNullOrEmpty( wfId ) ) localWfById[wfId] = wf;
+		}
 
 		// ── Check endpoints ──
+		var remoteSlugs = new HashSet<string>();
 		_remoteEndpoints = await SyncToolApi.GetEndpoints();
 		if ( !_remoteEndpoints.HasValue )
 		{
 			_status = "Failed to fetch endpoints from server — check Base URL and credentials";
 			_hasCheckedRemote = true;
-			_busy = false;
-			_busyItem = null;
-			Update();
 			return;
 		}
 		{
@@ -623,25 +659,25 @@ public class SyncToolWindow : DockWindow
 					remoteSlugs.Add( slug );
 					var id = $"ep_{slug}";
 
-					var localFile = _endpointFiles.FirstOrDefault( f => Path.GetFileNameWithoutExtension( f ) == slug );
-					if ( localFile == null )
+					var remoteLocal = SyncToolTransforms.ServerEndpointToLocal( ep );
+					var remoteJson = JsonSerializer.Serialize( remoteLocal, new JsonSerializerOptions { WriteIndented = true } );
+
+					if ( !localEpBySlug.TryGetValue( slug, out var localEp ) )
 					{
 						SetItemState( id, remoteDiffers: true, status: SyncStatus.RemoteOnly,
 							diffSummary: "Remote only — not in local files",
-							localJson: "", remoteJson: PrettyJson( JsonSerializer.Serialize( SyncToolTransforms.ServerEndpointToLocal( ep ) ) ) );
+							localJson: "", remoteJson: PrettyJson( remoteJson ) );
 						diffs++;
 					}
 					else
 					{
-						var remoteLocal = SyncToolTransforms.ServerEndpointToLocal( ep );
-						var remoteJson = JsonSerializer.Serialize( remoteLocal, new JsonSerializerOptions { WriteIndented = true } );
-						var localJson = File.ReadAllText( localFile );
+						var localJson = JsonSerializer.Serialize( localEp, new JsonSerializerOptions { WriteIndented = true } );
 						var differs = NormalizeJson( remoteJson ) != NormalizeJson( localJson );
 
 						if ( differs )
 						{
-							var epDiff = DiffEndpoint( localJson, remoteJson, slug );
-							SetItemState( id, remoteDiffers: true, status: SyncStatus.Differs, diffSummary: epDiff,
+							SetItemState( id, remoteDiffers: true, status: SyncStatus.Differs,
+								diffSummary: DiffEndpoint( localJson, remoteJson, slug ),
 								localJson: PrettyJson( localJson ), remoteJson: PrettyJson( remoteJson ) );
 							diffs++;
 						}
@@ -655,14 +691,12 @@ public class SyncToolWindow : DockWindow
 			}
 		}
 
-		// Detect local-only endpoints (exist locally but not on server)
-		foreach ( var file in _endpointFiles )
+		foreach ( var slug in localEpBySlug.Keys )
 		{
-			var slug = Path.GetFileNameWithoutExtension( file );
 			if ( !remoteSlugs.Contains( slug ) )
 			{
 				var id = $"ep_{slug}";
-				var localJson = File.ReadAllText( file );
+				var localJson = JsonSerializer.Serialize( localEpBySlug[slug], new JsonSerializerOptions { WriteIndented = true } );
 				SetItemState( id, remoteDiffers: false, status: SyncStatus.LocalOnly,
 					diffSummary: "Local only — not pushed to server",
 					localJson: PrettyJson( localJson ), remoteJson: "" );
@@ -671,14 +705,12 @@ public class SyncToolWindow : DockWindow
 		}
 
 		// ── Check collections ──
+		var remoteColNames = new HashSet<string>();
 		_remoteCollections = await SyncToolApi.GetCollections();
 		if ( !_remoteCollections.HasValue )
 		{
 			_status = "Failed to fetch collections from server — check Base URL and credentials";
 			_hasCheckedRemote = true;
-			_busy = false;
-			_busyItem = null;
-			Update();
 			return;
 		}
 		{
@@ -688,9 +720,8 @@ public class SyncToolWindow : DockWindow
 				remoteColNames.Add( colName );
 				var id = $"col_{colName}";
 				var remoteJson = JsonSerializer.Serialize( remoteLocal, new JsonSerializerOptions { WriteIndented = true } );
-				var localFile = _collectionFiles.FirstOrDefault( f => Path.GetFileNameWithoutExtension( f ) == colName );
 
-				if ( localFile == null )
+				if ( !localColByName.TryGetValue( colName, out var localJson ) )
 				{
 					SetItemState( id, remoteDiffers: true, status: SyncStatus.RemoteOnly,
 						diffSummary: "Remote only — no local file",
@@ -699,13 +730,12 @@ public class SyncToolWindow : DockWindow
 				}
 				else
 				{
-					var localJson = File.ReadAllText( localFile );
 					var differs = NormalizeJson( remoteJson ) != NormalizeJson( localJson );
 
 					if ( differs )
 					{
-						var colDiff = DiffCollectionSchema( localJson, remoteJson );
-						SetItemState( id, remoteDiffers: true, status: SyncStatus.Differs, diffSummary: colDiff,
+						SetItemState( id, remoteDiffers: true, status: SyncStatus.Differs,
+							diffSummary: DiffCollectionSchema( localJson, remoteJson ),
 							localJson: PrettyJson( localJson ), remoteJson: PrettyJson( remoteJson ) );
 						diffs++;
 					}
@@ -718,17 +748,14 @@ public class SyncToolWindow : DockWindow
 			}
 		}
 
-		// Detect local-only collections
-		foreach ( var file in _collectionFiles )
+		foreach ( var colName in localColByName.Keys )
 		{
-			var colName = Path.GetFileNameWithoutExtension( file );
 			if ( !remoteColNames.Contains( colName ) )
 			{
 				var id = $"col_{colName}";
-				var localJson = File.ReadAllText( file );
 				SetItemState( id, remoteDiffers: false, status: SyncStatus.LocalOnly,
 					diffSummary: "Local only — not pushed to server",
-					localJson: PrettyJson( localJson ), remoteJson: "" );
+					localJson: PrettyJson( localColByName[colName] ), remoteJson: "" );
 				localOnlyCount++;
 			}
 		}
@@ -744,9 +771,8 @@ public class SyncToolWindow : DockWindow
 				remoteWfIds.Add( wfId );
 				var id = $"wf_{wfId}";
 				var remoteJson = JsonSerializer.Serialize( remoteLocal, new JsonSerializerOptions { WriteIndented = true } );
-				var localFile = _workflowFiles.FirstOrDefault( f => Path.GetFileNameWithoutExtension( f ) == wfId );
 
-				if ( localFile == null )
+				if ( !localWfById.TryGetValue( wfId, out var localWf ) )
 				{
 					SetItemState( id, remoteDiffers: true, status: SyncStatus.RemoteOnly,
 						diffSummary: "Remote only — no local file",
@@ -755,8 +781,17 @@ public class SyncToolWindow : DockWindow
 				}
 				else
 				{
-					var localJson = File.ReadAllText( localFile );
-					var differs = NormalizeJson( remoteJson ) != NormalizeJson( localJson );
+					var localJson = JsonSerializer.Serialize( localWf, new JsonSerializerOptions { WriteIndented = true } );
+					var normRemote = NormalizeJson( remoteJson );
+					var normLocal = NormalizeJson( localJson );
+					var differs = normRemote != normLocal;
+
+					Log.Info( $"[SyncTool] ── Workflow {wfId} ──" );
+					Log.Info( $"[SyncTool] LOCAL:  {localJson}" );
+					Log.Info( $"[SyncTool] REMOTE: {remoteJson}" );
+					Log.Info( $"[SyncTool] NORM LOCAL:  {normLocal}" );
+					Log.Info( $"[SyncTool] NORM REMOTE: {normRemote}" );
+					Log.Info( $"[SyncTool] DIFFERS: {differs}" );
 
 					if ( differs )
 					{
@@ -773,14 +808,12 @@ public class SyncToolWindow : DockWindow
 			}
 		}
 
-		// Detect local-only workflows
-		foreach ( var file in _workflowFiles )
+		foreach ( var wfId in localWfById.Keys )
 		{
-			var wfId = Path.GetFileNameWithoutExtension( file );
 			if ( !remoteWfIds.Contains( wfId ) )
 			{
 				var id = $"wf_{wfId}";
-				var localJson = File.ReadAllText( file );
+				var localJson = JsonSerializer.Serialize( localWfById[wfId], new JsonSerializerOptions { WriteIndented = true } );
 				SetItemState( id, remoteDiffers: false, status: SyncStatus.LocalOnly,
 					diffSummary: "Local only — not pushed to server",
 					localJson: PrettyJson( localJson ), remoteJson: "" );
@@ -795,9 +828,6 @@ public class SyncToolWindow : DockWindow
 		_status = parts.Count > 0
 			? string.Join( ", ", parts )
 			: "Everything is in sync";
-		_busy = false;
-		_busyItem = null;
-		Update();
 	}
 
 	/// <summary>
@@ -949,32 +979,51 @@ public class SyncToolWindow : DockWindow
 		_status = $"Pushing {id}...";
 		Update();
 
-		bool ok;
-		if ( id.StartsWith( "ep_" ) )
+		try
 		{
-			var slug = id[3..];
-			ok = await DoPushSingleEndpointMerged( slug );
-		}
-		else if ( id.StartsWith( "col_" ) )
-		{
-			ok = await DoPushCollections();
-		}
-		else if ( id.StartsWith( "wf_" ) )
-		{
-			ok = await DoPushAllWorkflows();
-		}
-		else
-		{
-			ok = false;
-		}
+			bool ok;
+			if ( id.StartsWith( "ep_" ) )
+			{
+				var slug = id[3..];
+				ok = await DoPushSingleEndpointMerged( slug );
+			}
+			else if ( id.StartsWith( "col_" ) )
+			{
+				ok = await DoPushCollections();
+			}
+			else if ( id.StartsWith( "wf_" ) )
+			{
+				ok = await DoPushAllWorkflows();
+			}
+			else
+			{
+				ok = false;
+			}
 
-		// Clear diff state for this item only — keep other items' state intact
-		SetItemState( id, result: ok ? "OK" : "FAIL", remoteDiffers: false, diffSummary: "",
-			status: ok ? SyncStatus.InSync : null );
-		_status = ok ? $"Pushed {id}" : $"Push failed for {id}";
-		_busy = false;
-		_busyItem = null;
-		Update();
+			// Update this item's state
+			SetItemState( id, result: ok ? "OK" : "FAIL", remoteDiffers: false, diffSummary: "",
+				status: ok ? SyncStatus.InSync : null );
+
+			// Invalidate cached remote data so next Check for Updates is fresh,
+			// but preserve other items' diff state so they don't disappear
+			_remoteEndpoints = null;
+			_remoteCollections = null;
+			_remoteWorkflows = null;
+
+			_status = ok ? $"Pushed {id}" : $"Push failed for {id}";
+		}
+		catch ( Exception ex )
+		{
+			Log.Warning( $"[SyncTool] Push {id} failed: {ex.Message}" );
+			SetItemState( id, result: "FAIL" );
+			_status = $"Push failed for {id}: {ex.Message}";
+		}
+		finally
+		{
+			_busy = false;
+			_busyItem = null;
+			Update();
+		}
 	}
 
 	// ──────────────────────────────────────────────────────
@@ -1006,43 +1055,60 @@ public class SyncToolWindow : DockWindow
 		_status = $"Pulling {id}...";
 		Update();
 
-		bool ok;
-		if ( id.StartsWith( "ep_" ) )
+		try
 		{
-			var slug = id[3..];
-			ok = await DoPullSingleEndpoint( slug );
-		}
-		else if ( id.StartsWith( "col_" ) )
-		{
-			var colName = id[4..];
-			ok = await DoPullSingleCollection( colName );
-		}
-		else if ( id.StartsWith( "wf_" ) )
-		{
-			var wfId = id[3..];
-			ok = await DoPullSingleWorkflow( wfId );
-		}
-		else
-		{
-			ok = false;
-		}
+			bool ok;
+			if ( id.StartsWith( "ep_" ) )
+			{
+				var slug = id[3..];
+				ok = await DoPullSingleEndpoint( slug );
+			}
+			else if ( id.StartsWith( "col_" ) )
+			{
+				var colName = id[4..];
+				ok = await DoPullSingleCollection( colName );
+			}
+			else if ( id.StartsWith( "wf_" ) )
+			{
+				var wfId = id[3..];
+				ok = await DoPullSingleWorkflow( wfId );
+			}
+			else
+			{
+				ok = false;
+			}
 
-		if ( ok )
-		{
-			SetItemState( id, result: "OK", remoteDiffers: false, diffSummary: "",
-				status: SyncStatus.InSync );
-			RefreshFileList();
-			// Don't invalidate cached remote data — other items still need their state
+			if ( ok )
+			{
+				SetItemState( id, result: "OK", remoteDiffers: false, diffSummary: "",
+					status: SyncStatus.InSync );
+				RefreshFileList();
+
+				// Invalidate cached remote data so next Check is fresh,
+				// but keep _hasCheckedRemote and other items' state so they don't disappear
+				_remoteEndpoints = null;
+				_remoteCollections = null;
+				_remoteWorkflows = null;
+			}
+			else
+			{
+				SetItemState( id, result: "FAIL" );
+			}
+
+			_status = ok ? $"Pulled {id}" : $"Pull failed for {id}";
 		}
-		else
+		catch ( Exception ex )
 		{
+			Log.Warning( $"[SyncTool] Pull {id} failed: {ex.Message}" );
 			SetItemState( id, result: "FAIL" );
+			_status = $"Pull failed for {id}: {ex.Message}";
 		}
-
-		_status = ok ? $"Pulled {id}" : $"Pull failed for {id}";
-		_busy = false;
-		_busyItem = null;
-		Update();
+		finally
+		{
+			_busy = false;
+			_busyItem = null;
+			Update();
+		}
 	}
 
 	// ──────────────────────────────────────────────────────
@@ -1157,11 +1223,11 @@ public class SyncToolWindow : DockWindow
 				if ( epSlug != slug ) continue;
 
 				var localDict = SyncToolTransforms.ServerEndpointToLocal( ep );
-				var dir = ResolvePath( SyncToolConfig.EndpointsPath );
-				if ( !Directory.Exists( dir ) ) Directory.CreateDirectory( dir );
+				if ( !Directory.Exists( SyncToolConfig.Abs( SyncToolConfig.EndpointsPath ) ) )
+					Directory.CreateDirectory( SyncToolConfig.Abs( SyncToolConfig.EndpointsPath ) );
 
 				var json = JsonSerializer.Serialize( localDict, new JsonSerializerOptions { WriteIndented = true } );
-				File.WriteAllText( Path.Combine( dir, $"{slug}.json" ), json );
+				File.WriteAllText( SyncToolConfig.Abs( $"{SyncToolConfig.EndpointsPath}/{slug}.json" ), json );
 				return true;
 			}
 			return false;
