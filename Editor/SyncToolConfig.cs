@@ -8,8 +8,14 @@ using Editor;
 
 /// <summary>
 /// Manages the sync tool configuration for the Network Storage library.
-/// Credentials and data files live in a configurable Editor subfolder (default: Editor/Network Storage/).
-/// Everything in Editor/ is excluded from publishing — secrets never ship.
+///
+/// Config is split into two files for security:
+///   config/public/projectConfig.json  — project ID, public key, base URL, API version, preferences
+///                                       (safe to commit, ships with published game)
+///   config/secret/secret_key.json     — secret key ONLY (gitignored, editor-only, NEVER published)
+///
+/// The public config is also written to the project root as network-storage.credentials.json
+/// so the runtime client can auto-configure via s&box's sandboxed FileSystem.
 /// </summary>
 public static class SyncToolConfig
 {
@@ -38,27 +44,41 @@ public static class SyncToolConfig
 	// ── Validation ──
 	public static bool IsValid => !string.IsNullOrEmpty( SecretKey )
 		&& SecretKey.StartsWith( "sbox_sk_" )
+		&& !string.IsNullOrEmpty( PublicApiKey )
+		&& PublicApiKey.StartsWith( "sbox_ns_" )
 		&& !string.IsNullOrEmpty( ProjectId );
 
 	public static bool HasPublicKey => !string.IsNullOrEmpty( PublicApiKey )
 		&& PublicApiKey.StartsWith( "sbox_ns_" );
 
-	public static bool IsFullyConfigured => IsValid && HasPublicKey;
+	public static bool IsFullyConfigured => IsValid;
 
-	// ── Paths (all relative to the configurable data folder) ──
+	// ── Paths ──
 
 	private static string ProjectRoot => Project.Current?.GetRootPath() ?? "";
 
 	/// <summary>Root path for all sync data: {project}/Editor/{DataFolder}/</summary>
 	public static string SyncToolsPath => Path.Combine( ProjectRoot, "Editor", DataFolder );
 
-	/// <summary>Path to config/ directory (contains .env and other config).</summary>
+	/// <summary>Path to config/ directory.</summary>
 	public static string ConfigPath => Path.Combine( SyncToolsPath, "config" );
 
-	/// <summary>Path to the .env file with credentials (gitignored, never published).</summary>
-	public static string EnvFilePath => Path.Combine( ConfigPath, ".env" );
+	/// <summary>Path to config/public/ — safe to commit, ships with game.</summary>
+	public static string PublicConfigPath => Path.Combine( ConfigPath, "public" );
 
-	/// <summary>Path to collections/ directory (one JSON file per collection).</summary>
+	/// <summary>Path to config/secret/ — gitignored, editor-only, NEVER published.</summary>
+	public static string SecretConfigPath => Path.Combine( ConfigPath, "secret" );
+
+	/// <summary>Path to the public project config file.</summary>
+	public static string ProjectConfigFile => Path.Combine( PublicConfigPath, "projectConfig.json" );
+
+	/// <summary>Path to the secret key file.</summary>
+	public static string SecretKeyFile => Path.Combine( SecretConfigPath, "secret_key.json" );
+
+	/// <summary>Path to the runtime credentials file in Assets/ (shipped with game).</summary>
+	public static string RuntimeCredentialsFile => Path.Combine( ProjectRoot, "Assets", "network-storage.credentials.json" );
+
+	/// <summary>Path to collections/ directory.</summary>
 	public static string CollectionsPath => Path.Combine( SyncToolsPath, "collections" );
 
 	/// <summary>Path to the endpoints directory.</summary>
@@ -69,14 +89,22 @@ public static class SyncToolConfig
 
 	/// <summary>Legacy paths for auto-migration.</summary>
 	public static string LegacyCollectionSchemaPath => Path.Combine( SyncToolsPath, "collection_schema.json" );
-	private static string LegacySyncToolsPath => Path.Combine( ProjectRoot, "Editor", "SyncTools" );
+
+	// Legacy .env locations for migration
+	private static string LegacyEnvInConfig => Path.Combine( ConfigPath, ".env" );
+	private static string LegacyEnvInRoot => Path.Combine( SyncToolsPath, ".env" );
+	private static string LegacyEnvInSyncTools => Path.Combine( ProjectRoot, "Editor", "SyncTools", ".env" );
+
+	// ── JSON options ──
+	private static readonly JsonSerializerOptions _jsonOptions = new() { WriteIndented = true };
 
 	// ──────────────────────────────────────────────────────
 	//  Load / Save
 	// ──────────────────────────────────────────────────────
 
 	/// <summary>
-	/// Load configuration from .env file. Call before any sync operation.
+	/// Load configuration from the split config files.
+	/// Falls back to legacy .env files for migration.
 	/// </summary>
 	public static void Load()
 	{
@@ -88,42 +116,71 @@ public static class SyncToolConfig
 		DataSource = DataSourceMode.ApiThenJson;
 		DataFolder = "Network Storage";
 
-		// Try current path first, then old root location, then legacy Editor/SyncTools/
-		var envPath = EnvFilePath;
-		if ( !File.Exists( envPath ) )
+		// ── Try new split config first ──
+		if ( File.Exists( ProjectConfigFile ) )
 		{
-			// Check old location (root of Network Storage folder, before config/ subfolder)
-			var oldRootEnv = Path.Combine( SyncToolsPath, ".env" );
-			var legacyEnv = Path.Combine( LegacySyncToolsPath, ".env" );
-
-			if ( File.Exists( oldRootEnv ) )
-			{
-				Log.Info( "[SyncTool] Found .env at root — will migrate to config/ on next save" );
-				envPath = oldRootEnv;
-			}
-			else if ( File.Exists( legacyEnv ) )
-			{
-				Log.Info( "[SyncTool] Found legacy .env at Editor/SyncTools/ — will migrate on next save" );
-				envPath = legacyEnv;
-			}
-			else
-			{
-				ScaffoldProject();
-				return;
-			}
+			LoadPublicConfig( ProjectConfigFile );
+			if ( File.Exists( SecretKeyFile ) )
+				LoadSecretConfig( SecretKeyFile );
+			return;
 		}
 
+		// ── Try legacy .env locations for migration ──
+		string legacyEnv = null;
+		if ( File.Exists( LegacyEnvInConfig ) )
+			legacyEnv = LegacyEnvInConfig;
+		else if ( File.Exists( LegacyEnvInRoot ) )
+			legacyEnv = LegacyEnvInRoot;
+		else if ( File.Exists( LegacyEnvInSyncTools ) )
+			legacyEnv = LegacyEnvInSyncTools;
+
+		if ( legacyEnv != null )
+		{
+			Log.Info( $"[SyncTool] Found legacy .env — migrating to split config on next save" );
+			LoadLegacyEnv( legacyEnv );
+			return;
+		}
+
+		// ── First install — scaffold ──
+		ScaffoldProject();
+	}
+
+	private static void LoadPublicConfig( string path )
+	{
+		var json = JsonSerializer.Deserialize<JsonElement>( File.ReadAllText( path ) );
+		ProjectId = json.TryGetProperty( "projectId", out var pid ) ? pid.GetString() ?? "" : "";
+		PublicApiKey = json.TryGetProperty( "publicKey", out var pk ) ? pk.GetString() ?? "" : "";
+		BaseUrl = json.TryGetProperty( "baseUrl", out var bu ) ? bu.GetString()?.TrimEnd( '/' ) ?? "https://api.sboxcool.com" : "https://api.sboxcool.com";
+		ApiVersion = json.TryGetProperty( "apiVersion", out var av ) ? av.GetString()?.Trim( '/' ) ?? "v3" : "v3";
+		DataFolder = json.TryGetProperty( "dataFolder", out var df ) ? df.GetString() ?? "Network Storage" : "Network Storage";
+		if ( json.TryGetProperty( "dataSource", out var ds ) )
+		{
+			DataSource = ds.GetString()?.ToLowerInvariant() switch
+			{
+				"api_only" => DataSourceMode.ApiOnly,
+				"json_only" => DataSourceMode.JsonOnly,
+				_ => DataSourceMode.ApiThenJson
+			};
+		}
+	}
+
+	private static void LoadSecretConfig( string path )
+	{
+		var json = JsonSerializer.Deserialize<JsonElement>( File.ReadAllText( path ) );
+		SecretKey = json.TryGetProperty( "secretKey", out var sk ) ? sk.GetString() ?? "" : "";
+	}
+
+	private static void LoadLegacyEnv( string envPath )
+	{
 		foreach ( var line in File.ReadAllLines( envPath ) )
 		{
 			var trimmed = line.Trim();
-			if ( string.IsNullOrEmpty( trimmed ) || trimmed.StartsWith( '#' ) )
-				continue;
+			if ( string.IsNullOrEmpty( trimmed ) || trimmed.StartsWith( '#' ) ) continue;
+			var eq = trimmed.IndexOf( '=' );
+			if ( eq < 0 ) continue;
 
-			var eqIdx = trimmed.IndexOf( '=' );
-			if ( eqIdx < 0 ) continue;
-
-			var key = trimmed[..eqIdx].Trim();
-			var val = trimmed[( eqIdx + 1 )..].Trim();
+			var key = trimmed[..eq].Trim();
+			var val = trimmed[( eq + 1 )..].Trim();
 
 			switch ( key )
 			{
@@ -146,8 +203,10 @@ public static class SyncToolConfig
 	}
 
 	/// <summary>
-	/// Save all settings to the .env file. Creates the SyncTools directory if needed.
-	/// The .env file is in Editor/ (gitignored, never published) — secrets are safe.
+	/// Save configuration to split config files.
+	/// Public config → config/public/projectConfig.json (safe to commit)
+	/// Secret key   → config/secret/secret_key.json (gitignored, editor-only)
+	/// Runtime copy → {project root}/network-storage.credentials.json (ships with game)
 	/// </summary>
 	public static void Save( string secretKey, string publicApiKey, string projectId,
 		string baseUrl = null, DataSourceMode? dataSource = null, string dataFolder = null )
@@ -164,37 +223,57 @@ public static class SyncToolConfig
 		if ( dataSource.HasValue )
 			DataSource = dataSource.Value;
 
-		var lines = new List<string>
+		// ── Write public config (safe to commit) ──
+		var publicConfig = new Dictionary<string, object>
 		{
-			"# Network Storage credentials",
-			"# Stored in Editor/ — excluded from publishing, safe for secrets",
-			"# NEVER commit this file to version control",
-			"",
-			"# Project identifier from sboxcool.com dashboard",
-			$"SBOXCOOL_PROJECT_ID={ProjectId}",
-			"",
-			"# Public API key (sbox_ns_ prefix) — used by the game client at runtime",
-			$"SBOXCOOL_PUBLIC_KEY={PublicApiKey}",
-			"",
-			"# Secret key (sbox_sk_ prefix) — used by editor sync tool only, NEVER ships",
-			$"SBOXCOOL_SECRET_KEY={SecretKey}",
-			"",
-			"# Base URL (default: https://api.sboxcool.com)",
-			$"SBOXCOOL_BASE_URL={BaseUrl}",
-			"",
-			"# API version (default: v3)",
-			$"SBOXCOOL_API_VERSION={ApiVersion}",
-			"",
-			"# Editor subfolder for sync data (default: Network Storage)",
-			$"SBOXCOOL_DATA_FOLDER={DataFolder}",
-			"",
-			"# Data source for GET requests: api_then_json (try API first, fall back to JSON), api_only, json_only",
-			$"SBOXCOOL_DATA_SOURCE={DataSource switch { DataSourceMode.ApiOnly => "api_only", DataSourceMode.JsonOnly => "json_only", _ => "api_then_json" }}"
+			["projectId"] = ProjectId,
+			["publicKey"] = PublicApiKey,
+			["baseUrl"] = BaseUrl,
+			["apiVersion"] = ApiVersion,
+			["dataFolder"] = DataFolder,
+			["dataSource"] = DataSource switch
+			{
+				DataSourceMode.ApiOnly => "api_only",
+				DataSourceMode.JsonOnly => "json_only",
+				_ => "api_then_json"
+			}
 		};
+		File.WriteAllText( ProjectConfigFile, JsonSerializer.Serialize( publicConfig, _jsonOptions ) );
+		Log.Info( "[SyncTool] Public config saved to config/public/projectConfig.json" );
 
-		File.WriteAllLines( EnvFilePath, lines );
-		Log.Info( "[SyncTool] Configuration saved to .env" );
+		// ── Write secret key (gitignored, NEVER published) ──
+		var secretConfig = new Dictionary<string, string> { ["secretKey"] = SecretKey };
+		File.WriteAllText( SecretKeyFile, JsonSerializer.Serialize( secretConfig, _jsonOptions ) );
+		Log.Info( "[SyncTool] Secret key saved to config/secret/secret_key.json" );
+
+		// ── Write runtime credentials (ships with game, NO secret key) ──
+		if ( !string.IsNullOrEmpty( ProjectId ) )
+		{
+			var runtimeCreds = new Dictionary<string, string>
+			{
+				["projectId"] = ProjectId,
+				["publicKey"] = PublicApiKey,
+				["baseUrl"] = BaseUrl,
+				["apiVersion"] = ApiVersion
+			};
+			var credsJson = JsonSerializer.Serialize( runtimeCreds, _jsonOptions );
+
+			// Write to Assets/ (s&box mounts this for runtime FileSystem access)
+			var assetsPath = Path.Combine( ProjectRoot, "Assets", "network-storage.credentials.json" );
+			File.WriteAllText( assetsPath, credsJson );
+			Log.Info( "[SyncTool] Runtime credentials written to Assets/network-storage.credentials.json" );
+		}
+
+		// ── Write .gitignore in secret/ to protect the key ──
+		var secretGitignore = Path.Combine( SecretConfigPath, ".gitignore" );
+		if ( !File.Exists( secretGitignore ) )
+			File.WriteAllText( secretGitignore, "*\n!.gitignore\n" );
 	}
+
+	/// <summary>
+	/// For display in the Setup window — show the path to the secret key file.
+	/// </summary>
+	public static string EnvFilePath => SecretKeyFile;
 
 	/// <summary>
 	/// Update just the data source preference without touching other fields.
@@ -202,7 +281,7 @@ public static class SyncToolConfig
 	public static void SetDataSource( DataSourceMode mode )
 	{
 		DataSource = mode;
-		if ( File.Exists( EnvFilePath ) )
+		if ( File.Exists( ProjectConfigFile ) )
 			Save( SecretKey, PublicApiKey, ProjectId, BaseUrl, mode );
 	}
 
@@ -215,7 +294,6 @@ public static class SyncToolConfig
 	{
 		var list = new List<(string, Dictionary<string, object>)>();
 
-		// Try collections/ folder first
 		if ( Directory.Exists( CollectionsPath ) )
 		{
 			foreach ( var file in Directory.GetFiles( CollectionsPath, "*.json" ).OrderBy( f => f ) )
@@ -228,7 +306,6 @@ public static class SyncToolConfig
 				list.Add( (name, dict) );
 			}
 		}
-		// Fallback: legacy single collection_schema.json
 		else if ( File.Exists( LegacyCollectionSchemaPath ) )
 		{
 			var text = File.ReadAllText( LegacyCollectionSchemaPath );
@@ -304,18 +381,13 @@ public static class SyncToolConfig
 		PropertyNamingPolicy = JsonNamingPolicy.CamelCase
 	};
 
-	/// <summary>
-	/// Save endpoint definitions as individual JSON files in endpoints/ directory.
-	/// Clears the directory first, then writes one file per endpoint (slug.json).
-	/// </summary>
+	/// <summary>Save endpoint definitions as individual JSON files.</summary>
 	public static void SaveEndpoints( List<Dictionary<string, object>> endpoints )
 	{
 		EnsureSyncToolsDir();
-
 		if ( !Directory.Exists( EndpointsPath ) )
 			Directory.CreateDirectory( EndpointsPath );
 
-		// Clear existing endpoint files
 		foreach ( var file in Directory.GetFiles( EndpointsPath, "*.json" ) )
 			File.Delete( file );
 
@@ -323,24 +395,19 @@ public static class SyncToolConfig
 		{
 			var slug = ep.TryGetValue( "slug", out var s ) ? s?.ToString() ?? "unknown" : "unknown";
 			var path = Path.Combine( EndpointsPath, $"{slug}.json" );
-			var json = JsonSerializer.Serialize( ep, _writeOptions );
-			File.WriteAllText( path, json );
+			File.WriteAllText( path, JsonSerializer.Serialize( ep, _writeOptions ) );
 		}
 
 		Log.Info( $"[SyncTool] Saved {endpoints.Count} endpoint files to endpoints/" );
 	}
 
-	/// <summary>
-	/// Save workflow definitions as individual JSON files in workflows/ directory.
-	/// </summary>
+	/// <summary>Save workflow definitions as individual JSON files.</summary>
 	public static void SaveWorkflows( List<Dictionary<string, object>> workflows )
 	{
 		EnsureSyncToolsDir();
-
 		if ( !Directory.Exists( WorkflowsPath ) )
 			Directory.CreateDirectory( WorkflowsPath );
 
-		// Clear existing workflow files
 		foreach ( var file in Directory.GetFiles( WorkflowsPath, "*.json" ) )
 			File.Delete( file );
 
@@ -348,8 +415,7 @@ public static class SyncToolConfig
 		{
 			var id = wf.TryGetValue( "id", out var s ) ? s?.ToString() ?? "unknown" : "unknown";
 			var path = Path.Combine( WorkflowsPath, $"{id}.json" );
-			var json = JsonSerializer.Serialize( wf, _writeOptions );
-			File.WriteAllText( path, json );
+			File.WriteAllText( path, JsonSerializer.Serialize( wf, _writeOptions ) );
 		}
 
 		Log.Info( $"[SyncTool] Saved {workflows.Count} workflow files to workflows/" );
@@ -363,9 +429,8 @@ public static class SyncToolConfig
 			Directory.CreateDirectory( WorkflowsPath );
 
 		var path = Path.Combine( WorkflowsPath, $"{id}.json" );
-		var json = JsonSerializer.Serialize( data, _writeOptions );
-		File.WriteAllText( path, json );
-		Log.Info( $"[SyncTool] Saved workflows/{id}.json ({json.Length} bytes)" );
+		File.WriteAllText( path, JsonSerializer.Serialize( data, _writeOptions ) );
+		Log.Info( $"[SyncTool] Saved workflows/{id}.json" );
 	}
 
 	/// <summary>Save a collection to collections/{name}.json.</summary>
@@ -376,19 +441,18 @@ public static class SyncToolConfig
 			Directory.CreateDirectory( CollectionsPath );
 
 		var path = Path.Combine( CollectionsPath, $"{name}.json" );
-		var json = JsonSerializer.Serialize( data, _writeOptions );
-		File.WriteAllText( path, json );
-		Log.Info( $"[SyncTool] Saved collections/{name}.json ({json.Length} bytes)" );
+		File.WriteAllText( path, JsonSerializer.Serialize( data, _writeOptions ) );
+		Log.Info( $"[SyncTool] Saved collections/{name}.json" );
 	}
 
-	/// <summary>Save multiple collections to collections/ directory.</summary>
+	/// <summary>Save multiple collections.</summary>
 	public static void SaveCollections( List<(string Name, Dictionary<string, object> Data)> collections )
 	{
 		foreach ( var (name, data) in collections )
 			SaveCollection( name, data );
 	}
 
-	/// <summary>Check if local SyncTools files exist (for overwrite warnings).</summary>
+	/// <summary>Check if local data files exist.</summary>
 	public static bool HasLocalData()
 	{
 		return File.Exists( LegacyCollectionSchemaPath )
@@ -403,6 +467,10 @@ public static class SyncToolConfig
 			Directory.CreateDirectory( SyncToolsPath );
 		if ( !Directory.Exists( ConfigPath ) )
 			Directory.CreateDirectory( ConfigPath );
+		if ( !Directory.Exists( PublicConfigPath ) )
+			Directory.CreateDirectory( PublicConfigPath );
+		if ( !Directory.Exists( SecretConfigPath ) )
+			Directory.CreateDirectory( SecretConfigPath );
 		if ( !Directory.Exists( CollectionsPath ) )
 			Directory.CreateDirectory( CollectionsPath );
 		if ( !Directory.Exists( EndpointsPath ) )
@@ -416,8 +484,7 @@ public static class SyncToolConfig
 	// ──────────────────────────────────────────────────────
 
 	/// <summary>
-	/// Creates the full Editor/Network Storage/ folder structure with sample files
-	/// on first install when no .env exists.
+	/// Creates the full folder structure with sample files on first install.
 	/// </summary>
 	private static void ScaffoldProject()
 	{
@@ -425,39 +492,29 @@ public static class SyncToolConfig
 
 		EnsureSyncToolsDir();
 
-		// ── .env with placeholder keys ──
-		var envLines = new[]
+		// ── Public config with placeholders ──
+		var publicConfig = new Dictionary<string, object>
 		{
-			"# Network Storage credentials",
-			"# Stored in Editor/ — excluded from publishing, safe for secrets",
-			"# NEVER commit this file to version control",
-			"#",
-			"# Get your keys from https://sbox.cool → Dashboard → API Keys",
-			"",
-			"# Project identifier from your sbox.cool dashboard",
-			"SBOXCOOL_PROJECT_ID=your-project-id-here",
-			"",
-			"# Public API key (sbox_ns_ prefix) — used by the game client at runtime",
-			"SBOXCOOL_PUBLIC_KEY=sbox_ns_your_public_key_here",
-			"",
-			"# Secret key (sbox_sk_ prefix) — used by editor sync tool only, NEVER ships",
-			"SBOXCOOL_SECRET_KEY=sbox_sk_your_secret_key_here",
-			"",
-			"# Base URL (default: https://api.sboxcool.com)",
-			"SBOXCOOL_BASE_URL=https://api.sboxcool.com",
-			"",
-			"# API version (default: v3)",
-			"SBOXCOOL_API_VERSION=v3",
-			"",
-			"# Editor subfolder for sync data (default: Network Storage)",
-			"SBOXCOOL_DATA_FOLDER=Network Storage",
-			"",
-			"# Data source for GET requests: api_then_json, api_only, json_only",
-			"SBOXCOOL_DATA_SOURCE=api_then_json"
+			["projectId"] = "your-project-id-here",
+			["publicKey"] = "sbox_ns_your_public_key_here",
+			["baseUrl"] = "https://api.sboxcool.com",
+			["apiVersion"] = "v3",
+			["dataFolder"] = "Network Storage",
+			["dataSource"] = "api_then_json"
 		};
-		File.WriteAllLines( EnvFilePath, envLines );
+		File.WriteAllText( ProjectConfigFile, JsonSerializer.Serialize( publicConfig, _jsonOptions ) );
 
-		// ── Sample collection: players.json ──
+		// ── Secret key with placeholder ──
+		var secretConfig = new Dictionary<string, string>
+		{
+			["secretKey"] = "sbox_sk_your_secret_key_here"
+		};
+		File.WriteAllText( SecretKeyFile, JsonSerializer.Serialize( secretConfig, _jsonOptions ) );
+
+		// ── .gitignore in secret/ — ignore everything ──
+		File.WriteAllText( Path.Combine( SecretConfigPath, ".gitignore" ), "*\n!.gitignore\n" );
+
+		// ── Sample collection ──
 		var sampleCollection = @"{
   ""name"": ""players"",
   ""scope"": ""user"",
@@ -469,7 +526,7 @@ public static class SyncToolConfig
 }";
 		File.WriteAllText( Path.Combine( CollectionsPath, "players.json" ), sampleCollection );
 
-		// ── Sample endpoint: init-player.json ──
+		// ── Sample endpoint ──
 		var sampleEndpoint = @"{
   ""slug"": ""init-player"",
   ""description"": ""Initialize a new player with default values"",
@@ -497,13 +554,6 @@ public static class SyncToolConfig
   ]
 }";
 		File.WriteAllText( Path.Combine( EndpointsPath, "init-player.json" ), sampleEndpoint );
-
-		// ── .gitignore for .env in config/ ──
-		var gitignorePath = Path.Combine( ConfigPath, ".gitignore" );
-		if ( !File.Exists( gitignorePath ) )
-		{
-			File.WriteAllText( gitignorePath, ".env\n" );
-		}
 
 		Log.Info( "[NetworkStorage] Scaffolding complete. Open Editor → Network Storage → Setup to enter your API keys." );
 	}
