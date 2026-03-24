@@ -1,6 +1,4 @@
 using System;
-using System.Net.Http;
-using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
 
@@ -63,6 +61,8 @@ public static class NetworkStorage
 		if ( _autoConfigAttempted ) return;
 		_autoConfigAttempted = true;
 
+		NetworkStorageBootstrap.CheckEditorOnce();
+
 		const string fileName = "network-storage.credentials.json";
 
 		string contents = null;
@@ -121,21 +121,25 @@ public static class NetworkStorage
 	public static async Task<JsonElement?> CallEndpoint( string slug, object input = null )
 	{
 		EnsureConfigured();
+		string url = null;
+		string bodyJson = null;
 		try
 		{
-			var url = await BuildUrl( $"/endpoints/{ProjectId}/{slug}" );
+			url = await BuildUrl( $"/endpoints/{ProjectId}/{slug}" );
 
 			string result;
 			if ( input is not null )
 			{
-				var body = JsonSerializer.Serialize( input );
-				NetLog.Request( slug, $"POST {body}" );
-				var content = new StringContent( body, Encoding.UTF8, "application/json" );
+				bodyJson = JsonSerializer.Serialize( input );
+				NetLog.Request( slug, $"POST {bodyJson}" );
+				Log.Info( $"[NetworkStorage] {slug} request: POST {ApiRoot}/endpoints/{ProjectId}/{slug} body={bodyJson}" );
+				var content = Http.CreateJsonContent( input );
 				result = await Http.RequestStringAsync( url, "POST", content );
 			}
 			else
 			{
 				NetLog.Request( slug, "GET" );
+				Log.Info( $"[NetworkStorage] {slug} request: GET {ApiRoot}/endpoints/{ProjectId}/{slug}" );
 				result = await Http.RequestStringAsync( url );
 			}
 
@@ -145,9 +149,26 @@ public static class NetworkStorage
 				NetLog.Response( slug, TruncateJson( parsed.Value ) );
 			return parsed;
 		}
+		catch ( System.Net.Http.HttpRequestException httpEx )
+		{
+			var status = httpEx.StatusCode.HasValue ? $"{(int)httpEx.StatusCode.Value} {httpEx.StatusCode.Value}" : "unknown";
+			Log.Warning( $"[NetworkStorage] {slug} FAILED — HTTP {status}" );
+			Log.Warning( $"[NetworkStorage]   URL: {ApiRoot}/endpoints/{ProjectId}/{slug}" );
+			Log.Warning( $"[NetworkStorage]   Method: {( input is not null ? "POST" : "GET" )}" );
+			if ( bodyJson != null )
+				Log.Warning( $"[NetworkStorage]   Body: {bodyJson}" );
+			Log.Warning( $"[NetworkStorage]   Note: s&box Http API does not expose error response bodies — check server logs for details" );
+			NetLog.Error( slug, $"HTTP {status}" );
+			return null;
+		}
 		catch ( Exception ex )
 		{
-			Log.Warning( $"[NetworkStorage] {slug}: {ex.Message}" );
+			Log.Warning( $"[NetworkStorage] {slug} FAILED — {ex.Message}" );
+			Log.Warning( $"[NetworkStorage]   URL: {ApiRoot}/endpoints/{ProjectId}/{slug}" );
+			Log.Warning( $"[NetworkStorage]   Method: {( input is not null ? "POST" : "GET" )}" );
+			if ( bodyJson != null )
+				Log.Warning( $"[NetworkStorage]   Body: {bodyJson}" );
+			Log.Warning( $"[NetworkStorage]   Exception: {ex}" );
 			NetLog.Error( slug, ex.Message );
 			return null;
 		}
@@ -364,4 +385,93 @@ public static class NetworkStorage
 
 	private static string TruncateJson( string s, int max = 120 )
 		=> s.Length > max ? s[..max] + "..." : s;
+}
+
+/// <summary>
+/// Tracks the save state of endpoint calls for HUD feedback.
+/// Wraps NetworkStorage.CallEndpoint with automatic state management and logging.
+///
+/// Usage:
+///   var tracker = new SaveStateTracker();
+///   var result = await tracker.Call( "mine-ore", new { ore_id = "moon_ore", kg = 5 } );
+///   if ( result.HasValue ) Apply( result.Value );
+///
+/// Properties:
+///   tracker.State     → Idle, Saving, Saved, Error
+///   tracker.IsBusy    → true while any call is in progress
+///   tracker.LastError → error message from last failure
+/// </summary>
+public class SaveStateTracker
+{
+	public enum SaveState { Idle, Saving, Saved, Error }
+
+	public SaveState State { get; private set; } = SaveState.Idle;
+	public TimeSince TimeSinceStateChange { get; private set; }
+	public int PendingCalls { get; private set; }
+	public string LastError { get; private set; }
+	public bool IsBusy => PendingCalls > 0;
+
+	/// <summary>
+	/// Call an endpoint with automatic save state tracking and logging.
+	/// Sets State to Saving → Saved/Error. Logs to NetLog.
+	/// </summary>
+	public async Task<JsonElement?> Call( string slug, object input = null )
+	{
+		PendingCalls++;
+		SetState( SaveState.Saving );
+
+		NetLog.Info( slug, $"Calling endpoint... input={( input != null ? JsonSerializer.Serialize( input ) : "null" )}" );
+
+		var result = await NetworkStorage.CallEndpoint( slug, input );
+
+		PendingCalls--;
+		if ( result.HasValue )
+		{
+			if ( PendingCalls <= 0 )
+				SetState( SaveState.Saved );
+			NetLog.Info( slug, "Success" );
+		}
+		else
+		{
+			var error = $"{slug} failed — server returned null";
+			SetState( SaveState.Error, error );
+			NetLog.Error( slug, error );
+		}
+
+		return result;
+	}
+
+	/// <summary>
+	/// Call an endpoint, apply the result to a callback on success, revert on failure.
+	/// Handles the optimistic update → server confirm → revert pattern.
+	/// </summary>
+	public async Task<bool> CallAndApply( string slug, object input, Action applyOptimistic, Action<JsonElement> applyServer, Action revert )
+	{
+		applyOptimistic?.Invoke();
+
+		var result = await Call( slug, input );
+
+		if ( result.HasValue )
+		{
+			applyServer?.Invoke( result.Value );
+			return true;
+		}
+
+		revert?.Invoke();
+		return false;
+	}
+
+	public void Reset()
+	{
+		SetState( SaveState.Idle );
+		PendingCalls = 0;
+		LastError = null;
+	}
+
+	private void SetState( SaveState state, string error = null )
+	{
+		State = state;
+		TimeSinceStateChange = 0;
+		if ( error != null ) LastError = error;
+	}
 }

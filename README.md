@@ -257,6 +257,57 @@ Configure in **Editor > Network Storage > Setup** under "Data Source":
 | **API Only** | Always fetch from API, no fallback |
 | **JSON Only** | Read from local JSON files only, no API calls |
 
+## MCP Server (for AI Agents)
+
+This repo includes an MCP (Model Context Protocol) server that gives AI coding agents like Claude deep knowledge of the Network Storage system — collections, endpoints, workflows, template syntax, error diagnosis, and more.
+
+### What It Provides
+
+- **10 tools** — validate JSON files, scaffold new collections/endpoints/workflows, get documentation, diagnose errors
+- **8 resources** — all documentation files exposed for contextual reading
+
+### Setup
+
+The MCP server requires [Bun](https://bun.sh) to be installed.
+
+1. The `.mcp.json` file at the repo root auto-configures Claude Code to use the MCP server
+2. Dependencies are installed automatically on first launch (`bun install`)
+3. Open Claude Code in this repo and the MCP will be available
+
+To verify it's working, run `/mcp` in Claude Code — you should see `sbox-network-storage` listed.
+
+### Manual Setup (other MCP clients)
+
+If your MCP client doesn't auto-discover `.mcp.json`, add this to your MCP configuration:
+
+```json
+{
+  "mcpServers": {
+    "sbox-network-storage": {
+      "command": "bash",
+      "args": ["-c", "cd mcp && bun install --silent && cd .. && bun run mcp/index.ts"]
+    }
+  }
+}
+```
+
+Set the working directory to this repository root.
+
+### Available Tools
+
+| Tool | Description |
+|------|-------------|
+| `get_documentation` | Retrieve docs by topic (collections, endpoints, workflows, setup, errors, etc.) |
+| `validate_collection` | Validate a collection JSON for correct schema and naming |
+| `validate_endpoint` | Validate an endpoint JSON — steps, operators, templates, constraints |
+| `validate_workflow` | Validate a workflow JSON — conditions, onFail config |
+| `scaffold_collection` | Generate a collection JSON template |
+| `scaffold_endpoint` | Generate an endpoint JSON template |
+| `scaffold_workflow` | Generate a workflow JSON template |
+| `get_examples` | Get example JSONs for common game scenarios (inventory, currency, leaderboard, etc.) |
+| `validate_env_config` | Validate `.env` credential file format |
+| `diagnose_error` | Diagnose s&box console errors and suggest fixes |
+
 ## License
 
 MIT — see [LICENSE](LICENSE).

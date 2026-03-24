@@ -19,3 +19,6 @@ Exports/
 
 # Network Storage credentials (NEVER commit)
 **/.env
+
+# MCP server dependencies
+mcp/node_modules/

@@ -4,32 +4,49 @@ The runtime client (`NetworkStorageClient`) is what your game code uses to inter
 
 ## Auto-Configuration (Recommended)
 
-The client **automatically reads credentials from your `.env` file** on first use. No setup code needed.
+The client **automatically reads credentials from `Assets/network-storage.credentials.json`** on first API use. No setup code needed.
 
 Just call any API method and it works:
 
 ```csharp
-// No Configure() call needed — reads from Editor/Network Storage/config/.env automatically
+// No Configure() call needed — auto-configures from credentials file
 var player = await NetworkStorage.CallEndpoint( "load-player" );
 var values = await NetworkStorage.GetGameValues();
 ```
 
-The auto-config searches for `.env` in these locations (first match wins):
-1. `Editor/Network Storage/config/.env` (current)
-2. `Editor/Network Storage/.env` (legacy)
-3. `Editor/SyncTools/.env` (legacy)
+The credentials file is created by the Setup window (**Editor → Network Storage → Setup**) and contains only the Project ID and Public Key (no secrets). It looks like:
 
-It reads **only** the public key and project ID — the secret key is **never** loaded at runtime.
+```json
+{
+  "projectId": "your_project_id",
+  "publicKey": "sbox_ns_your_public_key",
+  "baseUrl": "https://api.sboxcool.com",
+  "apiVersion": "v3"
+}
+```
+
+Auto-config searches these paths (first match wins):
+1. `network-storage.credentials.json`
+2. `/network-storage.credentials.json`
+3. `Assets/network-storage.credentials.json`
+4. `/Assets/network-storage.credentials.json`
+
+The secret key is **never** loaded at runtime — only the public key ships with your game.
+
+> **Important:** Auto-configuration uses a static flag that persists across hot-reloads.
+> If you change credentials, do a **full restart** of s&box to pick up the new values.
 
 ## Manual Configuration (Optional Override)
 
-If you need to override the `.env` values (e.g., for testing against a different project), call `Configure()` before any API use:
+If you need to override credentials (e.g., for testing against a different project), call `Configure()` before any API use:
 
 ```csharp
 NetworkStorage.Configure( "your-project-id", "sbox_ns_your_key" );
 ```
 
-Once `Configure()` is called, it takes precedence over auto-config.
+Once `Configure()` is called, it takes precedence over auto-config. This also sets the static flag, so `AutoConfigure()` will not run.
+
+See [Getting Started](getting-started.md) for a complete setup walkthrough including credential testing.
 
 ## Making Requests
 

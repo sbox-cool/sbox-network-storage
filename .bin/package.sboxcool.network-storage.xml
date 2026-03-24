@@ -31,13 +31,13 @@
         <member name="T:Sandbox.NetworkStorage">
              <summary>
              Network Storage client for sboxcool.com.
-             Call Configure() once at startup, then use the static methods to interact with your project.
+            
+             Auto-configures from network-storage.credentials.json on first use.
+             You can also call Configure() manually to override.
             
              Example:
-               NetworkStorage.Configure( "your-project-id", "sbox_ns_your_key" );
                var player = await NetworkStorage.CallEndpoint( "load-player" );
                var values = await NetworkStorage.GetGameValues();
-               var doc = await NetworkStorage.GetDocument( "players", steamId );
              </summary>
         </member>
         <member name="P:Sandbox.NetworkStorage.BaseUrl">
@@ -53,33 +53,50 @@
             <summary>Your public API key (sbox_ns_ prefix).</summary>
         </member>
         <member name="P:Sandbox.NetworkStorage.IsConfigured">
-            <summary>True after Configure() has been called with valid credentials.</summary>
+            <summary>True after Configure() or auto-config has loaded valid credentials.</summary>
         </member>
         <member name="P:Sandbox.NetworkStorage.ApiRoot">
             <summary>The full versioned API root, e.g. https://api.sboxcool.com/v3</summary>
         </member>
         <member name="M:Sandbox.NetworkStorage.Configure(System.String,System.String,System.String,System.String)">
             <summary>
-            Configure the client. Call once at game startup.
+            Configure the client manually. Call once at game startup.
+            If not called, the client auto-configures from credentials file on first use.
+            </summary>
+        </member>
+        <member name="M:Sandbox.NetworkStorage.AutoConfigure">
+            <summary>
+            Auto-configure from network-storage.credentials.json.
+            Called automatically on first API use.
             </summary>
         </member>
         <member name="M:Sandbox.NetworkStorage.CallEndpoint(System.String,System.Object)">
             <summary>
             Call a server endpoint by slug.
-            URL: {ApiRoot}/endpoints/{ProjectId}/{slug}
+            Returns the response body on success, null on any failure.
             </summary>
         </member>
         <member name="M:Sandbox.NetworkStorage.GetGameValues">
             <summary>
             Load all game values (groups + tables).
-            URL: {ApiRoot}/values/{ProjectId}
             </summary>
         </member>
         <member name="M:Sandbox.NetworkStorage.GetDocument(System.String,System.String)">
             <summary>
             Read a document from a collection.
-            URL: {ApiRoot}/storage/{ProjectId}/{collectionId}/{documentId}
             If documentId is null, uses the current player's Steam ID.
+            </summary>
+        </member>
+        <member name="M:Sandbox.NetworkStorage.ParseResponse(System.String,System.String)">
+            <summary>
+            Parse a server response. Returns the response data on success, null on any error.
+            Detects errors via: ok=false, error object, or non-JSON responses.
+            </summary>
+        </member>
+        <member name="M:Sandbox.NetworkStorage.LogServerError(System.String,System.Text.Json.JsonElement)">
+            <summary>
+            Extract and log error details from a server error response.
+            Handles: { error: { code, message } }, { error: "msg" }, { message: "msg" }
             </summary>
         </member>
         <member name="T:Sandbox.NetworkStorageExtensions">
