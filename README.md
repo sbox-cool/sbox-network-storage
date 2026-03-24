@@ -15,10 +15,17 @@ Persistent cloud storage, server-side endpoints, and an editor sync tool for s&b
 
 ### From s&box (recommended)
 
+Install directly from the s&box asset browser:
+
+**[sbox.game/sboxcool/networkstoragebysboxcool](https://sbox.game/sboxcool/networkstoragebysboxcool)**
+
+Or find it in the editor:
+
 1. Open the s&box editor
 2. Go to **Editor > Library Manager**
-3. Search for **"Network Storage"** by `sbox-cool`
-4. Click **Add to Project**
+3. Search for **"Network Storage"**
+4. Look for the one published by **sboxcool** — do not install from other authors
+5. Click **Add to Project**
 
 The library appears in your project's `Libraries/` folder automatically.
 
