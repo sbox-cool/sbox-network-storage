@@ -1,5 +1,4 @@
 using System;
-using System.IO;
 using System.Net.Http;
 using System.Text;
 using System.Text.Json;
@@ -70,21 +69,18 @@ public static class NetworkStorage
 		if ( _autoConfigAttempted ) return;
 		_autoConfigAttempted = true;
 
-		var root = Project.Current?.GetRootPath();
-		if ( string.IsNullOrEmpty( root ) ) return;
-
-		// Search for .env in known locations
+		// Search for .env in known locations using the mounted filesystem
 		var candidates = new[]
 		{
-			Path.Combine( root, "Editor", "Network Storage", "config", ".env" ),
-			Path.Combine( root, "Editor", "Network Storage", ".env" ),
-			Path.Combine( root, "Editor", "SyncTools", ".env" ),
+			"Editor/Network Storage/config/.env",
+			"Editor/Network Storage/.env",
+			"Editor/SyncTools/.env",
 		};
 
 		string envPath = null;
 		foreach ( var path in candidates )
 		{
-			if ( File.Exists( path ) )
+			if ( FileSystem.Mounted.FileExists( path ) )
 			{
 				envPath = path;
 				break;
@@ -97,9 +93,12 @@ public static class NetworkStorage
 			return;
 		}
 
+		var content = FileSystem.Mounted.ReadAllText( envPath );
+		if ( string.IsNullOrEmpty( content ) ) return;
+
 		string projectId = null, publicKey = null, baseUrl = null, apiVersion = null;
 
-		foreach ( var line in File.ReadAllLines( envPath ) )
+		foreach ( var line in content.Split( '\n' ) )
 		{
 			var trimmed = line.Trim();
 			if ( string.IsNullOrEmpty( trimmed ) || trimmed.StartsWith( '#' ) ) continue;
