@@ -13,7 +13,7 @@ Basic player data collection with currency, XP, and level.
   "name": "players",
   "description": "Player save data",
   "collectionType": "per-steamid",
-  "accessMode": "public",
+  "accessMode": "endpoint",
   "maxRecords": 1,
   "schema": {
     "currency": { "type": "number", "default": 0 },
@@ -36,12 +36,28 @@ Initialize a new player record with default values.
   "description": "Create or load a player record",
   "enabled": true,
   "input": {
-    "displayName": { "type": "string", "required": true }
+    "type": "object",
+    "properties": {
+      "displayName": { "type": "string" }
+    },
+    "required": ["displayName"]
   },
   "steps": [
-    { "type": "read", "collection": "players", "as": "player" },
-    { "type": "transform", "field": "player.displayName", "operation": "set", "value": "{{input.displayName}}" },
-    { "type": "write", "collection": "players" }
+    {
+      "id": "player",
+      "type": "read",
+      "collection": "players",
+      "key": "{{steamId}}_default"
+    },
+    {
+      "id": "save",
+      "type": "write",
+      "collection": "players",
+      "key": "{{steamId}}_default",
+      "ops": [
+        { "op": "set", "path": "displayName", "value": "{{input.displayName}}" }
+      ]
+    }
   ],
   "response": { "status": 200, "body": { "ok": true } }
 }
@@ -60,7 +76,7 @@ Player collection with inventory and backpack capacity.
   "name": "players",
   "description": "Player data with inventory system",
   "collectionType": "per-steamid",
-  "accessMode": "public",
+  "accessMode": "endpoint",
   "maxRecords": 1,
   "schema": {
     "currency": { "type": "number", "default": 0 },
@@ -70,16 +86,26 @@ Player collection with inventory and backpack capacity.
     "phaserTier": { "type": "number", "default": 1 }
   },
   "constants": [
-    { "group": "mining", "values": { "base_capacity": 100, "capacity_per_upgrade": 50 } }
+    {
+      "id": "mining",
+      "name": "Mining",
+      "entries": { "base_capacity": 100, "capacity_per_upgrade": 50 }
+    }
   ],
   "tables": [
     {
-      "name": "ore_types",
-      "columns": ["id", "name", "tier", "basePrice"],
+      "id": "ore_types",
+      "name": "Ore Types",
+      "columns": [
+        { "key": "id", "type": "string" },
+        { "key": "name", "type": "string" },
+        { "key": "tier", "type": "number" },
+        { "key": "basePrice", "type": "number" }
+      ],
       "rows": [
-        ["iron", "Iron Ore", 1, 10],
-        ["copper", "Copper", 2, 25],
-        ["gold", "Gold", 3, 50]
+        { "id": "iron", "name": "Iron Ore", "tier": 1, "basePrice": 10 },
+        { "id": "copper", "name": "Copper", "tier": 2, "basePrice": 25 },
+        { "id": "gold", "name": "Gold", "tier": 3, "basePrice": 50 }
       ]
     }
   ]
@@ -98,19 +124,82 @@ Mine ore with backpack capacity check and tier validation.
   "description": "Process an ore mining action",
   "enabled": true,
   "input": {
-    "oreType": { "type": "string", "required": true },
-    "amount": { "type": "number", "required": true }
+    "type": "object",
+    "properties": {
+      "oreType": { "type": "string" },
+      "amount": { "type": "number" }
+    },
+    "required": ["oreType", "amount"]
   },
   "steps": [
-    { "type": "read", "collection": "players", "as": "player" },
-    { "type": "lookup", "source": "values", "table": "ore_types", "key": "id", "value": "{{input.oreType}}", "as": "ore" },
-    { "type": "condition", "field": "player.phaserTier", "operator": "gte", "value": "{{ore.tier}}", "onFail": "error", "errorMessage": "Phaser tier too low for this ore" },
-    { "type": "condition", "field": "player.currentOreKg", "operator": "lt", "value": "{{player.backpackCapacity}}", "onFail": "error", "errorCode": "BACKPACK_FULL", "errorMessage": "Backpack is full" },
-    { "type": "transform", "field": "player.ores.{{input.oreType}}", "operation": "add", "value": "{{input.amount}}" },
-    { "type": "transform", "field": "player.currentOreKg", "operation": "add", "value": "{{input.amount}}" },
-    { "type": "write", "collection": "players" }
+    {
+      "id": "player",
+      "type": "read",
+      "collection": "players",
+      "key": "{{steamId}}_default"
+    },
+    {
+      "id": "ore",
+      "type": "lookup",
+      "source": "values",
+      "table": "ore_types",
+      "where": {
+        "field": "id",
+        "op": "==",
+        "value": "{{input.oreType}}"
+      }
+    },
+    {
+      "id": "tier_check",
+      "type": "condition",
+      "check": {
+        "field": "{{player.phaserTier}}",
+        "op": ">=",
+        "value": "{{ore.tier}}"
+      },
+      "onFail": {
+        "status": 403,
+        "error": "TIER_TOO_LOW",
+        "message": "Phaser tier too low for this ore"
+      }
+    },
+    {
+      "id": "space_check",
+      "type": "condition",
+      "check": {
+        "field": "{{player.currentOreKg}}",
+        "op": "<",
+        "value": "{{player.backpackCapacity}}"
+      },
+      "onFail": {
+        "status": 403,
+        "error": "BACKPACK_FULL",
+        "message": "Backpack is full"
+      }
+    },
+    {
+      "id": "new_ore_total",
+      "type": "transform",
+      "expression": "{{player.currentOreKg}} + {{input.amount}}"
+    },
+    {
+      "id": "save",
+      "type": "write",
+      "collection": "players",
+      "key": "{{steamId}}_default",
+      "ops": [
+        { "op": "inc", "path": "ores.{{input.oreType}}", "value": "{{input.amount}}" },
+        { "op": "set", "path": "currentOreKg", "value": "{{new_ore_total}}" }
+      ]
+    }
   ],
-  "response": { "status": 200, "body": { "ok": true } }
+  "response": {
+    "status": 200,
+    "body": {
+      "ok": true,
+      "currentOreKg": "{{new_ore_total}}"
+    }
+  }
 }
 ```
 
@@ -124,25 +213,15 @@ Verify player has backpack space available.
   "name": "Check Backpack Space",
   "description": "Verify player has room in their backpack",
   "condition": {
-    "field": "player.currentOreKg",
-    "op": "lt",
-    "value": "{{player.backpackCapacity}}"
+    "field": "{{new_ore_total}}",
+    "op": "<=",
+    "value": "{{capacity}}"
   },
   "onFail": {
     "reject": true,
     "errorCode": "BACKPACK_FULL",
-    "errorMessage": "Not enough backpack space. Current: {{player.currentOreKg}}kg / {{player.backpackCapacity}}kg."
-  },
-  "steps": [
-    {
-      "type": "condition",
-      "field": "player.currentOreKg",
-      "operator": "lt",
-      "value": "{{player.backpackCapacity}}",
-      "onFail": "error",
-      "errorMessage": "Backpack is full"
-    }
-  ]
+    "errorMessage": "Not enough backpack space. Current: {{current_kg}}kg / {{capacity}}kg."
+  }
 }
 ```
 
@@ -162,19 +241,80 @@ Sell ore for currency with ore amount validation.
   "description": "Sell ore from inventory for currency",
   "enabled": true,
   "input": {
-    "oreType": { "type": "string", "required": true },
-    "amount": { "type": "number", "required": true }
+    "type": "object",
+    "properties": {
+      "oreType": { "type": "string" },
+      "amount": { "type": "number" }
+    },
+    "required": ["oreType", "amount"]
   },
   "steps": [
-    { "type": "read", "collection": "players", "as": "player" },
-    { "type": "lookup", "source": "values", "table": "ore_types", "key": "id", "value": "{{input.oreType}}", "as": "ore" },
-    { "type": "condition", "field": "player.ores.{{input.oreType}}", "operator": "gte", "value": "{{input.amount}}", "onFail": "error", "errorCode": "NOT_ENOUGH_ORE", "errorMessage": "Not enough ore to sell" },
-    { "type": "transform", "field": "player.ores.{{input.oreType}}", "operation": "subtract", "value": "{{input.amount}}" },
-    { "type": "transform", "field": "player.currentOreKg", "operation": "subtract", "value": "{{input.amount}}" },
-    { "type": "transform", "field": "player.currency", "operation": "add", "value": "{{input.amount}}" },
-    { "type": "write", "collection": "players" }
+    {
+      "id": "player",
+      "type": "read",
+      "collection": "players",
+      "key": "{{steamId}}_default"
+    },
+    {
+      "id": "ore",
+      "type": "lookup",
+      "source": "values",
+      "table": "ore_types",
+      "where": {
+        "field": "id",
+        "op": "==",
+        "value": "{{input.oreType}}"
+      }
+    },
+    {
+      "id": "ore_check",
+      "type": "condition",
+      "check": {
+        "field": "{{player.ores.{{input.oreType}}}}",
+        "op": ">=",
+        "value": "{{input.amount}}"
+      },
+      "onFail": {
+        "status": 403,
+        "error": "NOT_ENOUGH_ORE",
+        "message": "Not enough ore to sell"
+      }
+    },
+    {
+      "id": "sale_value",
+      "type": "transform",
+      "expression": "round({{ore.basePrice}} * {{input.amount}})"
+    },
+    {
+      "id": "neg_amount",
+      "type": "transform",
+      "expression": "0 - {{input.amount}}"
+    },
+    {
+      "id": "new_ore_total",
+      "type": "transform",
+      "expression": "max({{player.currentOreKg}} - {{input.amount}}, 0)"
+    },
+    {
+      "id": "save",
+      "type": "write",
+      "collection": "players",
+      "key": "{{steamId}}_default",
+      "ops": [
+        { "op": "inc", "path": "ores.{{input.oreType}}", "value": "{{neg_amount}}" },
+        { "op": "inc", "path": "currency", "value": "{{sale_value}}", "source": "ore_sale", "reason": "Sold {{input.amount}} of {{ore.name}}" },
+        { "op": "set", "path": "currentOreKg", "value": "{{new_ore_total}}" }
+      ]
+    }
   ],
-  "response": { "status": 200, "body": { "ok": true } }
+  "response": {
+    "status": 200,
+    "body": {
+      "ok": true,
+      "earned": "{{sale_value}}",
+      "currency": "{{player.currency}}"
+    }
+  }
 }
 ```
 
@@ -190,16 +330,72 @@ Purchase an upgrade with currency check.
   "description": "Purchase an upgrade using currency",
   "enabled": true,
   "input": {
-    "upgradeId": { "type": "string", "required": true },
-    "cost": { "type": "number", "required": true }
+    "type": "object",
+    "properties": {
+      "upgradeId": { "type": "string" }
+    },
+    "required": ["upgradeId"]
   },
   "steps": [
-    { "type": "read", "collection": "players", "as": "player" },
-    { "type": "condition", "field": "player.currency", "operator": "gte", "value": "{{input.cost}}", "onFail": "error", "errorCode": "NOT_ENOUGH_CURRENCY", "errorMessage": "Not enough currency" },
-    { "type": "transform", "field": "player.currency", "operation": "subtract", "value": "{{input.cost}}" },
-    { "type": "write", "collection": "players" }
+    {
+      "id": "player",
+      "type": "read",
+      "collection": "players",
+      "key": "{{steamId}}_default"
+    },
+    {
+      "id": "upgrade",
+      "type": "lookup",
+      "source": "values",
+      "table": "upgrades",
+      "where": {
+        "field": "upgrade_id",
+        "op": "==",
+        "value": "{{input.upgradeId}}"
+      }
+    },
+    {
+      "id": "upgrade_cost",
+      "type": "transform",
+      "expression": "{{upgrade.cost}} + 0"
+    },
+    {
+      "id": "currency_check",
+      "type": "condition",
+      "check": {
+        "field": "{{player.currency}}",
+        "op": ">=",
+        "value": "{{upgrade_cost}}"
+      },
+      "onFail": {
+        "status": 403,
+        "error": "NOT_ENOUGH_CURRENCY",
+        "message": "Not enough currency. Need {{upgrade_cost}}, have {{player.currency}}."
+      }
+    },
+    {
+      "id": "neg_cost",
+      "type": "transform",
+      "expression": "0 - {{upgrade_cost}}"
+    },
+    {
+      "id": "save",
+      "type": "write",
+      "collection": "players",
+      "key": "{{steamId}}_default",
+      "ops": [
+        { "op": "inc", "path": "currency", "value": "{{neg_cost}}", "source": "upgrade_purchase", "reason": "Purchased {{upgrade.name}}" },
+        { "op": "push", "path": "purchasedUpgrades", "value": "{{input.upgradeId}}" }
+      ]
+    }
   ],
-  "response": { "status": 200, "body": { "ok": true } }
+  "response": {
+    "status": 200,
+    "body": {
+      "ok": true,
+      "purchased": "{{input.upgradeId}}"
+    }
+  }
 }
 ```
 
@@ -213,25 +409,15 @@ Reusable currency check workflow.
   "name": "Check Currency",
   "description": "Verify player has enough currency",
   "condition": {
-    "field": "player.currency",
-    "op": "gte",
-    "value": "{{input.cost}}"
+    "field": "{{player.currency}}",
+    "op": ">=",
+    "value": "{{cost}}"
   },
   "onFail": {
     "reject": true,
     "errorCode": "NOT_ENOUGH_CURRENCY",
-    "errorMessage": "Not enough currency. Have: {{player.currency}}, need: {{input.cost}}"
-  },
-  "steps": [
-    {
-      "type": "condition",
-      "field": "player.currency",
-      "operator": "gte",
-      "value": "{{input.cost}}",
-      "onFail": "error",
-      "errorMessage": "Not enough currency"
-    }
-  ]
+    "errorMessage": "Not enough currency. Have: {{player.currency}}, need: {{cost}}"
+  }
 }
 ```
 
@@ -248,7 +434,7 @@ Global leaderboard collection for top scores.
   "name": "leaderboard",
   "description": "Global leaderboard for high scores",
   "collectionType": "global",
-  "accessMode": "public",
+  "accessMode": "endpoint",
   "maxRecords": 100,
   "allowRecordDelete": false,
   "schema": {
@@ -272,13 +458,45 @@ Submit a score to the global leaderboard.
   "description": "Submit a player score to the leaderboard",
   "enabled": true,
   "input": {
-    "playerName": { "type": "string", "required": true },
-    "score": { "type": "number", "required": true }
+    "type": "object",
+    "properties": {
+      "playerName": { "type": "string" },
+      "score": { "type": "number" }
+    },
+    "required": ["playerName", "score"]
   },
   "steps": [
-    { "type": "read", "collection": "players", "as": "player" },
-    { "type": "condition", "field": "input.score", "operator": "gt", "value": 0, "onFail": "error", "errorMessage": "Score must be positive" },
-    { "type": "write", "collection": "leaderboard" }
+    {
+      "id": "player",
+      "type": "read",
+      "collection": "players",
+      "key": "{{steamId}}_default"
+    },
+    {
+      "id": "score_check",
+      "type": "condition",
+      "check": {
+        "field": "{{input.score}}",
+        "op": ">",
+        "value": 0
+      },
+      "onFail": {
+        "status": 400,
+        "error": "INVALID_SCORE",
+        "message": "Score must be positive"
+      }
+    },
+    {
+      "id": "save",
+      "type": "write",
+      "collection": "leaderboard",
+      "key": "{{steamId}}",
+      "ops": [
+        { "op": "set", "path": "playerName", "value": "{{input.playerName}}" },
+        { "op": "set", "path": "score", "value": "{{input.score}}" },
+        { "op": "set", "path": "steamId", "value": "{{steamId}}" }
+      ]
+    }
   ],
   "response": { "status": 200, "body": { "ok": true } }
 }
@@ -297,7 +515,7 @@ Per-player chat message storage.
   "name": "chat_messages",
   "description": "Stores chat messages per player",
   "collectionType": "per-steamid",
-  "accessMode": "public",
+  "accessMode": "endpoint",
   "maxRecords": 1,
   "schema": {
     "displayName": { "type": "string", "default": "" },
@@ -318,14 +536,30 @@ Send a chat message and increment counter.
   "description": "Send a chat message",
   "enabled": true,
   "input": {
-    "text": { "type": "string", "required": true },
-    "displayName": { "type": "string", "required": true }
+    "type": "object",
+    "properties": {
+      "text": { "type": "string" },
+      "displayName": { "type": "string" }
+    },
+    "required": ["text", "displayName"]
   },
   "steps": [
-    { "type": "read", "collection": "chat_messages", "as": "chat" },
-    { "type": "transform", "field": "chat.displayName", "operation": "set", "value": "{{input.displayName}}" },
-    { "type": "transform", "field": "chat.messageCount", "operation": "add", "value": 1 },
-    { "type": "write", "collection": "chat_messages" }
+    {
+      "id": "chat",
+      "type": "read",
+      "collection": "chat_messages",
+      "key": "{{steamId}}_default"
+    },
+    {
+      "id": "save",
+      "type": "write",
+      "collection": "chat_messages",
+      "key": "{{steamId}}_default",
+      "ops": [
+        { "op": "set", "path": "displayName", "value": "{{input.displayName}}" },
+        { "op": "inc", "path": "messageCount", "value": 1 }
+      ]
+    }
   ],
   "response": { "status": 200, "body": { "ok": true, "messageCount": "{{chat.messageCount}}" } }
 }

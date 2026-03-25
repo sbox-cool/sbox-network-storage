@@ -14,8 +14,8 @@ const REPO_ROOT = resolve(__dirname, "..");
 // ─── Validation Constants ─────────────────────────────────────────────────────
 
 const VALID_STEP_TYPES = ["read", "write", "transform", "condition", "lookup", "filter", "workflow"] as const;
-const VALID_OPERATIONS = ["add", "subtract", "set", "multiply", "divide", "append", "remove"] as const;
-const VALID_OPERATORS = ["eq", "neq", "gt", "gte", "lt", "lte", "contains", "exists", "not_exists"] as const;
+const VALID_OPERATIONS = ["set", "inc", "push"] as const;
+const VALID_OPERATORS = ["==", "!=", ">", ">=", "<", "<=", "contains", "exists", "not_exists", "eq", "neq", "gt", "gte", "lt", "lte"] as const;
 const VALID_ONFAIL = ["error", "skip"] as const;
 const VALID_COLLECTION_TYPES = ["per-steamid", "global"] as const;
 const VALID_ACCESS_MODES = ["public", "private"] as const;
@@ -37,13 +37,13 @@ const REQUIRED_ENV_KEYS = ["SBOXCOOL_PROJECT_ID", "SBOXCOOL_PUBLIC_KEY", "SBOXCO
 const OPTIONAL_ENV_KEYS = ["SBOXCOOL_BASE_URL", "SBOXCOOL_API_VERSION", "SBOXCOOL_DATA_FOLDER", "SBOXCOOL_DATA_SOURCE"] as const;
 
 const STEP_REQUIRED_FIELDS: Record<string, string[]> = {
-  read: ["collection", "as"],
-  write: ["collection"],
-  transform: ["field", "operation", "value"],
-  condition: ["field", "operator", "value", "onFail"],
-  lookup: ["source", "table", "key", "value", "as"],
-  filter: ["source", "field", "operator", "value", "as"],
-  workflow: ["workflow"],
+  read: ["id", "collection", "key"],
+  write: ["id", "collection", "key", "ops"],
+  transform: ["id", "expression"],
+  condition: ["id", "check"],
+  lookup: ["id", "source", "table", "where"],
+  filter: ["id", "source", "table", "where"],
+  workflow: ["id", "workflow"],
 };
 
 // ─── Documentation Content ────────────────────────────────────────────────────
@@ -102,17 +102,24 @@ Collections define where and how your data is stored. Each collection is a JSON 
   },
   "constants": [
     {
-      "group": "progression",
-      "values": { "xp_per_level": 1000, "max_level": 50 }
+      "id": "progression",
+      "name": "Progression",
+      "entries": { "xp_per_level": 1000, "max_level": 50 }
     }
   ],
   "tables": [
     {
-      "name": "ore_types",
-      "columns": ["id", "name", "tier", "basePrice"],
+      "id": "ore_types",
+      "name": "Ore Types",
+      "columns": [
+        { "key": "id", "type": "string" },
+        { "key": "name", "type": "string" },
+        { "key": "tier", "type": "number" },
+        { "key": "basePrice", "type": "number" }
+      ],
       "rows": [
-        ["iron", "Iron Ore", 1, 10],
-        ["copper", "Copper", 2, 25]
+        { "id": "iron", "name": "Iron Ore", "tier": 1, "basePrice": 10 },
+        { "id": "copper", "name": "Copper", "tier": 2, "basePrice": 25 }
       ]
     }
   ]
@@ -163,15 +170,19 @@ Endpoints are server-side pipelines that your game calls via the API. Each endpo
   "description": "Process an ore mining action",
   "enabled": true,
   "input": {
-    "oreType": { "type": "string", "required": true },
-    "amount": { "type": "number", "required": true }
+    "type": "object",
+    "properties": {
+      "oreType": { "type": "string" },
+      "amount": { "type": "number" }
+    },
+    "required": ["oreType", "amount"]
   },
   "steps": [
-    { "type": "read", "collection": "players", "as": "player" },
-    { "type": "lookup", "source": "values", "table": "ore_types", "key": "id", "value": "{{input.oreType}}", "as": "ore" },
-    { "type": "condition", "field": "player.phaserTier", "operator": "gte", "value": "{{ore.tier}}", "onFail": "error", "errorMessage": "Phaser tier too low" },
-    { "type": "transform", "field": "player.ores.{{input.oreType}}", "operation": "add", "value": "{{input.amount}}" },
-    { "type": "write", "collection": "players" }
+    { "id": "player", "type": "read", "collection": "players", "key": "{{steamId}}_default" },
+    { "id": "ore", "type": "lookup", "source": "values", "table": "ore_types", "where": { "field": "id", "op": "==", "value": "{{input.oreType}}" } },
+    { "id": "tier_check", "type": "condition", "check": { "field": "{{player.phaserTier}}", "op": ">=", "value": "{{ore.tier}}" }, "onFail": { "status": 403, "error": "TIER_TOO_LOW", "message": "Phaser tier too low" } },
+    { "id": "new_total", "type": "transform", "expression": "{{player.currentOreKg}} + {{input.amount}}" },
+    { "id": "save", "type": "write", "collection": "players", "key": "{{steamId}}_default", "ops": [{ "op": "inc", "path": "ores.{{input.oreType}}", "value": "{{input.amount}}" }, { "op": "set", "path": "currentOreKg", "value": "{{new_total}}" }] }
   ],
   "response": {
     "status": 200,
@@ -189,8 +200,8 @@ Endpoints are server-side pipelines that your game calls via the API. Each endpo
 | \`method\` | string | No | \`GET\` or \`POST\`. Default: \`POST\` |
 | \`description\` | string | No | Description (max 256 chars) |
 | \`enabled\` | boolean | No | Whether the endpoint is active. Default: true |
-| \`input\` | object | No | Input field definitions with \`type\` and optional \`required\` |
-| \`steps\` | array | Yes | Pipeline steps (max 20). This is where all the logic lives |
+| \`input\` | object | No | JSON Schema object with \`type\`, \`properties\`, and \`required\` array |
+| \`steps\` | array | Yes | Pipeline steps (max 20). Each step needs an \`id\` and \`type\` |
 | \`response\` | object | No | Default response with \`status\` and \`body\` |
 
 ## Slug Rules
@@ -204,7 +215,7 @@ Endpoint slugs must match \`/^[a-z0-9-]+$/\` — lowercase letters, digits, and 
 var result = await NetworkStorage.CallEndpoint("mine-ore", new { oreType = "iron", amount = 5 });
 
 // GET endpoint (no input)
-var data = await NetworkStorage.CallEndpoint("get-leaderboard");
+var data = await NetworkStorage.CallEndpoint("load-player");
 \`\`\``,
 
   workflows: `# Workflows
@@ -219,25 +230,15 @@ Workflows are reusable validation/logic blocks that endpoints can reference. Eac
   "name": "Check Currency",
   "description": "Verify player has enough currency",
   "condition": {
-    "field": "player.currency",
-    "op": "gte",
-    "value": "{{input.cost}}"
+    "field": "{{player.currency}}",
+    "op": ">=",
+    "value": "{{cost}}"
   },
   "onFail": {
     "reject": true,
     "errorCode": "NOT_ENOUGH_CURRENCY",
-    "errorMessage": "Not enough currency. Have: {{player.currency}}, need: {{input.cost}}"
-  },
-  "steps": [
-    {
-      "type": "condition",
-      "field": "player.currency",
-      "operator": "gte",
-      "value": "{{input.cost}}",
-      "onFail": "error",
-      "errorMessage": "Not enough currency"
-    }
-  ]
+    "errorMessage": "Not enough currency. Have: {{player.currency}}, need: {{cost}}"
+  }
 }
 \`\`\`
 
@@ -269,10 +270,10 @@ Workflows are reusable validation/logic blocks that endpoints can reference. Eac
 
 ## Referencing from Endpoints
 
-Use a \`workflow\` step in your endpoint:
+Use a workflow step in your endpoint with optional \`bindings\` to map variables:
 
 \`\`\`json
-{ "type": "workflow", "workflow": "check-currency" }
+{ "id": "currency_check", "type": "condition", "workflow": "check-currency", "bindings": { "cost": "upgrade_cost" } }
 \`\`\`
 
 ## Compound Conditions
@@ -292,135 +293,125 @@ Use \`all\` (AND) or \`any\` (OR) for compound checks:
 
   steps: `# Endpoint Step Types — Complete Reference
 
-Endpoints execute a pipeline of steps in order. Each step has a \`type\` field and type-specific properties.
+Endpoints execute a pipeline of steps in order. Each step has an \`id\`, a \`type\`, and type-specific properties. The \`id\` is used to reference the step's result in later steps via \`{{id.field}}\` templates.
 
 ## read — Load a Collection Record
 
-Loads a player's record from a collection into a named variable.
+Loads a record from a collection by key.
 
 \`\`\`json
-{ "type": "read", "collection": "players", "as": "player" }
+{ "id": "player", "type": "read", "collection": "players", "key": "{{steamId}}_default" }
 \`\`\`
 
 | Field | Required | Description |
 |-------|----------|-------------|
+| \`id\` | Yes | Variable name for the result (used as \`{{player.currency}}\`, etc.) |
 | \`collection\` | Yes | Collection name to read from |
-| \`as\` | Yes | Variable name to store the result (used in later steps as \`{{player.fieldName}}\`) |
+| \`key\` | Yes | Record key (supports \`{{templates}}\`) |
 
 ## write — Save a Collection Record
 
-Writes/updates a record in a collection. All writes are **deferred** until all conditions pass.
+Persists changes using atomic operations. All writes are **deferred** until all conditions pass.
 
 \`\`\`json
-{ "type": "write", "collection": "players" }
+{ "id": "save", "type": "write", "collection": "players", "key": "{{steamId}}_default", "ops": [
+  { "op": "inc", "path": "xp", "value": "{{xp_reward}}", "source": "mining", "reason": "Mined ore" },
+  { "op": "set", "path": "currentOreKg", "value": "{{new_total}}" },
+  { "op": "push", "path": "purchasedUpgrades", "value": "{{input.upgrade_id}}" }
+]}
 \`\`\`
 
 | Field | Required | Description |
 |-------|----------|-------------|
-| \`collection\` | Yes | Collection name to write to (must have been \`read\` earlier) |
+| \`id\` | Yes | Step identifier |
+| \`collection\` | Yes | Collection name to write to |
+| \`key\` | Yes | Record key (supports \`{{templates}}\`) |
+| \`ops\` | Yes | Array of operations: \`set\` (assign), \`inc\` (increment), \`push\` (append to array) |
 
-## transform — Modify a Field Value
+Each op has: \`op\`, \`path\` (dot-path, supports templates), \`value\`. Ledger fields also need \`source\` and \`reason\`.
 
-Modifies a field value using an operation.
+## transform — Compute a Value
+
+Evaluates a math expression. Reference result as \`{{id}}\` (NOT \`{{id.result}}\`).
 
 \`\`\`json
-{ "type": "transform", "field": "player.currency", "operation": "add", "value": 100 }
-{ "type": "transform", "field": "player.ores.{{input.oreType}}", "operation": "add", "value": "{{input.amount}}" }
+{ "id": "sale_value", "type": "transform", "expression": "round({{ore.value_per_kg}} * {{input.kg}})" }
+{ "id": "neg_cost", "type": "transform", "expression": "0 - {{upgrade_cost}}" }
 \`\`\`
 
 | Field | Required | Description |
 |-------|----------|-------------|
-| \`field\` | Yes | Dot-path to the field (supports \`{{templates}}\`) |
-| \`operation\` | Yes | One of: \`add\`, \`subtract\`, \`set\`, \`multiply\`, \`divide\`, \`append\`, \`remove\` |
-| \`value\` | Yes | The value to use (supports \`{{templates}}\`) |
-
-**Operations:**
-- \`add\` — add numeric value
-- \`subtract\` — subtract numeric value
-- \`set\` — overwrite with new value
-- \`multiply\` — multiply by value
-- \`divide\` — divide by value
-- \`append\` — add item to array
-- \`remove\` — remove item from array
+| \`id\` | Yes | Variable name for the result |
+| \`expression\` | Yes | Math expression with \`{{templates}}\`. Functions: floor, ceil, round, min, max, abs |
 
 ## condition — Validate a Check
 
-Checks a condition and either rejects the request or skips remaining steps.
+Checks a condition and rejects the request if it fails.
 
 \`\`\`json
 {
-  "type": "condition",
-  "field": "player.currency",
-  "operator": "gte",
-  "value": "{{input.cost}}",
-  "onFail": "error",
-  "errorMessage": "Not enough currency"
+  "id": "currency_check", "type": "condition",
+  "check": { "field": "{{player.currency}}", "op": ">=", "value": "{{upgrade_cost}}" },
+  "onFail": { "status": 403, "error": "NOT_ENOUGH_CURRENCY", "message": "Need {{upgrade_cost}} QC." }
 }
 \`\`\`
 
 | Field | Required | Description |
 |-------|----------|-------------|
-| \`field\` | Yes | Dot-path to the field to check |
-| \`operator\` | Yes | One of: \`eq\`, \`neq\`, \`gt\`, \`gte\`, \`lt\`, \`lte\`, \`contains\`, \`exists\`, \`not_exists\` |
-| \`value\` | Yes* | Value to compare against (*not required for \`exists\`/\`not_exists\`) |
-| \`onFail\` | Yes | \`"error"\` (reject request) or \`"skip"\` (skip remaining steps) |
-| \`errorMessage\` | No | Human-readable error message (supports \`{{templates}}\`) |
-| \`errorCode\` | No | Custom error code (e.g. \`"BACKPACK_FULL"\`) |
+| \`id\` | Yes | Step identifier |
+| \`check\` | Yes | Object with \`field\` (left-hand value), \`op\` (operator), \`value\` (right-hand value) |
+| \`onFail\` | Yes | Object with \`status\` (HTTP code), \`error\` (error code string), \`message\` (human-readable) |
 
-**Operators:**
-- \`eq\` — equals
-- \`neq\` — not equals
-- \`gt\` — greater than
-- \`gte\` — greater than or equal
-- \`lt\` — less than
-- \`lte\` — less than or equal
-- \`contains\` — array contains value or string contains substring
-- \`exists\` — field exists and is not null/undefined
-- \`not_exists\` — field does not exist or is null/undefined
+**Operators:** \`==\`, \`!=\`, \`>\`, \`>=\`, \`<\`, \`<=\`, \`contains\`, \`exists\`, \`not_exists\`
 
-## lookup — Find a Table Row
+**Compound conditions** use \`all\` (AND) or \`any\` (OR) arrays inside \`check\`.
 
-Looks up a single row in a values table by key match.
+## lookup — Find a Single Table Row
+
+Looks up a single row from a game values table.
 
 \`\`\`json
-{ "type": "lookup", "source": "values", "table": "ore_types", "key": "id", "value": "{{input.oreType}}", "as": "ore" }
+{ "id": "ore", "type": "lookup", "source": "values", "table": "ore_types",
+  "where": { "field": "ore_id", "op": "==", "value": "{{input.ore_id}}" } }
 \`\`\`
 
 | Field | Required | Description |
 |-------|----------|-------------|
+| \`id\` | Yes | Variable name for the matched row |
 | \`source\` | Yes | Data source (typically \`"values"\`) |
-| \`table\` | Yes | Table name (defined in collection's \`tables\` array) |
-| \`key\` | Yes | Column to match against |
-| \`value\` | Yes | Value to match (supports \`{{templates}}\`) |
-| \`as\` | Yes | Variable name for the matched row |
+| \`table\` | Yes | Table name |
+| \`where\` | Yes | Match criteria: \`field\` (column), \`op\` (operator), \`value\` (match value) |
 
-## filter — Find Multiple Records
+## filter — Find Multiple Table Rows
 
-Filters records by field match. Max 500 records scanned.
+Queries multiple rows from a game values table.
 
 \`\`\`json
-{ "type": "filter", "source": "leaderboard", "field": "score", "operator": "gte", "value": 100, "as": "topPlayers" }
+{ "id": "tier_ores", "type": "filter", "source": "values", "table": "ore_types",
+  "where": { "field": "tier", "op": "<=", "value": "{{player_tier}}" } }
 \`\`\`
 
 | Field | Required | Description |
 |-------|----------|-------------|
-| \`source\` | Yes | Collection or data source to filter |
-| \`field\` | Yes | Field to match against |
-| \`operator\` | Yes | Comparison operator |
-| \`value\` | Yes | Value to compare |
-| \`as\` | Yes | Variable name for the filtered results |
+| \`id\` | Yes | Variable name for results (\`{{id.rows}}\` for array, \`{{id.count}}\` for count) |
+| \`source\` | Yes | Data source |
+| \`table\` | Yes | Table name |
+| \`where\` | Yes | Filter criteria: \`field\`, \`op\`, \`value\` (same as lookup) |
 
 ## workflow — Run a Reusable Workflow
 
-Executes a workflow by its ID. The workflow's steps run inline.
+Executes a workflow by ID with optional variable bindings.
 
 \`\`\`json
-{ "type": "workflow", "workflow": "check-currency" }
+{ "id": "space_check", "type": "condition", "workflow": "check-inventory-space",
+  "bindings": { "new_ore_total": "new_ore_total", "capacity": "capacity" } }
 \`\`\`
 
 | Field | Required | Description |
 |-------|----------|-------------|
-| \`workflow\` | Yes | The workflow ID to execute |`,
+| \`id\` | Yes | Step identifier |
+| \`workflow\` | Yes | The workflow ID to execute |
+| \`bindings\` | No | Map of workflow variable names to step IDs from current pipeline |`,
 
   templates: `# Template Syntax — \`{{template}}\` Reference
 
@@ -435,8 +426,10 @@ Templates let you reference dynamic values in endpoint steps. They are resolved 
 | Source | Description | Example |
 |--------|------------|---------|
 | \`input\` | Request input fields | \`{{input.oreType}}\`, \`{{input.amount}}\` |
-| \`{alias}\` | Data from a \`read\` or \`lookup\` step | \`{{player.currency}}\`, \`{{ore.tier}}\` |
-| \`values\` | Game values / tables | \`{{values.ore_types}}\` |
+| \`steamId\` | The player's Steam ID | \`{{steamId}}\` |
+| \`{stepId}\` | Data from a \`read\` or \`lookup\` step | \`{{player.currency}}\`, \`{{ore.tier}}\` |
+| \`{transformId}\` | Result of a \`transform\` step | \`{{sale_value}}\`, \`{{neg_cost}}\` |
+| \`values\` | Game values constants | \`{{values.progression.xp_per_level}}\` |
 
 ## Path Traversal
 
@@ -457,14 +450,18 @@ Prefix with \`-\` for numeric negation:
 ## Where Templates Work
 
 Templates are resolved in these step fields:
-- \`transform.field\` — the target field path
-- \`transform.value\` — the value to apply
-- \`condition.field\` — the field to check
-- \`condition.value\` — the comparison value
-- \`lookup.value\` — the lookup key value
-- \`filter.value\` — the filter comparison value
+- \`read.key\` — the record key
+- \`write.key\` — the record key
+- \`write.ops[].path\` — dot-path to field (e.g. \`ores.{{input.ore_id}}\`)
+- \`write.ops[].value\` — the value to apply
+- \`write.ops[].reason\` — audit trail reason
+- \`transform.expression\` — the math expression
+- \`condition.check.field\` — left-hand value to check
+- \`condition.check.value\` — right-hand value to compare
+- \`condition.onFail.message\` — error message
+- \`lookup.where.value\` — the lookup match value
+- \`filter.where.value\` — the filter comparison value
 - \`response.body\` — values in the response body
-- \`onFail.errorMessage\` — workflow error messages
 
 ## Common Patterns
 
@@ -473,14 +470,19 @@ Templates are resolved in these step fields:
 "value": "{{input.amount}}"
 
 // Reference read data
-"field": "player.currency"
-"value": "{{player.currency}}"
+"field": "{{player.currency}}"
 
-// Dynamic field path
-"field": "player.ores.{{input.oreType}}"
+// Reference transform result (no .result suffix needed)
+"value": "{{sale_value}}"
 
-// Negation
-"value": "{{-input.cost}}"
+// Dynamic field path in write ops
+{ "op": "inc", "path": "ores.{{input.oreType}}", "value": "{{input.amount}}" }
+
+// Negation (for decrementing)
+"expression": "0 - {{upgrade_cost}}"
+
+// Game values constants
+"expression": "max({{player.xp}}, {{values.progression.xp_per_level}})"
 \`\`\``,
 
   "env-config": `# Environment Configuration (.env)
@@ -616,7 +618,7 @@ NetworkStorage.Configure("your-project-id", "sbox_ns_your_key");
 var result = await NetworkStorage.CallEndpoint("sell-ore", new { oreType = "iron", amount = 50 });
 
 // GET (no input)
-var data = await NetworkStorage.CallEndpoint("get-leaderboard");
+var data = await NetworkStorage.CallEndpoint("load-player");
 \`\`\`
 
 ### GetGameValues
@@ -900,19 +902,22 @@ const EXAMPLES: Record<string, Example[]> = {
         description: "Process an ore mining action",
         enabled: true,
         input: {
-          oreType: { type: "string", required: true },
-          amount: { type: "number", required: true },
+          type: "object",
+          properties: {
+            oreType: { type: "string" },
+            amount: { type: "number" },
+          },
+          required: ["oreType", "amount"],
         },
         steps: [
-          { type: "read", collection: "players", as: "player" },
-          { type: "lookup", source: "values", table: "ore_types", key: "id", value: "{{input.oreType}}", as: "ore" },
-          { type: "condition", field: "player.phaserTier", operator: "gte", value: "{{ore.tier}}", onFail: "error", errorMessage: "Phaser tier too low for this ore" },
-          { type: "condition", field: "player.currentOreKg", operator: "lt", value: "{{player.backpackCapacity}}", onFail: "error", errorCode: "BACKPACK_FULL", errorMessage: "Backpack is full" },
-          { type: "transform", field: "player.ores.{{input.oreType}}", operation: "add", value: "{{input.amount}}" },
-          { type: "transform", field: "player.currentOreKg", operation: "add", value: "{{input.amount}}" },
-          { type: "write", collection: "players" },
+          { id: "player", type: "read", collection: "players", key: "{{steamId}}_default" },
+          { id: "ore", type: "lookup", source: "values", table: "ore_types", where: { field: "id", op: "==", value: "{{input.oreType}}" } },
+          { id: "tier_check", type: "condition", check: { field: "{{player.phaserTier}}", op: ">=", value: "{{ore.tier}}" }, onFail: { status: 403, error: "TIER_TOO_LOW", message: "Phaser tier too low for this ore" } },
+          { id: "space_check", type: "condition", check: { field: "{{player.currentOreKg}}", op: "<", value: "{{player.backpackCapacity}}" }, onFail: { status: 403, error: "BACKPACK_FULL", message: "Backpack is full" } },
+          { id: "new_total", type: "transform", expression: "{{player.currentOreKg}} + {{input.amount}}" },
+          { id: "save", type: "write", collection: "players", key: "{{steamId}}_default", ops: [{ op: "inc", path: "ores.{{input.oreType}}", value: "{{input.amount}}" }, { op: "set", path: "currentOreKg", value: "{{new_total}}" }] },
         ],
-        response: { status: 200, body: { ok: true } },
+        response: { status: 200, body: { ok: true, currentOreKg: "{{new_total}}" } },
       }, null, 2),
     },
     {
@@ -924,25 +929,15 @@ const EXAMPLES: Record<string, Example[]> = {
         name: "Check Backpack Space",
         description: "Verify player has room in their backpack",
         condition: {
-          field: "player.currentOreKg",
-          op: "lt",
-          value: "{{player.backpackCapacity}}",
+          field: "{{new_ore_total}}",
+          op: "<=",
+          value: "{{capacity}}",
         },
         onFail: {
           reject: true,
           errorCode: "BACKPACK_FULL",
-          errorMessage: "Not enough backpack space. Current: {{player.currentOreKg}}kg / {{player.backpackCapacity}}kg.",
+          errorMessage: "Not enough backpack space. Current: {{current_kg}}kg / {{capacity}}kg.",
         },
-        steps: [
-          {
-            type: "condition",
-            field: "player.currentOreKg",
-            operator: "lt",
-            value: "{{player.backpackCapacity}}",
-            onFail: "error",
-            errorMessage: "Backpack is full",
-          },
-        ],
       }, null, 2),
     },
   ],
@@ -958,19 +953,23 @@ const EXAMPLES: Record<string, Example[]> = {
         description: "Sell ore from inventory for currency",
         enabled: true,
         input: {
-          oreType: { type: "string", required: true },
-          amount: { type: "number", required: true },
+          type: "object",
+          properties: {
+            oreType: { type: "string" },
+            amount: { type: "number" },
+          },
+          required: ["oreType", "amount"],
         },
         steps: [
-          { type: "read", collection: "players", as: "player" },
-          { type: "lookup", source: "values", table: "ore_types", key: "id", value: "{{input.oreType}}", as: "ore" },
-          { type: "condition", field: "player.ores.{{input.oreType}}", operator: "gte", value: "{{input.amount}}", onFail: "error", errorCode: "NOT_ENOUGH_ORE", errorMessage: "Not enough ore to sell" },
-          { type: "transform", field: "player.ores.{{input.oreType}}", operation: "subtract", value: "{{input.amount}}" },
-          { type: "transform", field: "player.currentOreKg", operation: "subtract", value: "{{input.amount}}" },
-          { type: "transform", field: "player.currency", operation: "add", value: "{{input.amount}}" },
-          { type: "write", collection: "players" },
+          { id: "player", type: "read", collection: "players", key: "{{steamId}}_default" },
+          { id: "ore", type: "lookup", source: "values", table: "ore_types", where: { field: "id", op: "==", value: "{{input.oreType}}" } },
+          { id: "ore_check", type: "condition", check: { field: "{{player.ores.{{input.oreType}}}}", op: ">=", value: "{{input.amount}}" }, onFail: { status: 403, error: "NOT_ENOUGH_ORE", message: "Not enough ore to sell" } },
+          { id: "sale_value", type: "transform", expression: "round({{ore.basePrice}} * {{input.amount}})" },
+          { id: "neg_amount", type: "transform", expression: "0 - {{input.amount}}" },
+          { id: "new_total", type: "transform", expression: "max({{player.currentOreKg}} - {{input.amount}}, 0)" },
+          { id: "save", type: "write", collection: "players", key: "{{steamId}}_default", ops: [{ op: "inc", path: "ores.{{input.oreType}}", value: "{{neg_amount}}" }, { op: "inc", path: "currency", value: "{{sale_value}}", source: "ore_sale", reason: "Sold {{input.amount}} of {{ore.name}}" }, { op: "set", path: "currentOreKg", value: "{{new_total}}" }] },
         ],
-        response: { status: 200, body: { ok: true } },
+        response: { status: 200, body: { ok: true, earned: "{{sale_value}}", currency: "{{player.currency}}" } },
       }, null, 2),
     },
     {
@@ -984,16 +983,21 @@ const EXAMPLES: Record<string, Example[]> = {
         description: "Purchase an upgrade using currency",
         enabled: true,
         input: {
-          upgradeId: { type: "string", required: true },
-          cost: { type: "number", required: true },
+          type: "object",
+          properties: {
+            upgradeId: { type: "string" },
+          },
+          required: ["upgradeId"],
         },
         steps: [
-          { type: "read", collection: "players", as: "player" },
-          { type: "condition", field: "player.currency", operator: "gte", value: "{{input.cost}}", onFail: "error", errorCode: "NOT_ENOUGH_CURRENCY", errorMessage: "Not enough currency" },
-          { type: "transform", field: "player.currency", operation: "subtract", value: "{{input.cost}}" },
-          { type: "write", collection: "players" },
+          { id: "player", type: "read", collection: "players", key: "{{steamId}}_default" },
+          { id: "upgrade", type: "lookup", source: "values", table: "upgrades", where: { field: "upgrade_id", op: "==", value: "{{input.upgradeId}}" } },
+          { id: "upgrade_cost", type: "transform", expression: "{{upgrade.cost}} + 0" },
+          { id: "currency_check", type: "condition", check: { field: "{{player.currency}}", op: ">=", value: "{{upgrade_cost}}" }, onFail: { status: 403, error: "NOT_ENOUGH_CURRENCY", message: "Not enough currency. Need {{upgrade_cost}}, have {{player.currency}}." } },
+          { id: "neg_cost", type: "transform", expression: "0 - {{upgrade_cost}}" },
+          { id: "save", type: "write", collection: "players", key: "{{steamId}}_default", ops: [{ op: "inc", path: "currency", value: "{{neg_cost}}", source: "upgrade_purchase", reason: "Purchased {{upgrade.name}}" }, { op: "push", path: "purchasedUpgrades", value: "{{input.upgradeId}}" }] },
         ],
-        response: { status: 200, body: { ok: true } },
+        response: { status: 200, body: { ok: true, purchased: "{{input.upgradeId}}" } },
       }, null, 2),
     },
     {
@@ -1005,25 +1009,15 @@ const EXAMPLES: Record<string, Example[]> = {
         name: "Check Currency",
         description: "Verify player has enough currency",
         condition: {
-          field: "player.currency",
-          op: "gte",
-          value: "{{input.cost}}",
+          field: "{{player.currency}}",
+          op: ">=",
+          value: "{{cost}}",
         },
         onFail: {
           reject: true,
           errorCode: "NOT_ENOUGH_CURRENCY",
-          errorMessage: "Not enough currency. Have: {{player.currency}}, need: {{input.cost}}",
+          errorMessage: "Not enough currency. Have: {{player.currency}}, need: {{cost}}",
         },
-        steps: [
-          {
-            type: "condition",
-            field: "player.currency",
-            operator: "gte",
-            value: "{{input.cost}}",
-            onFail: "error",
-            errorMessage: "Not enough currency",
-          },
-        ],
       }, null, 2),
     },
   ],
@@ -1058,13 +1052,17 @@ const EXAMPLES: Record<string, Example[]> = {
         description: "Submit a player score to the leaderboard",
         enabled: true,
         input: {
-          playerName: { type: "string", required: true },
-          score: { type: "number", required: true },
+          type: "object",
+          properties: {
+            playerName: { type: "string" },
+            score: { type: "number" },
+          },
+          required: ["playerName", "score"],
         },
         steps: [
-          { type: "read", collection: "players", as: "player" },
-          { type: "condition", field: "input.score", operator: "gt", value: 0, onFail: "error", errorMessage: "Score must be positive" },
-          { type: "write", collection: "leaderboard" },
+          { id: "player", type: "read", collection: "players", key: "{{steamId}}_default" },
+          { id: "score_check", type: "condition", check: { field: "{{input.score}}", op: ">", value: 0 }, onFail: { status: 400, error: "INVALID_SCORE", message: "Score must be positive" } },
+          { id: "save", type: "write", collection: "leaderboard", key: "{{steamId}}", ops: [{ op: "set", path: "playerName", value: "{{input.playerName}}" }, { op: "set", path: "score", value: "{{input.score}}" }, { op: "set", path: "steamId", value: "{{steamId}}" }] },
         ],
         response: { status: 200, body: { ok: true } },
       }, null, 2),
@@ -1098,14 +1096,16 @@ const EXAMPLES: Record<string, Example[]> = {
         description: "Send a chat message",
         enabled: true,
         input: {
-          text: { type: "string", required: true },
-          displayName: { type: "string", required: true },
+          type: "object",
+          properties: {
+            text: { type: "string" },
+            displayName: { type: "string" },
+          },
+          required: ["text", "displayName"],
         },
         steps: [
-          { type: "read", collection: "chat_messages", as: "chat" },
-          { type: "transform", field: "chat.displayName", operation: "set", value: "{{input.displayName}}" },
-          { type: "transform", field: "chat.messageCount", operation: "add", value: 1 },
-          { type: "write", collection: "chat_messages" },
+          { id: "chat", type: "read", collection: "chat_messages", key: "{{steamId}}_default" },
+          { id: "save", type: "write", collection: "chat_messages", key: "{{steamId}}_default", ops: [{ op: "set", path: "displayName", value: "{{input.displayName}}" }, { op: "inc", path: "messageCount", value: 1 }] },
         ],
         response: { status: 200, body: { ok: true, messageCount: "{{chat.messageCount}}" } },
       }, null, 2),

@@ -22,6 +22,7 @@ public class SetupWindow : DockWindow
 	private string _publicKey = "";
 	private string _secretKey = "";
 	private string _baseUrl = "https://api.sboxcool.com";
+	private string _cdnUrl = "";
 	private string _dataFolder = "Network Storage";
 	private int _dataSourceIndex;
 
@@ -55,8 +56,8 @@ public class SetupWindow : DockWindow
 	public SetupWindow()
 	{
 		Title = "Network Storage Setup";
-		Size = new Vector2( 480, 620 );
-		MinimumSize = new Vector2( 400, 520 );
+		Size = new Vector2( 480, 680 );
+		MinimumSize = new Vector2( 400, 580 );
 
 		// Load existing config
 		SyncToolConfig.Load();
@@ -64,6 +65,7 @@ public class SetupWindow : DockWindow
 		_publicKey = SyncToolConfig.PublicApiKey;
 		_secretKey = SyncToolConfig.SecretKey;
 		_baseUrl = SyncToolConfig.BaseUrl;
+		_cdnUrl = SyncToolConfig.CdnUrl;
 		_dataFolder = SyncToolConfig.DataFolder;
 		_dataSourceIndex = SyncToolConfig.DataSource switch
 		{
@@ -120,8 +122,11 @@ public class SetupWindow : DockWindow
 		// ── Base URL ──
 		DrawInputField( ref y, pad, w, 3, "Base URL", _baseUrl, "Default: https://api.sboxcool.com" );
 
+		// ── CDN URL ──
+		DrawInputField( ref y, pad, w, 4, "CDN URL", _cdnUrl, "Optional: storage.sboxcool.com" );
+
 		// ── Editor Data Folder ──
-		DrawInputField( ref y, pad, w, 4, "Editor Data Folder", _dataFolder, "Subfolder under Editor/ (default: Network Storage)" );
+		DrawInputField( ref y, pad, w, 5, "Editor Data Folder", _dataFolder, "Subfolder under Editor/ (default: Network Storage)" );
 
 		y += 4;
 		DrawSeparator( ref y, w, pad );
@@ -457,7 +462,7 @@ public class SetupWindow : DockWindow
 		}
 		else if ( e.Key == KeyCode.Tab )
 		{
-			_focusedField = ( _focusedField + 1 ) % 5;
+			_focusedField = ( _focusedField + 1 ) % 6;
 		}
 		else if ( e.Key == KeyCode.Escape )
 		{
@@ -529,7 +534,8 @@ public class SetupWindow : DockWindow
 			case 1: _publicKey += c; break;
 			case 2: _secretKey += c; break;
 			case 3: _baseUrl += c; break;
-			case 4: _dataFolder += c; break;
+			case 4: _cdnUrl += c; break;
+			case 5: _dataFolder += c; break;
 		}
 	}
 
@@ -541,7 +547,8 @@ public class SetupWindow : DockWindow
 			case 1: if ( _publicKey.Length > 0 ) _publicKey = _publicKey[..^1]; break;
 			case 2: if ( _secretKey.Length > 0 ) _secretKey = _secretKey[..^1]; break;
 			case 3: if ( _baseUrl.Length > 0 ) _baseUrl = _baseUrl[..^1]; break;
-			case 4: if ( _dataFolder.Length > 0 ) _dataFolder = _dataFolder[..^1]; break;
+			case 4: if ( _cdnUrl.Length > 0 ) _cdnUrl = _cdnUrl[..^1]; break;
+			case 5: if ( _dataFolder.Length > 0 ) _dataFolder = _dataFolder[..^1]; break;
 		}
 	}
 
@@ -551,7 +558,8 @@ public class SetupWindow : DockWindow
 		1 => _publicKey,
 		2 => _secretKey,
 		3 => _baseUrl,
-		4 => _dataFolder,
+		4 => _cdnUrl,
+		5 => _dataFolder,
 		_ => ""
 	};
 
@@ -563,7 +571,8 @@ public class SetupWindow : DockWindow
 			case 1: _publicKey = value; break;
 			case 2: _secretKey = value; break;
 			case 3: _baseUrl = value; break;
-			case 4: _dataFolder = value; break;
+			case 4: _cdnUrl = value; break;
+			case 5: _dataFolder = value; break;
 		}
 	}
 
@@ -605,7 +614,7 @@ public class SetupWindow : DockWindow
 			_ => SyncToolConfig.DataSourceMode.ApiThenJson
 		};
 
-		SyncToolConfig.Save( _secretKey, _publicKey, _projectId, _baseUrl, dataSource, _dataFolder );
+		SyncToolConfig.Save( _secretKey, _publicKey, _projectId, _baseUrl, dataSource, _dataFolder, _cdnUrl );
 
 		_status = "Configuration saved successfully";
 		_statusColor = "green";

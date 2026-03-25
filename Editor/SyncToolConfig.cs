@@ -26,6 +26,7 @@ public static class SyncToolConfig
 	public static string PublicApiKey { get; private set; } = "";
 	public static string ProjectId { get; private set; } = "";
 	public static string BaseUrl { get; private set; } = "https://api.sboxcool.com";
+	public static string CdnUrl { get; private set; } = "";
 	public static string ApiVersion { get; private set; } = "v3";
 
 	// ── Preferences ──
@@ -148,6 +149,7 @@ public static class SyncToolConfig
 		PublicApiKey = "";
 		ProjectId = "";
 		BaseUrl = "https://api.sboxcool.com";
+		CdnUrl = "";
 		ApiVersion = "v3";
 		DataSource = DataSourceMode.ApiThenJson;
 		DataFolder = "Network Storage";
@@ -187,6 +189,7 @@ public static class SyncToolConfig
 		ProjectId = json.TryGetProperty( "projectId", out var pid ) ? pid.GetString() ?? "" : "";
 		PublicApiKey = json.TryGetProperty( "publicKey", out var pk ) ? pk.GetString() ?? "" : "";
 		BaseUrl = json.TryGetProperty( "baseUrl", out var bu ) ? bu.GetString()?.TrimEnd( '/' ) ?? "https://api.sboxcool.com" : "https://api.sboxcool.com";
+		CdnUrl = json.TryGetProperty( "cdnUrl", out var cu ) ? cu.GetString() ?? "" : "";
 		ApiVersion = json.TryGetProperty( "apiVersion", out var av ) ? av.GetString()?.Trim( '/' ) ?? "v3" : "v3";
 		DataFolder = json.TryGetProperty( "dataFolder", out var df ) ? df.GetString() ?? "Network Storage" : "Network Storage";
 		if ( json.TryGetProperty( "dataSource", out var ds ) )
@@ -224,6 +227,7 @@ public static class SyncToolConfig
 				case "SBOXCOOL_PUBLIC_KEY": PublicApiKey = val; break;
 				case "SBOXCOOL_PROJECT_ID": ProjectId = val; break;
 				case "SBOXCOOL_BASE_URL": BaseUrl = val.TrimEnd( '/' ); break;
+			case "SBOXCOOL_CDN_URL": CdnUrl = val; break;
 				case "SBOXCOOL_API_VERSION": ApiVersion = val.Trim( '/' ); break;
 				case "SBOXCOOL_DATA_FOLDER": DataFolder = val; break;
 				case "SBOXCOOL_DATA_SOURCE":
@@ -245,7 +249,7 @@ public static class SyncToolConfig
 	/// Runtime copy → {project root}/network-storage.credentials.json (ships with game)
 	/// </summary>
 	public static void Save( string secretKey, string publicApiKey, string projectId,
-		string baseUrl = null, DataSourceMode? dataSource = null, string dataFolder = null )
+		string baseUrl = null, DataSourceMode? dataSource = null, string dataFolder = null, string cdnUrl = null )
 	{
 		if ( dataFolder != null )
 			DataFolder = dataFolder;
@@ -256,6 +260,7 @@ public static class SyncToolConfig
 		PublicApiKey = publicApiKey ?? "";
 		ProjectId = projectId ?? "";
 		BaseUrl = ( baseUrl ?? "https://api.sboxcool.com" ).TrimEnd( '/' );
+		CdnUrl = ( cdnUrl ?? "" ).TrimEnd( '/' );
 		if ( dataSource.HasValue )
 			DataSource = dataSource.Value;
 
@@ -265,6 +270,7 @@ public static class SyncToolConfig
 			["projectId"] = ProjectId,
 			["publicKey"] = PublicApiKey,
 			["baseUrl"] = BaseUrl,
+			["cdnUrl"] = CdnUrl,
 			["apiVersion"] = ApiVersion,
 			["dataFolder"] = DataFolder,
 			["dataSource"] = DataSource switch
@@ -290,6 +296,7 @@ public static class SyncToolConfig
 				["projectId"] = ProjectId,
 				["publicKey"] = PublicApiKey,
 				["baseUrl"] = BaseUrl,
+				["cdnUrl"] = CdnUrl,
 				["apiVersion"] = ApiVersion
 			};
 			var credsJson = JsonSerializer.Serialize( runtimeCreds, _jsonOptions );
@@ -522,6 +529,7 @@ public static class SyncToolConfig
 			["projectId"] = "your-project-id-here",
 			["publicKey"] = "sbox_ns_your_public_key_here",
 			["baseUrl"] = "https://api.sboxcool.com",
+			["cdnUrl"] = "",
 			["apiVersion"] = "v3",
 			["dataFolder"] = "Network Storage",
 			["dataSource"] = "api_then_json"

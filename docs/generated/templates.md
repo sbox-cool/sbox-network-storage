@@ -11,8 +11,10 @@ Templates let you reference dynamic values in endpoint steps. They are resolved 
 | Source | Description | Example |
 |--------|------------|---------|
 | `input` | Request input fields | `{{input.oreType}}`, `{{input.amount}}` |
-| `{alias}` | Data from a `read` or `lookup` step | `{{player.currency}}`, `{{ore.tier}}` |
-| `values` | Game values / tables | `{{values.ore_types}}` |
+| `steamId` | The player's Steam ID | `{{steamId}}` |
+| `{stepId}` | Data from a `read` or `lookup` step | `{{player.currency}}`, `{{ore.tier}}` |
+| `{transformId}` | Result of a `transform` step | `{{sale_value}}`, `{{neg_cost}}` |
+| `values` | Game values constants | `{{values.progression.xp_per_level}}` |
 
 ## Path Traversal
 
@@ -33,14 +35,19 @@ Prefix with `-` for numeric negation:
 ## Where Templates Work
 
 Templates are resolved in these step fields:
-- `transform.field` — the target field path
-- `transform.value` — the value to apply
-- `condition.field` — the field to check
-- `condition.value` — the comparison value
-- `lookup.value` — the lookup key value
-- `filter.value` — the filter comparison value
+
+- `read.key` — the record key
+- `write.key` — the record key
+- `write.ops[].path` — dot-path to field (e.g. `ores.{{input.ore_id}}`)
+- `write.ops[].value` — the value to apply
+- `write.ops[].reason` — audit trail reason
+- `transform.expression` — the math expression
+- `condition.check.field` — left-hand value to check
+- `condition.check.value` — right-hand value to compare
+- `condition.onFail.message` — error message
+- `lookup.where.value` — the lookup match value
+- `filter.where.value` — the filter comparison value
 - `response.body` — values in the response body
-- `onFail.errorMessage` — workflow error messages
 
 ## Common Patterns
 
@@ -49,14 +56,19 @@ Templates are resolved in these step fields:
 "value": "{{input.amount}}"
 
 // Reference read data
-"field": "player.currency"
-"value": "{{player.currency}}"
+"field": "{{player.currency}}"
 
-// Dynamic field path
-"field": "player.ores.{{input.oreType}}"
+// Reference transform result (no .result suffix needed)
+"value": "{{sale_value}}"
 
-// Negation
-"value": "{{-input.cost}}"
+// Dynamic field path in write ops
+{ "op": "inc", "path": "ores.{{input.oreType}}", "value": "{{input.amount}}" }
+
+// Negation (for decrementing)
+"expression": "0 - {{upgrade_cost}}"
+
+// Game values constants
+"expression": "max({{player.xp}}, {{values.progression.xp_per_level}})"
 ```
 
 ## Validation Rules
@@ -65,5 +77,5 @@ The MCP validates template syntax against these rules:
 
 - Templates must use double braces: `{{...}}` (single braces `{...}` are flagged as possible mistakes)
 - Empty templates `{{}}` are flagged
-- Templates without a dot-path (e.g. `{{foo}}` instead of `{{input.foo}}`) are warned
+- Templates without a dot-path (e.g. `{{foo}}` instead of `{{input.foo}}`) are warned — except for transform step references which are accessed as `{{stepId}}` directly
 - Negation templates must follow `{{-source.field}}` format

@@ -10,25 +10,15 @@ Workflows are reusable validation/logic blocks that endpoints can reference. Eac
   "name": "Check Currency",
   "description": "Verify player has enough currency",
   "condition": {
-    "field": "player.currency",
-    "op": "gte",
-    "value": "{{input.cost}}"
+    "field": "{{player.currency}}",
+    "op": ">=",
+    "value": "{{cost}}"
   },
   "onFail": {
     "reject": true,
     "errorCode": "NOT_ENOUGH_CURRENCY",
-    "errorMessage": "Not enough currency. Have: {{player.currency}}, need: {{input.cost}}"
-  },
-  "steps": [
-    {
-      "type": "condition",
-      "field": "player.currency",
-      "operator": "gte",
-      "value": "{{input.cost}}",
-      "onFail": "error",
-      "errorMessage": "Not enough currency"
-    }
-  ]
+    "errorMessage": "Not enough currency. Have: {{player.currency}}, need: {{cost}}"
+  }
 }
 ```
 
@@ -40,12 +30,21 @@ Workflows are reusable validation/logic blocks that endpoints can reference. Eac
 | `name` | string | No | Human-readable name |
 | `description` | string | No | Description of what this workflow validates |
 | `condition` | object | No | Top-level condition with `field`, `op`, `value` |
-| `onFail` | string/object | No | What happens when condition fails (see below) |
-| `steps` | array | No | Steps to execute (same step types as endpoints) |
+| `onFail` | object | No | What happens when condition fails (see below) |
+
+## Condition Format
+
+The `condition` object uses the same format as endpoint condition steps:
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `field` | Yes | Value to check (supports `{{templates}}`) |
+| `op` | Yes | Operator: `>=`, `<=`, `==`, `!=`, `>`, `<`, `contains`, `exists`, `not_exists` |
+| `value` | Yes* | Value to compare against (supports `{{templates}}`) |
+
+\* Not required for `exists`/`not_exists` operators.
 
 ## onFail Options
-
-`onFail` can be a simple string (`"error"`) or a detailed object:
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
@@ -60,11 +59,20 @@ Workflows are reusable validation/logic blocks that endpoints can reference. Eac
 
 ## Referencing from Endpoints
 
-Use a `workflow` step in your endpoint:
+Use a workflow step in your endpoint with optional `bindings` to map variables:
 
 ```json
-{ "type": "workflow", "workflow": "check-currency" }
+{
+  "id": "currency_check",
+  "type": "condition",
+  "workflow": "check-currency",
+  "bindings": {
+    "cost": "upgrade_cost"
+  }
+}
 ```
+
+The `bindings` object maps workflow variable names (left) to step IDs from the current endpoint pipeline (right). This allows you to pass computed values from earlier steps into the workflow.
 
 ## Compound Conditions
 
@@ -74,8 +82,8 @@ Use `all` (AND) or `any` (OR) for compound checks:
 {
   "condition": {
     "all": [
-      { "field": "player.level", "op": "gte", "value": 5 },
-      { "field": "player.currency", "op": "gte", "value": "{{input.cost}}" }
+      { "field": "{{player.level}}", "op": ">=", "value": 5 },
+      { "field": "{{player.currency}}", "op": ">=", "value": "{{cost}}" }
     ]
   }
 }
@@ -87,9 +95,8 @@ The MCP validates workflows against these rules:
 
 - `id` is required, must match `/^[a-z0-9-]+$/`
 - Simple conditions require `field` and `op`
-- `condition.op` must be one of: `eq`, `neq`, `gt`, `gte`, `lt`, `lte`, `contains`, `exists`, `not_exists`
+- `condition.op` must be a valid operator
 - Compound conditions (`all`/`any`) must be arrays
 - `onFail.severity` must be `"warning"` or `"critical"` if present
 - `onFail.status` warns if not 200 (non-200 causes s&box to lose response body)
 - `onFail.errorMessage` is checked for valid `{{template}}` syntax
-- Steps within the workflow are validated using the same rules as endpoint steps

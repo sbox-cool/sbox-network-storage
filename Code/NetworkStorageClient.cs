@@ -33,6 +33,9 @@ public static class NetworkStorage
 	/// <summary>True after Configure() or auto-config has loaded valid credentials.</summary>
 	public static bool IsConfigured => !string.IsNullOrEmpty( ProjectId ) && !string.IsNullOrEmpty( ApiKey );
 
+	/// <summary>Optional CDN URL for storage reads (no trailing slash). When set and is a CDN domain, cache-busting is applied.</summary>
+	public static string CdnUrl { get; private set; }
+
 	/// <summary>The full versioned API root, e.g. https://api.sboxcool.com/v3</summary>
 	public static string ApiRoot => $"{BaseUrl}/{ApiVersion}";
 
@@ -42,12 +45,13 @@ public static class NetworkStorage
 	/// Configure the client manually. Call once at game startup.
 	/// If not called, the client auto-configures from credentials file on first use.
 	/// </summary>
-	public static void Configure( string projectId, string apiKey, string baseUrl = null, string apiVersion = null )
+	public static void Configure( string projectId, string apiKey, string baseUrl = null, string apiVersion = null, string cdnUrl = null )
 	{
 		ProjectId = projectId;
 		ApiKey = apiKey;
 		if ( !string.IsNullOrEmpty( baseUrl ) ) BaseUrl = baseUrl.TrimEnd( '/' );
 		if ( !string.IsNullOrEmpty( apiVersion ) ) ApiVersion = apiVersion.Trim( '/' );
+		CdnUrl = string.IsNullOrEmpty( cdnUrl ) ? null : cdnUrl.TrimEnd( '/' );
 		_autoConfigAttempted = true;
 		NetLog.Info( "config", $"NetworkStorage ready — {ApiRoot}" );
 	}
@@ -96,10 +100,11 @@ public static class NetworkStorage
 			var publicKey = json.TryGetProperty( "publicKey", out var pk ) ? pk.GetString() : null;
 			var baseUrl = json.TryGetProperty( "baseUrl", out var bu ) ? bu.GetString() : null;
 			var apiVersion = json.TryGetProperty( "apiVersion", out var av ) ? av.GetString() : null;
+			var cdnUrl = json.TryGetProperty( "cdnUrl", out var cu ) ? cu.GetString() : null;
 
 			if ( !string.IsNullOrEmpty( projectId ) && !string.IsNullOrEmpty( publicKey ) )
 			{
-				Configure( projectId, publicKey, baseUrl, apiVersion );
+				Configure( projectId, publicKey, baseUrl, apiVersion, cdnUrl );
 			}
 			else
 			{
@@ -213,9 +218,7 @@ public static class NetworkStorage
 		try
 		{
 			var docId = documentId ?? Game.SteamId.ToString();
-			var v = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-			var auth = await BuildAuthQuery();
-			var url = $"{ApiRoot}/storage/{ProjectId}/{collectionId}/{docId}{auth}&v={v}";
+			var url = await BuildUrl( $"/storage/{ProjectId}/{collectionId}/{docId}" );
 
 			NetLog.Request( "storage", $"GET {collectionId}/{docId}" );
 			var result = await Http.RequestStringAsync( url );
@@ -244,9 +247,17 @@ public static class NetworkStorage
 			throw new InvalidOperationException( "NetworkStorage not configured. Add credentials via Editor → Network Storage → Setup, or call NetworkStorage.Configure() manually." );
 	}
 
+	private static bool IsCdnRoot( string root )
+		=> root.Contains( "storage.sbox.cool" ) || root.Contains( "storage.sboxcool.com" );
+
 	private static async Task<string> BuildUrl( string path )
 	{
 		var auth = await BuildAuthQuery();
+		if ( IsCdnRoot( ApiRoot ) )
+		{
+			var v = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+			return $"{ApiRoot}{path}{auth}&v={v}";
+		}
 		return $"{ApiRoot}{path}{auth}";
 	}
 
