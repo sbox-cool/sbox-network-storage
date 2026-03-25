@@ -4,6 +4,7 @@
 *.csproj
 obj/
 bin/
+.bin/
 Properties/
 *.generated.*
 *.*_c
