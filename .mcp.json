@@ -1,8 +1,9 @@
 {
   "mcpServers": {
     "sbox-network-storage": {
-      "command": "bash",
-      "args": ["-c", "cd mcp && bun install --silent && cd .. && bun run mcp/index.ts"]
+      "command": "node",
+      "args": ["--import", "tsx/esm", "index.ts"],
+      "cwd": "mcp"
     }
   }
 }
