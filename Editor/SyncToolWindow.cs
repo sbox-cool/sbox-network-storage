@@ -35,6 +35,24 @@ public class SyncToolWindow : DockWindow
 	private JsonElement? _remoteCollections;
 	private JsonElement? _remoteWorkflows;
 
+	// ── Scroll state ──
+	private float _scrollY;
+	private float _scrollAreaTop;
+	private float _contentHeight;
+	private const float RowH = 29f;
+
+	// ── Sync log (shown after push/pull) ──
+	private List<SyncLogEntry> _syncLog = new();
+
+	private struct SyncLogEntry
+	{
+		public string Name;
+		public string Type;  // "Endpoint", "Collection", "Workflow"
+		public bool Ok;
+	}
+
+	private float MaxScroll => Math.Max( 0, _contentHeight - ( Height - _scrollAreaTop ) + 60 );
+
 	private struct ClickRegion
 	{
 		public Rect Rect;
@@ -143,6 +161,10 @@ public class SyncToolWindow : DockWindow
 
 		DrawSeparator( ref y, w, pad );
 
+		// ── Begin scrollable content ──
+		_scrollAreaTop = y;
+		y -= _scrollY;
+
 		// ── Endpoints ──
 		var localEpCount = _endpointFiles.Length;
 		var remoteEpSlugs = GetRemoteEndpointSlugs();
@@ -246,6 +268,129 @@ public class SyncToolWindow : DockWindow
 		Paint.SetDefaultFont( size: 9 );
 		Paint.SetPen( _busy ? Color.Yellow : Color.White.WithAlpha( 0.4f ) );
 		Paint.DrawText( new Rect( pad, y, w, 16 ), _status, TextFlag.LeftCenter );
+		y += 22;
+
+		// ── Sync log (shown after push/pull) ──
+		if ( _syncLog.Count > 0 )
+		{
+			DrawSeparator( ref y, w, pad );
+			DrawSectionHeader( ref y, pad, w, "SYNC RESULTS" );
+
+			var pushed = _syncLog.Count( e => e.Ok );
+			var failed = _syncLog.Count( e => !e.Ok );
+
+			// Summary counts
+			Paint.SetDefaultFont( size: 9, weight: 600 );
+			if ( pushed > 0 )
+			{
+				Paint.SetPen( Color.Green.WithAlpha( 0.8f ) );
+				Paint.DrawText( new Rect( pad + 8, y, 90, 16 ), $"✓ {pushed} synced", TextFlag.LeftCenter );
+			}
+			if ( failed > 0 )
+			{
+				Paint.SetPen( Color.Red.WithAlpha( 0.8f ) );
+				Paint.DrawText( new Rect( pad + 100, y, 90, 16 ), $"✗ {failed} failed", TextFlag.LeftCenter );
+			}
+			y += 22;
+
+			// Per-item log
+			Paint.SetDefaultFont( size: 9 );
+			foreach ( var entry in _syncLog )
+			{
+				if ( y > _scrollAreaTop && y < Height )
+				{
+					var icon = entry.Ok ? "✓" : "✗";
+					var color = entry.Ok ? Color.Green.WithAlpha( 0.6f ) : Color.Red.WithAlpha( 0.7f );
+					Paint.SetPen( color );
+					Paint.DrawText( new Rect( pad + 8, y, 16, 16 ), icon, TextFlag.Center );
+
+					Paint.SetPen( Color.White.WithAlpha( 0.7f ) );
+					Paint.DrawText( new Rect( pad + 26, y, w - 100, 16 ), entry.Name, TextFlag.LeftCenter );
+
+					Paint.SetPen( Color.White.WithAlpha( 0.3f ) );
+					Paint.DrawText( new Rect( pad + w - 80, y, 80, 16 ), entry.Type, TextFlag.RightCenter );
+				}
+				y += 18;
+			}
+			y += 8;
+		}
+
+		// ── Record content height for scrollbar ──
+		_contentHeight = ( y + _scrollY ) - _scrollAreaTop;
+
+		// ── Redraw header background to cover scrolled content ──
+		Paint.SetBrush( new Color( 0.133f, 0.133f, 0.133f ) );
+		Paint.SetPen( Color.Transparent );
+		Paint.DrawRect( new Rect( 0, 0, Width, _scrollAreaTop ) );
+
+		// Re-draw header (replayed from top)
+		RedrawHeader( pad, w );
+
+		// ── Scrollbar ──
+		if ( MaxScroll > 0 )
+		{
+			var trackX = Width - 8;
+			var trackH = Height - _scrollAreaTop - 4;
+			var viewRatio = ( Height - _scrollAreaTop ) / _contentHeight;
+			var thumbH = Math.Max( 20, trackH * viewRatio );
+			var thumbY = _scrollAreaTop + ( _scrollY / MaxScroll ) * ( trackH - thumbH );
+
+			Paint.SetBrush( Color.White.WithAlpha( 0.04f ) );
+			Paint.SetPen( Color.Transparent );
+			Paint.DrawRect( new Rect( trackX, _scrollAreaTop, 6, trackH ) );
+
+			Paint.SetBrush( Color.White.WithAlpha( 0.15f ) );
+			Paint.DrawRect( new Rect( trackX, thumbY, 6, thumbH ), 3 );
+		}
+	}
+
+	/// <summary>
+	/// Redraws the fixed header area on top of scrolled content so it doesn't bleed through.
+	/// </summary>
+	private void RedrawHeader( float pad, float w )
+	{
+		var y = 38f;
+
+		// Header + Push All
+		Paint.SetDefaultFont( size: 13, weight: 700 );
+		Paint.SetPen( Color.White );
+		Paint.DrawText( new Rect( pad, y, w * 0.55f, 22 ), "Network Storage Sync", TextFlag.LeftCenter );
+
+		if ( SyncToolConfig.IsValid )
+		{
+			var pushAllW = 70f;
+			var pushAllRect = new Rect( pad + w - pushAllW, y, pushAllW, 22 );
+			DrawSmallButton( pushAllRect, "Push All", Color.Green, "push_all", () => _ = PushAll() );
+		}
+		y += 30;
+
+		// Config status
+		if ( !SyncToolConfig.IsValid )
+		{
+			Paint.SetDefaultFont( size: 10 );
+			Paint.SetPen( Color.Red );
+			Paint.DrawText( new Rect( pad, y, w, 16 ), "Not configured — click Setup to enter your keys", TextFlag.LeftCenter );
+			y += 24;
+		}
+		else
+		{
+			Paint.SetDefaultFont( size: 9 );
+			Paint.SetPen( Color.Green.WithAlpha( 0.8f ) );
+			Paint.DrawText( new Rect( pad, y, w, 14 ), $"Connected — {SyncToolConfig.ProjectId}", TextFlag.LeftCenter );
+			y += 20;
+		}
+
+		// Check for Updates button
+		if ( SyncToolConfig.IsValid )
+		{
+			var checkBtnH = 26f;
+			var checkLabel = _hasCheckedRemote ? "Pull from Web (re-check)" : "Check for Updates";
+			var checkRect = new Rect( pad, y, w, checkBtnH );
+			DrawWideButton( checkRect, checkLabel, Color.Cyan, "check_updates", () => _ = CheckForUpdates() );
+			y += checkBtnH + 8;
+		}
+
+		DrawSeparator( ref y, w, pad );
 	}
 
 	// ──────────────────────────────────────────────────────
@@ -461,7 +606,7 @@ public class SyncToolWindow : DockWindow
 	}
 
 	// ──────────────────────────────────────────────────────
-	//  Mouse
+	//  Mouse + Scroll
 	// ──────────────────────────────────────────────────────
 
 	protected override void OnMousePress( MouseEvent e )
@@ -474,7 +619,7 @@ public class SyncToolWindow : DockWindow
 			if ( btn.Rect.IsInside( e.LocalPosition ) )
 			{
 				btn.OnClick?.Invoke();
-				break;
+				return;
 			}
 		}
 	}
@@ -483,6 +628,39 @@ public class SyncToolWindow : DockWindow
 	{
 		base.OnMouseMove( e );
 		_mousePos = e.LocalPosition;
+		Update();
+	}
+
+	protected override void OnWheel( WheelEvent e )
+	{
+		var direction = e.Delta > 0 ? -1 : 1;
+		_scrollY = Math.Clamp( _scrollY + direction * RowH * 3, 0, MaxScroll );
+		Update();
+		e.Accept();
+	}
+
+	protected override void OnKeyPress( KeyEvent e )
+	{
+		var handled = true;
+		switch ( e.Key )
+		{
+			case KeyCode.Up: _scrollY = Math.Max( 0, _scrollY - RowH ); break;
+			case KeyCode.Down: _scrollY = Math.Min( MaxScroll, _scrollY + RowH ); break;
+			case KeyCode.PageUp: _scrollY = Math.Max( 0, _scrollY - RowH * 10 ); break;
+			case KeyCode.PageDown: _scrollY = Math.Min( MaxScroll, _scrollY + RowH * 10 ); break;
+			case KeyCode.Home: _scrollY = 0; break;
+			case KeyCode.End: _scrollY = MaxScroll; break;
+			default: handled = false; break;
+		}
+
+		if ( handled ) Update();
+		else base.OnKeyPress( e );
+	}
+
+	/// <summary>Scroll to show the bottom of the content.</summary>
+	private void ScrollToBottom()
+	{
+		_scrollY = MaxScroll;
 		Update();
 	}
 
@@ -590,6 +768,7 @@ public class SyncToolWindow : DockWindow
 		_busyItem = "check_updates";
 		_status = "Checking remote for changes...";
 		_items.Clear();
+		_syncLog.Clear();
 		RefreshFileList();
 		Update();
 
@@ -892,6 +1071,7 @@ public class SyncToolWindow : DockWindow
 		_busy = true;
 		_busyItem = "push_all";
 		_status = "Pushing all resources...";
+		_syncLog.Clear();
 		foreach ( var k in _items.Keys.ToList() ) SetItemState( k, result: null );
 		Update();
 
@@ -899,6 +1079,7 @@ public class SyncToolWindow : DockWindow
 		if ( _endpointFiles.Length > 0 )
 		{
 			_busyItem = "push_ep_all";
+			_status = $"Pushing {_endpointFiles.Length} endpoints...";
 			Update();
 			var ok = await DoPushAllEndpoints();
 			foreach ( var f in _endpointFiles )
@@ -906,29 +1087,43 @@ public class SyncToolWindow : DockWindow
 				var slug = Path.GetFileNameWithoutExtension( f );
 				SetItemState( $"ep_{slug}", result: ok ? "OK" : "FAIL",
 					remoteDiffers: false, diffSummary: "", status: ok ? SyncStatus.InSync : null );
+				_syncLog.Add( new SyncLogEntry { Name = $"{slug}.json", Type = "Endpoint", Ok = ok } );
 			}
+			ScrollToBottom();
 		}
 
 		// Push collections
 		if ( _collectionFiles.Length > 0 )
 		{
 			_busyItem = "push_col";
+			_status = $"Pushing {_collectionFiles.Length} collections...";
 			Update();
 			var ok = await DoPushCollections();
 			foreach ( var f in _collectionFiles )
-				SetItemState( $"col_{Path.GetFileNameWithoutExtension( f )}", result: ok ? "OK" : "FAIL",
+			{
+				var name = Path.GetFileNameWithoutExtension( f );
+				SetItemState( $"col_{name}", result: ok ? "OK" : "FAIL",
 					remoteDiffers: false, diffSummary: "", status: ok ? SyncStatus.InSync : null );
+				_syncLog.Add( new SyncLogEntry { Name = $"{name}.json", Type = "Collection", Ok = ok } );
+			}
+			ScrollToBottom();
 		}
 
 		// Push workflows
 		if ( _workflowFiles.Length > 0 )
 		{
 			_busyItem = "push_wf";
+			_status = $"Pushing {_workflowFiles.Length} workflows...";
 			Update();
 			var ok = await DoPushAllWorkflows();
 			foreach ( var f in _workflowFiles )
-				SetItemState( $"wf_{Path.GetFileNameWithoutExtension( f )}", result: ok ? "OK" : "FAIL",
+			{
+				var name = Path.GetFileNameWithoutExtension( f );
+				SetItemState( $"wf_{name}", result: ok ? "OK" : "FAIL",
 					remoteDiffers: false, diffSummary: "", status: ok ? SyncStatus.InSync : null );
+				_syncLog.Add( new SyncLogEntry { Name = $"{name}.json", Type = "Workflow", Ok = ok } );
+			}
+			ScrollToBottom();
 		}
 
 		// Invalidate cached remote data — next check will fetch fresh
@@ -939,12 +1134,12 @@ public class SyncToolWindow : DockWindow
 		_remoteWorkflows = null;
 		_hasCheckedRemote = false;
 
-		var okCount = _items.Values.Count( s => s.SyncResult == "OK" );
-		var failCount = _items.Values.Count( s => s.SyncResult == "FAIL" );
+		var okCount = _syncLog.Count( e => e.Ok );
+		var failCount = _syncLog.Count( e => !e.Ok );
 		_status = failCount == 0 ? $"All pushed ({okCount} resources)" : $"Done: {okCount} OK, {failCount} failed";
 		_busy = false;
 		_busyItem = null;
-		Update();
+		ScrollToBottom();
 	}
 
 	private void PushItem( string id )
@@ -982,27 +1177,41 @@ public class SyncToolWindow : DockWindow
 		try
 		{
 			bool ok;
+			string itemName;
+			string itemType;
+
 			if ( id.StartsWith( "ep_" ) )
 			{
 				var slug = id[3..];
 				ok = await DoPushSingleEndpointMerged( slug );
+				itemName = $"{slug}.json";
+				itemType = "Endpoint";
 			}
 			else if ( id.StartsWith( "col_" ) )
 			{
 				ok = await DoPushCollections();
+				itemName = $"{id[4..]}.json";
+				itemType = "Collection";
 			}
 			else if ( id.StartsWith( "wf_" ) )
 			{
 				ok = await DoPushAllWorkflows();
+				itemName = $"{id[3..]}.json";
+				itemType = "Workflow";
 			}
 			else
 			{
 				ok = false;
+				itemName = id;
+				itemType = "Unknown";
 			}
 
 			// Update this item's state
 			SetItemState( id, result: ok ? "OK" : "FAIL", remoteDiffers: false, diffSummary: "",
 				status: ok ? SyncStatus.InSync : null );
+
+			// Add to sync log
+			_syncLog.Add( new SyncLogEntry { Name = itemName, Type = itemType, Ok = ok } );
 
 			// Invalidate cached remote data so next Check for Updates is fresh,
 			// but preserve other items' diff state so they don't disappear
@@ -1011,6 +1220,7 @@ public class SyncToolWindow : DockWindow
 			_remoteWorkflows = null;
 
 			_status = ok ? $"Pushed {id}" : $"Push failed for {id}";
+			ScrollToBottom();
 		}
 		catch ( Exception ex )
 		{
@@ -1542,6 +1752,8 @@ public class SyncToolWindow : DockWindow
 		SyncToolConfig.Load();
 		RefreshFileList();
 		_items.Clear();
+		_syncLog.Clear();
+		_scrollY = 0;
 		_hasCheckedRemote = false;
 
 		_remoteEndpoints = null;
