@@ -47,8 +47,9 @@ public class SyncToolWindow : DockWindow
 	private struct SyncLogEntry
 	{
 		public string Name;
-		public string Type;  // "Endpoint", "Collection", "Workflow"
+		public string Type;   // "Endpoint", "Collection", "Workflow"
 		public bool Ok;
+		public string Detail; // "Pushed", "Created (new)", "Failed", "Verified ✓", "Mismatch — see diff", etc.
 	}
 
 	private float MaxScroll => Math.Max( 0, _contentHeight - ( Height - _scrollAreaTop ) + 60 );
@@ -276,39 +277,74 @@ public class SyncToolWindow : DockWindow
 			DrawSeparator( ref y, w, pad );
 			DrawSectionHeader( ref y, pad, w, "SYNC RESULTS" );
 
-			var pushed = _syncLog.Count( e => e.Ok );
-			var failed = _syncLog.Count( e => !e.Ok );
+			var okCount = _syncLog.Count( e => e.Ok );
+			var failCount = _syncLog.Count( e => !e.Ok );
+			var verifiedCount = _syncLog.Count( e => e.Detail != null && e.Detail.Contains( "Verified" ) );
+			var mismatchCount = _syncLog.Count( e => e.Detail != null && e.Detail.Contains( "Mismatch" ) );
 
 			// Summary counts
 			Paint.SetDefaultFont( size: 9, weight: 600 );
-			if ( pushed > 0 )
+			var sx = pad + 8f;
+			if ( okCount > 0 )
 			{
 				Paint.SetPen( Color.Green.WithAlpha( 0.8f ) );
-				Paint.DrawText( new Rect( pad + 8, y, 90, 16 ), $"✓ {pushed} synced", TextFlag.LeftCenter );
+				Paint.DrawText( new Rect( sx, y, 90, 16 ), $"✓ {okCount} pushed", TextFlag.LeftCenter );
+				sx += 80;
 			}
-			if ( failed > 0 )
+			if ( verifiedCount > 0 )
+			{
+				Paint.SetPen( Color.Cyan.WithAlpha( 0.8f ) );
+				Paint.DrawText( new Rect( sx, y, 90, 16 ), $"● {verifiedCount} verified", TextFlag.LeftCenter );
+				sx += 85;
+			}
+			if ( mismatchCount > 0 )
+			{
+				Paint.SetPen( Color.Orange.WithAlpha( 0.9f ) );
+				Paint.DrawText( new Rect( sx, y, 100, 16 ), $"▲ {mismatchCount} mismatch", TextFlag.LeftCenter );
+				sx += 90;
+			}
+			if ( failCount > 0 )
 			{
 				Paint.SetPen( Color.Red.WithAlpha( 0.8f ) );
-				Paint.DrawText( new Rect( pad + 100, y, 90, 16 ), $"✗ {failed} failed", TextFlag.LeftCenter );
+				Paint.DrawText( new Rect( sx, y, 90, 16 ), $"✗ {failCount} failed", TextFlag.LeftCenter );
 			}
 			y += 22;
 
 			// Per-item log
-			Paint.SetDefaultFont( size: 9 );
 			foreach ( var entry in _syncLog )
 			{
 				if ( y > _scrollAreaTop && y < Height )
 				{
-					var icon = entry.Ok ? "✓" : "✗";
-					var color = entry.Ok ? Color.Green.WithAlpha( 0.6f ) : Color.Red.WithAlpha( 0.7f );
-					Paint.SetPen( color );
+					// Icon
+					var isMismatch = entry.Detail != null && entry.Detail.Contains( "Mismatch" );
+					var isVerified = entry.Detail != null && entry.Detail.Contains( "Verified" );
+					var icon = entry.Ok ? ( isVerified ? "●" : "✓" ) : ( isMismatch ? "▲" : "✗" );
+					var iconColor = entry.Ok
+						? ( isVerified ? Color.Cyan.WithAlpha( 0.7f ) : Color.Green.WithAlpha( 0.6f ) )
+						: ( isMismatch ? Color.Orange.WithAlpha( 0.8f ) : Color.Red.WithAlpha( 0.7f ) );
+
+					Paint.SetDefaultFont( size: 9 );
+					Paint.SetPen( iconColor );
 					Paint.DrawText( new Rect( pad + 8, y, 16, 16 ), icon, TextFlag.Center );
 
-					Paint.SetPen( Color.White.WithAlpha( 0.7f ) );
-					Paint.DrawText( new Rect( pad + 26, y, w - 100, 16 ), entry.Name, TextFlag.LeftCenter );
+					// Name
+					Paint.SetPen( Color.White.WithAlpha( 0.8f ) );
+					var nameW = w * 0.35f;
+					Paint.DrawText( new Rect( pad + 26, y, nameW, 16 ), entry.Name, TextFlag.LeftCenter );
 
-					Paint.SetPen( Color.White.WithAlpha( 0.3f ) );
-					Paint.DrawText( new Rect( pad + w - 80, y, 80, 16 ), entry.Type, TextFlag.RightCenter );
+					// Detail
+					var detailText = entry.Detail ?? ( entry.Ok ? "Pushed" : "Failed" );
+					var detailColor = isMismatch ? Color.Orange.WithAlpha( 0.8f )
+						: isVerified ? Color.Cyan.WithAlpha( 0.6f )
+						: entry.Ok ? Color.Green.WithAlpha( 0.5f )
+						: Color.Red.WithAlpha( 0.6f );
+					Paint.SetDefaultFont( size: 8 );
+					Paint.SetPen( detailColor );
+					Paint.DrawText( new Rect( pad + 26 + nameW + 4, y, w - nameW - 100, 16 ), detailText, TextFlag.LeftCenter );
+
+					// Type badge
+					Paint.SetPen( Color.White.WithAlpha( 0.25f ) );
+					Paint.DrawText( new Rect( pad + w - 70, y, 70, 16 ), entry.Type, TextFlag.RightCenter );
 				}
 				y += 18;
 			}
@@ -1075,6 +1111,16 @@ public class SyncToolWindow : DockWindow
 		foreach ( var k in _items.Keys.ToList() ) SetItemState( k, result: null );
 		Update();
 
+		// ── Load local files for pre-push comparison ──
+		var localEndpoints = SyncToolConfig.LoadEndpoints();
+		var localEpBySlug = new Dictionary<string, string>();
+		foreach ( var ep in localEndpoints )
+		{
+			var slug = ep.TryGetProperty( "slug", out var s ) ? s.GetString() : "";
+			if ( !string.IsNullOrEmpty( slug ) )
+				localEpBySlug[slug] = NormalizeJson( JsonSerializer.Serialize( ep ) );
+		}
+
 		// Push all endpoints
 		if ( _endpointFiles.Length > 0 )
 		{
@@ -1085,9 +1131,10 @@ public class SyncToolWindow : DockWindow
 			foreach ( var f in _endpointFiles )
 			{
 				var slug = Path.GetFileNameWithoutExtension( f );
+				var detail = ok ? "Pushed" : "Push failed";
 				SetItemState( $"ep_{slug}", result: ok ? "OK" : "FAIL",
 					remoteDiffers: false, diffSummary: "", status: ok ? SyncStatus.InSync : null );
-				_syncLog.Add( new SyncLogEntry { Name = $"{slug}.json", Type = "Endpoint", Ok = ok } );
+				_syncLog.Add( new SyncLogEntry { Name = $"{slug}.json", Type = "Endpoint", Ok = ok, Detail = detail } );
 			}
 			ScrollToBottom();
 		}
@@ -1102,9 +1149,10 @@ public class SyncToolWindow : DockWindow
 			foreach ( var f in _collectionFiles )
 			{
 				var name = Path.GetFileNameWithoutExtension( f );
+				var detail = ok ? "Pushed" : "Push failed";
 				SetItemState( $"col_{name}", result: ok ? "OK" : "FAIL",
 					remoteDiffers: false, diffSummary: "", status: ok ? SyncStatus.InSync : null );
-				_syncLog.Add( new SyncLogEntry { Name = $"{name}.json", Type = "Collection", Ok = ok } );
+				_syncLog.Add( new SyncLogEntry { Name = $"{name}.json", Type = "Collection", Ok = ok, Detail = detail } );
 			}
 			ScrollToBottom();
 		}
@@ -1119,16 +1167,23 @@ public class SyncToolWindow : DockWindow
 			foreach ( var f in _workflowFiles )
 			{
 				var name = Path.GetFileNameWithoutExtension( f );
+				var detail = ok ? "Pushed" : "Push failed";
 				SetItemState( $"wf_{name}", result: ok ? "OK" : "FAIL",
 					remoteDiffers: false, diffSummary: "", status: ok ? SyncStatus.InSync : null );
-				_syncLog.Add( new SyncLogEntry { Name = $"{name}.json", Type = "Workflow", Ok = ok } );
+				_syncLog.Add( new SyncLogEntry { Name = $"{name}.json", Type = "Workflow", Ok = ok, Detail = detail } );
 			}
 			ScrollToBottom();
 		}
 
+		// ── Auto-verify: re-fetch remote and compare to local ──
+		_busyItem = "verify";
+		_status = "Verifying remote matches local...";
+		Update();
+
+		await VerifyPushResults( localEpBySlug );
+
 		// Invalidate cached remote data — next check will fetch fresh
 		ClearAllRemoteDiffs();
-
 		_remoteEndpoints = null;
 		_remoteCollections = null;
 		_remoteWorkflows = null;
@@ -1136,10 +1191,156 @@ public class SyncToolWindow : DockWindow
 
 		var okCount = _syncLog.Count( e => e.Ok );
 		var failCount = _syncLog.Count( e => !e.Ok );
-		_status = failCount == 0 ? $"All pushed ({okCount} resources)" : $"Done: {okCount} OK, {failCount} failed";
+		var mismatchCount = _syncLog.Count( e => e.Detail != null && e.Detail.Contains( "Mismatch" ) );
+		var verifiedCount = _syncLog.Count( e => e.Detail != null && e.Detail.Contains( "Verified" ) );
+
+		if ( mismatchCount > 0 )
+			_status = $"Done: {okCount} pushed, {mismatchCount} mismatch(es) — check diffs";
+		else if ( failCount > 0 )
+			_status = $"Done: {okCount - failCount} OK, {failCount} failed";
+		else
+			_status = $"All synced and verified ({verifiedCount} resources)";
+
 		_busy = false;
 		_busyItem = null;
 		ScrollToBottom();
+	}
+
+	/// <summary>
+	/// After pushing, re-fetch remote data and compare each resource to local.
+	/// Updates sync log entries with "Verified ✓" or "Mismatch — see diff".
+	/// </summary>
+	private async Task VerifyPushResults( Dictionary<string, string> localEpBySlug )
+	{
+		try
+		{
+			// Re-load local files fresh
+			var localCollections = SyncToolConfig.LoadCollections();
+			var localColByName = new Dictionary<string, string>();
+			foreach ( var (name, data) in localCollections )
+				localColByName[name] = NormalizeJson( JsonSerializer.Serialize( data, new JsonSerializerOptions { WriteIndented = true } ) );
+
+			var localWorkflows = SyncToolConfig.LoadWorkflows();
+			var localWfById = new Dictionary<string, string>();
+			foreach ( var wf in localWorkflows )
+			{
+				var wfId = wf.TryGetProperty( "id", out var id ) ? id.GetString() : "";
+				if ( !string.IsNullOrEmpty( wfId ) )
+					localWfById[wfId] = NormalizeJson( JsonSerializer.Serialize( wf ) );
+			}
+
+			// Fetch remote endpoints
+			var remoteEps = await SyncToolApi.GetEndpoints();
+			if ( remoteEps.HasValue )
+			{
+				var data = remoteEps.Value;
+				if ( data.TryGetProperty( "data", out var d ) ) data = d;
+				if ( data.ValueKind == JsonValueKind.Array )
+				{
+					foreach ( var ep in data.EnumerateArray() )
+					{
+						var slug = ep.TryGetProperty( "slug", out var s ) ? s.GetString() : "";
+						if ( string.IsNullOrEmpty( slug ) ) continue;
+
+						var remoteLocal = SyncToolTransforms.ServerEndpointToLocal( ep );
+						var remoteNorm = NormalizeJson( JsonSerializer.Serialize( remoteLocal ) );
+
+						var logIdx = _syncLog.FindIndex( e => e.Name == $"{slug}.json" && e.Type == "Endpoint" );
+						if ( logIdx < 0 ) continue;
+
+						var entry = _syncLog[logIdx];
+						if ( !entry.Ok ) continue; // Skip failed pushes
+
+						if ( localEpBySlug.TryGetValue( slug, out var localNorm ) && localNorm == remoteNorm )
+						{
+							entry.Detail = "Verified ✓";
+						}
+						else
+						{
+							entry.Detail = "Mismatch — pushed but remote differs. See diff";
+							entry.Ok = false;
+							var id = $"ep_{slug}";
+							var localJson = localEpBySlug.TryGetValue( slug, out var lj ) ? lj : "";
+							SetItemState( id, remoteDiffers: true, status: SyncStatus.Differs,
+								diffSummary: "Post-push verification failed — remote doesn't match local",
+								localJson: PrettyJson( localJson ), remoteJson: PrettyJson( JsonSerializer.Serialize( remoteLocal ) ) );
+						}
+						_syncLog[logIdx] = entry;
+					}
+				}
+			}
+
+			// Fetch remote collections
+			var remoteCols = await SyncToolApi.GetCollections();
+			if ( remoteCols.HasValue )
+			{
+				var collections = SyncToolTransforms.ServerToCollections( remoteCols.Value );
+				foreach ( var (colName, remoteLocal) in collections )
+				{
+					var remoteNorm = NormalizeJson( JsonSerializer.Serialize( remoteLocal ) );
+					var logIdx = _syncLog.FindIndex( e => e.Name == $"{colName}.json" && e.Type == "Collection" );
+					if ( logIdx < 0 ) continue;
+
+					var entry = _syncLog[logIdx];
+					if ( !entry.Ok ) continue;
+
+					if ( localColByName.TryGetValue( colName, out var localNorm ) && localNorm == remoteNorm )
+					{
+						entry.Detail = "Verified ✓";
+					}
+					else
+					{
+						entry.Detail = "Mismatch — pushed but remote differs. See diff";
+						entry.Ok = false;
+						var id = $"col_{colName}";
+						SetItemState( id, remoteDiffers: true, status: SyncStatus.Differs,
+							diffSummary: "Post-push verification failed — remote doesn't match local",
+							localJson: PrettyJson( localColByName.GetValueOrDefault( colName, "" ) ),
+							remoteJson: PrettyJson( JsonSerializer.Serialize( remoteLocal ) ) );
+					}
+					_syncLog[logIdx] = entry;
+				}
+			}
+
+			// Fetch remote workflows
+			var remoteWfs = await SyncToolApi.GetWorkflows();
+			if ( remoteWfs.HasValue )
+			{
+				var workflows = SyncToolTransforms.ServerToWorkflows( remoteWfs.Value );
+				foreach ( var (wfId, remoteLocal) in workflows )
+				{
+					var remoteNorm = NormalizeJson( JsonSerializer.Serialize( remoteLocal ) );
+					var logIdx = _syncLog.FindIndex( e => e.Name == $"{wfId}.json" && e.Type == "Workflow" );
+					if ( logIdx < 0 ) continue;
+
+					var entry = _syncLog[logIdx];
+					if ( !entry.Ok ) continue;
+
+					if ( localWfById.TryGetValue( wfId, out var localNorm ) && localNorm == remoteNorm )
+					{
+						entry.Detail = "Verified ✓";
+					}
+					else
+					{
+						entry.Detail = "Mismatch — pushed but remote differs. See diff";
+						entry.Ok = false;
+						var id = $"wf_{wfId}";
+						SetItemState( id, remoteDiffers: true, status: SyncStatus.Differs,
+							diffSummary: "Post-push verification failed — remote doesn't match local",
+							localJson: PrettyJson( localWfById.GetValueOrDefault( wfId, "" ) ),
+							remoteJson: PrettyJson( JsonSerializer.Serialize( remoteLocal ) ) );
+					}
+					_syncLog[logIdx] = entry;
+				}
+			}
+
+			Update();
+		}
+		catch ( Exception ex )
+		{
+			Log.Warning( $"[SyncTool] Post-push verification failed: {ex.Message}" );
+			_status = $"Push done, verification failed: {ex.Message}";
+		}
 	}
 
 	private void PushItem( string id )
@@ -1211,7 +1412,7 @@ public class SyncToolWindow : DockWindow
 				status: ok ? SyncStatus.InSync : null );
 
 			// Add to sync log
-			_syncLog.Add( new SyncLogEntry { Name = itemName, Type = itemType, Ok = ok } );
+			_syncLog.Add( new SyncLogEntry { Name = itemName, Type = itemType, Ok = ok, Detail = ok ? "Pushed" : "Push failed" } );
 
 			// Invalidate cached remote data so next Check for Updates is fresh,
 			// but preserve other items' diff state so they don't disappear
