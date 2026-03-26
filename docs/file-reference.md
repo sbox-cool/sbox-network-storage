@@ -191,14 +191,21 @@ SBOXCOOL_DATA_SOURCE=api_then_json
 
 ```json
 {
-  "id": "validate-purchase",
-  "name": "Validate Purchase",
-  "description": "Validate that a player can purchase an item",
+  "id": "process-purchase",
+  "name": "Process Purchase",
+  "description": "Validate and execute a shop purchase for a player",
   "params": {
-    "player": { "type": "object" },
+    "player_id": { "type": "string" },
     "item_id": { "type": "string" }
   },
   "steps": [
+    {
+      "id": "player",
+      "type": "read",
+      "collection": "players",
+      "key": "{{player_id}}",
+      "as": "player"
+    },
     {
       "id": "item",
       "type": "lookup",
@@ -215,15 +222,28 @@ SBOXCOOL_DATA_SOURCE=api_then_json
         "value": "{{item.cost}}"
       },
       "onFail": { "status": 403, "error": "NOT_ENOUGH_CURRENCY" }
+    },
+    {
+      "id": "deduct",
+      "type": "transform",
+      "field": "player.currency",
+      "operation": "subtract",
+      "value": "{{item.cost}}"
+    },
+    {
+      "id": "save",
+      "type": "write",
+      "collection": "players"
     }
   ],
   "returns": {
-    "item": "{{item}}"
+    "item": "{{item}}",
+    "remaining_currency": "{{player.currency}}"
   }
 }
 ```
 
-Workflows are referenced by ID from endpoint steps and execute inline. Multi-step workflows accept typed `params`, can contain up to 10 steps (`lookup`, `filter`, `transform`, `condition`, `workflow`), and return values via `returns`. Max nesting depth: 3.
+Workflows are referenced by ID from endpoint steps and execute inline. Multi-step workflows accept typed `params`, can contain up to 20 steps (`read`, `write`, `delete`, `lookup`, `filter`, `transform`, `condition`, `workflow`), and return values via `returns`. Write and delete steps are deferred until all conditions pass, ensuring atomicity. Max nesting depth: 8.
 
 ## Library Source Files
 

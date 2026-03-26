@@ -80,6 +80,57 @@ Workflows can contain multiple steps, accept typed parameters, and return values
 }
 ```
 
+### Full Operation Workflow (Read + Validate + Write)
+
+Workflows can contain read, write, and delete steps, making them self-contained operation units. Write and delete steps inside workflows are deferred to the parent endpoint's write queue. If any condition fails anywhere in the pipeline, no data is written. This lets you build complete operation workflows (read, validate, write) as a single reusable unit.
+
+```json
+{
+  "id": "do-purchase",
+  "name": "Do Purchase",
+  "description": "Complete purchase flow: read player, validate, deduct currency, add item",
+  "params": {
+    "item_table": { "type": "string" },
+    "item_id": { "type": "string" }
+  },
+  "steps": [
+    {
+      "id": "player",
+      "type": "read",
+      "collection": "players",
+      "key": "{{steamId}}"
+    },
+    {
+      "id": "item",
+      "type": "lookup",
+      "source": "values",
+      "table": "{{item_table}}",
+      "where": { "field": "id", "op": "==", "value": "{{item_id}}" }
+    },
+    {
+      "id": "afford_check",
+      "type": "condition",
+      "check": { "field": "{{player.currency}}", "op": ">=", "value": "{{item.cost}}" },
+      "onFail": { "status": 403, "error": "NOT_ENOUGH_CURRENCY", "message": "Need {{item.cost}}, have {{player.currency}}" }
+    },
+    {
+      "id": "pay",
+      "type": "write",
+      "collection": "players",
+      "key": "{{steamId}}",
+      "ops": [
+        { "op": "inc", "path": "currency", "value": "{{-item.cost}}", "source": "purchase", "reason": "Bought {{item_id}}" },
+        { "op": "push", "path": "inventory", "value": "{{item_id}}" }
+      ]
+    }
+  ],
+  "returns": {
+    "item": "{{item}}",
+    "cost": "{{item.cost}}"
+  }
+}
+```
+
 ## Fields
 
 | Field | Type | Required | Description |
@@ -111,7 +162,7 @@ Parameters are accessible within the workflow's steps as `{{param_name}}` (e.g.,
 
 ### `steps` array
 
-Multi-step workflows support these step types: `lookup`, `filter`, `transform`, `condition`, and `workflow` (nested). Steps work the same as endpoint steps — see [Step Types](steps.md) for full details.
+Multi-step workflows support all step types: `read`, `write`, `delete`, `lookup`, `filter`, `transform`, `condition`, and `workflow` (nested). Write and delete steps are deferred -- they are queued alongside the parent endpoint's writes and only execute after all steps in the entire pipeline pass, preserving atomicity. Steps work the same as endpoint steps -- see [Step Types](steps.md) for full details.
 
 ### `returns` object
 
@@ -132,8 +183,9 @@ If the calling endpoint step has `"id": "validate"`, the returned values are acc
 
 | Limit | Value |
 |-------|-------|
-| Max steps per workflow | 10 |
-| Max nesting depth (workflow calling workflow) | 3 |
+| Max steps per workflow | 20 |
+| Max nesting depth (workflow calling workflow) | 8 |
+| Read/lookup/filter steps across execution | 10 |
 
 ## Condition Format (Legacy)
 
@@ -225,6 +277,6 @@ The MCP validates workflows against these rules:
 - `onFail.severity` must be `"warning"` or `"critical"` if present
 - `onFail.status` warns if not 200 (non-200 causes s&box to lose response body)
 - `onFail.errorMessage` is checked for valid `{{template}}` syntax
-- Multi-step workflows: `steps` must be an array with max 10 steps
+- Multi-step workflows: `steps` must be an array with max 20 steps
 - Multi-step workflows: `params` values must have a `type` field
-- Nested workflow calls have a max depth of 3
+- Nested workflow calls have a max depth of 8

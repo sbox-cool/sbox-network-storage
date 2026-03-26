@@ -276,7 +276,7 @@ Queries multiple rows from a game values table. Returns matching rows as an arra
 
 ## workflow — Run a Reusable Workflow
 
-Executes a workflow by its ID. Workflows can be simple (legacy condition-only format) or multi-step (containing their own pipeline of steps). Use `params` to pass values into the workflow and receive return values mapped back into the endpoint context.
+Executes a workflow by its ID. Workflows can be simple (legacy condition-only format) or multi-step (containing their own pipeline of steps). Multi-step workflows support all step types -- read, write, delete, lookup, filter, transform, condition, and nested workflow calls. Write and delete steps inside workflows are deferred to the parent endpoint's write queue, preserving atomicity. Use `params` to pass values into the workflow and receive return values mapped back into the endpoint context.
 
 ### Simple workflow call (legacy condition-only)
 
@@ -312,6 +312,8 @@ For enhanced multi-step workflows, use `params` to pass typed values and receive
 ```
 
 The workflow's return values are mapped into the endpoint context. For example, if the workflow returns `{ "item": "{{item}}" }`, you can reference `{{validate.item}}` in subsequent steps.
+
+Workflows can nest up to 8 levels deep. Read, lookup, and filter steps are tracked globally across all nested workflows with a combined limit of 10.
 
 | Field | Required | Description |
 |-------|----------|-------------|

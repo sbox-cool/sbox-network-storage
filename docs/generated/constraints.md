@@ -17,8 +17,9 @@
 | Endpoints per project | 20 |
 | Collections per project | 50 |
 | Records scanned in filter | 500 |
-| Steps per workflow | 10 |
-| Workflow nesting depth | 3 |
+| Steps per workflow | 20 |
+| Workflow nesting depth | 8 |
+| Read/lookup/filter steps per execution | 10 |
 
 ## Valid Enums
 
