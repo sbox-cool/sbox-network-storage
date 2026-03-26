@@ -88,8 +88,9 @@ The MCP validates endpoints against these rules:
 - Max 20 steps per endpoint
 - Max 10 `read`/`lookup`/`filter` steps per endpoint
 - `method` must be `GET` or `POST`
-- Each step must have a valid `type` (see [Step Types](steps.md))
+- Each step must have a valid `type`: `read`, `write`, `transform`, `condition`, `lookup`, `filter`, `workflow`, `delete` (see [Step Types](steps.md))
 - Each step must include `id` and all required fields for its type
 - `write` steps warn if the collection was never `read` in a prior step
+- `delete` steps warn if the collection's `allowRecordDelete` is not `true`
 - GET endpoints with input fields generate a warning
 - All `{{template}}` syntax is validated for correct format

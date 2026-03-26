@@ -53,6 +53,8 @@ Persists changes to a collection record using atomic operations. All writes are 
 | `set` | Overwrite field with new value | `path`, `value` |
 | `inc` | Increment numeric field | `path`, `value`, `source`*, `reason`* |
 | `push` | Append item to array field | `path`, `value` |
+| `pull` | Remove item from array by match object | `path`, `match` |
+| `remove` | Remove item from array by exact value | `path`, `value` |
 
 \* `source` and `reason` are required for ledger-tracked fields (fields with `_ledger: true` in schema). They provide an audit trail.
 
@@ -60,11 +62,38 @@ Persists changes to a collection record using atomic operations. All writes are 
 
 | Field | Required | Description |
 |-------|----------|-------------|
-| `op` | Yes | Operation type: `set`, `inc`, or `push` |
+| `op` | Yes | Operation type: `set`, `inc`, `push`, `pull`, or `remove` |
 | `path` | Yes | Dot-path to the field (supports `{{templates}}` in path segments, e.g. `ores.{{input.ore_id}}`) |
-| `value` | Yes | The value to apply (supports `{{templates}}`) |
+| `value` | Yes (except `pull`) | The value to apply (supports `{{templates}}`) |
+| `match` | For `pull` | Match criteria for finding the item to remove from an array (see below) |
 | `source` | For ledger fields | Source category (e.g. `"mining"`, `"ore_sale"`, `"upgrade_purchase"`) |
 | `reason` | For ledger fields | Human-readable reason (supports `{{templates}}`) |
+
+### `pull` operation
+
+Removes the first matching item from an array. The `match` object specifies which field/value pair to match against. For arrays of objects, match on an object property. For arrays of primitives, use `match.value`.
+
+```json
+// Remove object from array by matching a property
+{ "op": "pull", "path": "inventory", "match": { "item_id": "{{input.item_id}}" } }
+
+// Remove primitive from array by matching the value directly
+{ "op": "pull", "path": "tags", "match": { "value": "old_tag" } }
+```
+
+### `remove` operation
+
+Removes items from an array by exact value match. Works for both primitives and objects. Unlike `pull`, it matches the entire value rather than a single property.
+
+```json
+// Remove a string from an array
+{ "op": "remove", "path": "tags", "value": "old_tag" }
+
+// Remove an object from an array by exact match
+{ "op": "remove", "path": "inventory", "value": { "item_id": "sword" } }
+```
+
+**`pull` vs `remove`:** Use `pull` when you want to match on a specific property of objects in an array (e.g., find the item where `item_id == "sword"`). Use `remove` when you want to remove by exact value match, which is simpler for primitives and works for full object matches.
 
 ## transform — Compute a Value
 
@@ -126,17 +155,30 @@ Checks a condition and rejects the request if it fails. Uses a `check` object wi
 
 **Operators:**
 
-| Op | Description |
-|----|-------------|
-| `==` | Equals |
-| `!=` | Not equals |
-| `>` | Greater than |
-| `>=` | Greater than or equal |
-| `<` | Less than |
-| `<=` | Less than or equal |
-| `contains` | Array contains value or string contains substring |
-| `exists` | Field exists and is not null/undefined |
-| `not_exists` | Field does not exist or is null/undefined |
+| Op | Aliases | Description |
+|----|---------|-------------|
+| `==` | `eq` | Equals |
+| `!=` | `neq`, `ne` | Not equals |
+| `>` | `gt` | Greater than |
+| `>=` | `gte`, `ge` | Greater than or equal |
+| `<` | `lt` | Less than |
+| `<=` | `lte`, `le` | Less than or equal |
+| `contains` | `includes`, `has` | Array contains value or string contains substring |
+| `not_contains` | `not_includes`, `not_has`, `notcontains` | Array does NOT contain value or string does NOT include substring |
+| `exists` | | Field exists and is not null/undefined |
+| `not_exists` | `not_exist`, `notexists` | Field does not exist or is null/undefined |
+
+**Field aliases:** The `check` object also accepts `left` as an alias for `field` and `right` as an alias for `value`. This can improve readability in some cases:
+
+```json
+{
+  "check": {
+    "left": "{{player.tags}}",
+    "op": "not_contains",
+    "right": "banned"
+  }
+}
+```
 
 **`onFail` object:**
 
@@ -234,7 +276,11 @@ Queries multiple rows from a game values table. Returns matching rows as an arra
 
 ## workflow — Run a Reusable Workflow
 
-Executes a workflow by its ID. The workflow's condition is evaluated inline. Use `bindings` to map step results to the workflow's expected variables.
+Executes a workflow by its ID. Workflows can be simple (legacy condition-only format) or multi-step (containing their own pipeline of steps). Use `params` to pass values into the workflow and receive return values mapped back into the endpoint context.
+
+### Simple workflow call (legacy condition-only)
+
+For backwards-compatible condition-only workflows, use `bindings` to map step results to the workflow's expected variables:
 
 ```json
 {
@@ -249,11 +295,53 @@ Executes a workflow by its ID. The workflow's condition is evaluated inline. Use
 }
 ```
 
+### Multi-step workflow call
+
+For enhanced multi-step workflows, use `params` to pass typed values and receive `returns`:
+
+```json
+{
+  "id": "validate",
+  "type": "workflow",
+  "workflow": "validate_purchase",
+  "params": {
+    "player": "{{player}}",
+    "item_id": "{{input.item_id}}"
+  }
+}
+```
+
+The workflow's return values are mapped into the endpoint context. For example, if the workflow returns `{ "item": "{{item}}" }`, you can reference `{{validate.item}}` in subsequent steps.
+
 | Field | Required | Description |
 |-------|----------|-------------|
 | `id` | Yes | Step identifier |
 | `workflow` | Yes | The workflow ID to execute |
-| `bindings` | No | Map of workflow variable names to step IDs from the current pipeline |
+| `bindings` | No | Map of workflow variable names to step IDs (legacy condition-only workflows) |
+| `params` | No | Map of parameter names to values (multi-step workflows, supports `{{templates}}`) |
+
+See the [Workflows](workflows.md) documentation for details on defining multi-step workflows with typed params and returns.
+
+## delete — Remove a Collection Record
+
+Removes a record entirely from a collection. Like writes, deletes are **deferred** until all conditions in the pipeline pass. This ensures that a failed condition won't result in data loss.
+
+```json
+{
+  "id": "wipe",
+  "type": "delete",
+  "collection": "players",
+  "key": "{{steamId}}_default"
+}
+```
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `id` | Yes | Step identifier |
+| `collection` | Yes | Collection name to delete from |
+| `key` | Yes | Record key to delete (supports `{{templates}}`) |
+
+**Important:** The collection's `allowRecordDelete` must be set to `true` in the collection schema for delete operations to succeed. This is a safety measure to prevent accidental data loss.
 
 ## Required Fields Summary
 
@@ -262,7 +350,8 @@ Executes a workflow by its ID. The workflow's condition is evaluated inline. Use
 | `read` | `id`, `collection`, `key` |
 | `write` | `id`, `collection`, `key`, `ops` |
 | `transform` | `id`, `expression` |
-| `condition` | `id`, `check` (`field`, `op`, `value`), `onFail` (`status`, `error`) |
+| `condition` | `id`, `check` (`field`/`left`, `op`, `value`/`right`), `onFail` (`status`, `error`) |
 | `lookup` | `id`, `source`, `table`, `where` (`field`, `op`, `value`) |
 | `filter` | `id`, `source`, `table`, `where` (`field`, `op`, `value`) |
 | `workflow` | `id`, `workflow` |
+| `delete` | `id`, `collection`, `key` |

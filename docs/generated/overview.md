@@ -12,7 +12,7 @@ Network Storage is an s&box editor library providing a complete backend-as-a-ser
 - Developers edit JSON files in `Editor/Network Storage/`
 - Sync Tool pushes changes to sbox.cool (live immediately)
 - Game code uses `NetworkStorageClient` to call endpoints
-- Server executes pipelines atomically (read → validate → transform → write → respond)
+- Server executes pipelines atomically (read → validate → transform → write/delete → respond)
 
 ## Key Principles
 

@@ -42,11 +42,13 @@ Templates are resolved in these step fields:
 - `write.ops[].value` — the value to apply
 - `write.ops[].reason` — audit trail reason
 - `transform.expression` — the math expression
-- `condition.check.field` — left-hand value to check
-- `condition.check.value` — right-hand value to compare
+- `condition.check.field` (or `condition.check.left`) — left-hand value to check
+- `condition.check.value` (or `condition.check.right`) — right-hand value to compare
 - `condition.onFail.message` — error message
 - `lookup.where.value` — the lookup match value
 - `filter.where.value` — the filter comparison value
+- `delete.key` — the record key to delete
+- `workflow.params.*` — parameter values passed to a multi-step workflow
 - `response.body` — values in the response body
 
 ## Common Patterns

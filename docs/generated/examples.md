@@ -564,3 +564,328 @@ Send a chat message and increment counter.
   "response": { "status": 200, "body": { "ok": true, "messageCount": "{{chat.messageCount}}" } }
 }
 ```
+
+---
+
+## Array Manipulation (remove, pull)
+
+### Endpoint: remove-tag
+
+Remove a tag from a player's tags array using the `remove` operation.
+
+```json
+{
+  "slug": "remove-tag",
+  "name": "Remove Tag",
+  "method": "POST",
+  "description": "Remove a tag from a player",
+  "enabled": true,
+  "input": {
+    "type": "object",
+    "properties": {
+      "tag": { "type": "string" }
+    },
+    "required": ["tag"]
+  },
+  "steps": [
+    {
+      "id": "player",
+      "type": "read",
+      "collection": "players",
+      "key": "{{steamId}}_default"
+    },
+    {
+      "id": "has_tag",
+      "type": "condition",
+      "check": {
+        "field": "{{player.tags}}",
+        "op": "contains",
+        "value": "{{input.tag}}"
+      },
+      "onFail": {
+        "status": 200,
+        "error": "TAG_NOT_FOUND",
+        "message": "Player doesn't have that tag"
+      }
+    },
+    {
+      "id": "save",
+      "type": "write",
+      "collection": "players",
+      "key": "{{steamId}}_default",
+      "ops": [
+        { "op": "remove", "path": "tags", "value": "{{input.tag}}" }
+      ]
+    }
+  ],
+  "response": { "status": 200, "body": { "ok": true } }
+}
+```
+
+### Endpoint: drop-inventory-item
+
+Remove an item from inventory using the `pull` operation (match by object property).
+
+```json
+{
+  "slug": "drop-item",
+  "name": "Drop Item",
+  "method": "POST",
+  "description": "Remove an item from player inventory",
+  "enabled": true,
+  "input": {
+    "type": "object",
+    "properties": {
+      "item_id": { "type": "string" }
+    },
+    "required": ["item_id"]
+  },
+  "steps": [
+    {
+      "id": "player",
+      "type": "read",
+      "collection": "players",
+      "key": "{{steamId}}_default"
+    },
+    {
+      "id": "save",
+      "type": "write",
+      "collection": "players",
+      "key": "{{steamId}}_default",
+      "ops": [
+        { "op": "pull", "path": "inventory", "match": { "item_id": "{{input.item_id}}" } }
+      ]
+    }
+  ],
+  "response": { "status": 200, "body": { "ok": true } }
+}
+```
+
+---
+
+## Record Deletion
+
+### Endpoint: reset-player
+
+Delete a player's record entirely and re-initialize it. Uses the `delete` step type.
+
+```json
+{
+  "slug": "reset-player",
+  "name": "Reset Player",
+  "method": "POST",
+  "description": "Wipe and re-initialize player data",
+  "enabled": true,
+  "steps": [
+    {
+      "id": "player",
+      "type": "read",
+      "collection": "players",
+      "key": "{{steamId}}_default"
+    },
+    {
+      "id": "wipe",
+      "type": "delete",
+      "collection": "players",
+      "key": "{{steamId}}_default"
+    }
+  ],
+  "response": { "status": 200, "body": { "ok": true, "reset": true } }
+}
+```
+
+---
+
+## not_contains Condition
+
+### Endpoint: buy-unique-item
+
+Purchase an item only if the player doesn't already own it, using `not_contains`.
+
+```json
+{
+  "slug": "buy-unique-item",
+  "name": "Buy Unique Item",
+  "method": "POST",
+  "description": "Purchase an item (prevent duplicates)",
+  "enabled": true,
+  "input": {
+    "type": "object",
+    "properties": {
+      "item_id": { "type": "string" }
+    },
+    "required": ["item_id"]
+  },
+  "steps": [
+    {
+      "id": "player",
+      "type": "read",
+      "collection": "players",
+      "key": "{{steamId}}_default"
+    },
+    {
+      "id": "item",
+      "type": "lookup",
+      "source": "values",
+      "table": "shop_items",
+      "where": { "field": "id", "op": "==", "value": "{{input.item_id}}" }
+    },
+    {
+      "id": "not_owned",
+      "type": "condition",
+      "check": {
+        "field": "{{player.purchasedItems}}",
+        "op": "not_contains",
+        "value": "{{input.item_id}}"
+      },
+      "onFail": {
+        "status": 200,
+        "error": "ALREADY_OWNED",
+        "message": "You already own this item"
+      }
+    },
+    {
+      "id": "currency_check",
+      "type": "condition",
+      "check": {
+        "field": "{{player.currency}}",
+        "op": ">=",
+        "value": "{{item.cost}}"
+      },
+      "onFail": {
+        "status": 200,
+        "error": "NOT_ENOUGH_CURRENCY",
+        "message": "Need {{item.cost}}, have {{player.currency}}"
+      }
+    },
+    {
+      "id": "neg_cost",
+      "type": "transform",
+      "expression": "0 - {{item.cost}}"
+    },
+    {
+      "id": "save",
+      "type": "write",
+      "collection": "players",
+      "key": "{{steamId}}_default",
+      "ops": [
+        { "op": "inc", "path": "currency", "value": "{{neg_cost}}", "source": "shop", "reason": "Bought {{item.name}}" },
+        { "op": "push", "path": "purchasedItems", "value": "{{input.item_id}}" }
+      ]
+    }
+  ],
+  "response": { "status": 200, "body": { "ok": true, "purchased": "{{input.item_id}}" } }
+}
+```
+
+---
+
+## Multi-Step Workflow
+
+### Workflow: validate-purchase
+
+A reusable multi-step workflow that validates a purchase (item exists, not already owned, enough currency).
+
+```json
+{
+  "id": "validate-purchase",
+  "name": "Validate Purchase",
+  "description": "Validate a player can purchase an item from the shop",
+  "params": {
+    "player": { "type": "object" },
+    "item_id": { "type": "string" }
+  },
+  "steps": [
+    {
+      "id": "item",
+      "type": "lookup",
+      "source": "values",
+      "table": "shop_items",
+      "where": { "field": "id", "op": "==", "value": "{{item_id}}" }
+    },
+    {
+      "id": "not_owned",
+      "type": "condition",
+      "check": {
+        "field": "{{player.purchasedItems}}",
+        "op": "not_contains",
+        "value": "{{item_id}}"
+      },
+      "onFail": {
+        "status": 200,
+        "error": "ALREADY_OWNED",
+        "message": "You already own this item"
+      }
+    },
+    {
+      "id": "currency_check",
+      "type": "condition",
+      "check": {
+        "field": "{{player.currency}}",
+        "op": ">=",
+        "value": "{{item.cost}}"
+      },
+      "onFail": {
+        "status": 200,
+        "error": "NOT_ENOUGH_CURRENCY",
+        "message": "Need {{item.cost}}, have {{player.currency}}"
+      }
+    }
+  ],
+  "returns": {
+    "item": "{{item}}"
+  }
+}
+```
+
+### Endpoint using the workflow: buy-shop-item
+
+```json
+{
+  "slug": "buy-shop-item",
+  "name": "Buy Shop Item",
+  "method": "POST",
+  "description": "Purchase an item using the validate-purchase workflow",
+  "enabled": true,
+  "input": {
+    "type": "object",
+    "properties": {
+      "item_id": { "type": "string" }
+    },
+    "required": ["item_id"]
+  },
+  "steps": [
+    {
+      "id": "player",
+      "type": "read",
+      "collection": "players",
+      "key": "{{steamId}}_default"
+    },
+    {
+      "id": "validate",
+      "type": "workflow",
+      "workflow": "validate-purchase",
+      "params": {
+        "player": "{{player}}",
+        "item_id": "{{input.item_id}}"
+      }
+    },
+    {
+      "id": "neg_cost",
+      "type": "transform",
+      "expression": "0 - {{validate.item.cost}}"
+    },
+    {
+      "id": "save",
+      "type": "write",
+      "collection": "players",
+      "key": "{{steamId}}_default",
+      "ops": [
+        { "op": "inc", "path": "currency", "value": "{{neg_cost}}", "source": "shop", "reason": "Bought {{validate.item.name}}" },
+        { "op": "push", "path": "purchasedItems", "value": "{{input.item_id}}" }
+      ]
+    }
+  ],
+  "response": { "status": 200, "body": { "ok": true, "purchased": "{{input.item_id}}" } }
+}
+```

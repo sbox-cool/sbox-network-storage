@@ -162,28 +162,68 @@ SBOXCOOL_DATA_SOURCE=api_then_json
 | `condition` | Check a condition; fail with error or skip remaining steps |
 | `lookup` | Look up a row in a values table by key |
 | `filter` | Filter an array field by criteria |
+| `workflow` | Execute a reusable workflow (condition-only or multi-step) |
+| `delete` | Remove a record entirely from a collection (deferred until conditions pass) |
 
 ### Workflow File Format (`workflows/*.json`)
+
+**Legacy condition-only format:**
 
 ```json
 {
   "id": "check-currency",
   "name": "Check Currency",
   "description": "Verify player has enough currency",
-  "steps": [
-    {
-      "type": "condition",
-      "field": "player.currency",
-      "operator": "gte",
-      "value": "{{input.cost}}",
-      "onFail": "error",
-      "errorMessage": "Not enough currency"
-    }
-  ]
+  "condition": {
+    "field": "{{player.currency}}",
+    "op": ">=",
+    "value": "{{cost}}"
+  },
+  "onFail": {
+    "reject": true,
+    "errorCode": "NOT_ENOUGH_CURRENCY",
+    "errorMessage": "Not enough currency. Have: {{player.currency}}, need: {{cost}}"
+  }
 }
 ```
 
-Workflows are referenced by ID from endpoint steps and execute inline.
+**Enhanced multi-step format:**
+
+```json
+{
+  "id": "validate-purchase",
+  "name": "Validate Purchase",
+  "description": "Validate that a player can purchase an item",
+  "params": {
+    "player": { "type": "object" },
+    "item_id": { "type": "string" }
+  },
+  "steps": [
+    {
+      "id": "item",
+      "type": "lookup",
+      "source": "values",
+      "table": "shop_items",
+      "where": { "field": "id", "op": "==", "value": "{{item_id}}" }
+    },
+    {
+      "id": "cost_check",
+      "type": "condition",
+      "check": {
+        "field": "{{player.currency}}",
+        "op": ">=",
+        "value": "{{item.cost}}"
+      },
+      "onFail": { "status": 403, "error": "NOT_ENOUGH_CURRENCY" }
+    }
+  ],
+  "returns": {
+    "item": "{{item}}"
+  }
+}
+```
+
+Workflows are referenced by ID from endpoint steps and execute inline. Multi-step workflows accept typed `params`, can contain up to 10 steps (`lookup`, `filter`, `transform`, `condition`, `workflow`), and return values via `returns`. Max nesting depth: 3.
 
 ## Library Source Files
 

@@ -94,9 +94,20 @@ var result = await NetworkStorage.Post( "endpoint-slug", inputData );
 ### Adding a New Workflow
 
 1. Create `Editor/Network Storage/workflows/{id}.json`
-2. Define reusable steps (typically conditions/validation)
+2. Define either a simple condition-only workflow or a multi-step workflow:
+   - **Condition-only:** Uses `condition` and `onFail` fields directly
+   - **Multi-step:** Uses `params` for typed inputs, `steps` for a pipeline (up to 10 steps), and `returns` to pass values back
 3. Push via Sync Tool
-4. Reference from endpoints by workflow ID
+4. Reference from endpoints:
+   - Condition-only: `{ "type": "condition", "workflow": "id", "bindings": {...} }`
+   - Multi-step: `{ "type": "workflow", "workflow": "id", "params": {...} }`
+
+### Deleting Player Records
+
+Use the `delete` step type to remove records. Deletes are deferred until all conditions pass:
+1. Ensure the collection has `allowRecordDelete: true` in its schema
+2. Add a `delete` step: `{ "id": "wipe", "type": "delete", "collection": "players", "key": "{{steamId}}_default" }`
+3. Combine with `read` + `condition` steps for validation before deletion
 
 ### Modifying Game Data
 

@@ -17,17 +17,37 @@
 | Endpoints per project | 20 |
 | Collections per project | 50 |
 | Records scanned in filter | 500 |
+| Steps per workflow | 10 |
+| Workflow nesting depth | 3 |
 
 ## Valid Enums
 
 ### Step Types
-`read`, `write`, `transform`, `condition`, `lookup`, `filter`, `workflow`
+`read`, `write`, `transform`, `condition`, `lookup`, `filter`, `workflow`, `delete`
+
+### Write Operations (`ops`)
+`set`, `inc`, `push`, `pull`, `remove`
 
 ### Transform Operations
 `add`, `subtract`, `set`, `multiply`, `divide`, `append`, `remove`
 
 ### Condition Operators
-`eq`, `neq`, `gt`, `gte`, `lt`, `lte`, `contains`, `exists`, `not_exists`
+
+| Operator | Aliases | Description |
+|----------|---------|-------------|
+| `==` | `eq` | Equals |
+| `!=` | `neq`, `ne` | Not equals |
+| `>` | `gt` | Greater than |
+| `>=` | `gte`, `ge` | Greater than or equal |
+| `<` | `lt` | Less than |
+| `<=` | `lte`, `le` | Less than or equal |
+| `contains` | `includes`, `has` | Array/string contains |
+| `not_contains` | `not_includes`, `not_has`, `notcontains` | Array/string does not contain |
+| `exists` | | Field exists and is not null |
+| `not_exists` | `not_exist`, `notexists` | Field does not exist or is null |
+
+### Condition Field Aliases
+`left` is accepted as an alias for `field`, and `right` as an alias for `value` in condition checks.
 
 ### onFail Values
 `error`, `skip`
@@ -58,12 +78,13 @@
 | `read` | `collection`, `as` |
 | `write` | `collection` |
 | `transform` | `field`, `operation`, `value` |
-| `condition` | `field`, `operator`, `value`*, `onFail` |
+| `condition` | `field`/`left`, `operator`, `value`/`right`*, `onFail` |
 | `lookup` | `source`, `table`, `key`, `value`, `as` |
 | `filter` | `source`, `field`, `operator`, `value`, `as` |
 | `workflow` | `workflow` |
+| `delete` | `collection`, `key` |
 
-*`value` not required for `exists`/`not_exists` operators.
+*`value` not required for `exists`/`not_exists`/`not_contains` (when checking existence) operators.
 
 ## Response Pattern
 
