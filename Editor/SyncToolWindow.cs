@@ -52,7 +52,7 @@ public class SyncToolWindow : DockWindow
 		public string Detail; // "Pushed", "Created (new)", "Failed", "Verified ✓", "Mismatch — see diff", etc.
 	}
 
-	private float MaxScroll => Math.Max( 0, _contentHeight - ( Height - _scrollAreaTop ) + 60 );
+	private float MaxScroll => !IsValid ? 0 : Math.Max( 0, _contentHeight - ( Height - _scrollAreaTop ) + 60 );
 
 	private struct ClickRegion
 	{
@@ -696,6 +696,7 @@ public class SyncToolWindow : DockWindow
 	/// <summary>Scroll to show the bottom of the content.</summary>
 	private void ScrollToBottom()
 	{
+		if ( !IsValid ) return;
 		_scrollY = MaxScroll;
 		Update();
 	}
