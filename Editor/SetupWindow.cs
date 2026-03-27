@@ -1,7 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
-using System.IO;
 using System.Text.Json;
 using System.Threading.Tasks;
 using Sandbox;
@@ -9,42 +7,34 @@ using Editor;
 
 /// <summary>
 /// Setup window for entering Network Storage credentials.
-/// Stores project ID, public API key, and secret key safely in Editor/SyncTools/.env.
-/// The .env file is in Editor/ which is excluded from publishing — secrets never ship with the game.
+/// Uses Paint for layout/chrome but real LineEdit widgets for text inputs,
+/// giving native text selection, copy/paste, drag, and unlimited key length.
 ///
 /// Access via Editor menu → Network Storage → Setup, or the Setup button in the Sync Tool.
 /// </summary>
 [Dock( "Editor", "Network Storage Setup", "key" )]
 public class SetupWindow : DockWindow
 {
-	// ── Input state ──
-	private string _projectId = "";
-	private string _publicKey = "";
-	private string _secretKey = "";
-	private string _baseUrl = "https://api.sboxcool.com";
-	private string _cdnUrl = "";
-	private string _dataFolder = "Network Storage";
-	private int _dataSourceIndex;
+	// ── Real input widgets (native text selection, copy/paste, any length) ──
+	private LineEdit _projectIdInput;
+	private LineEdit _publicKeyInput;
+	private LineEdit _secretKeyInput;
+	private LineEdit _baseUrlInput;
+	private LineEdit _cdnUrlInput;
+	private LineEdit _dataFolderInput;
 
 	// ── UI state ──
 	private string _status = "";
 	private string _statusColor = "white";
+	private int _dataSourceIndex;
+	private List<ButtonRect> _buttons = new();
+	private Vector2 _mousePos;
 
 	// ── Test results ──
 	private string _testProjectId;
 	private string _testSecretKey;
 	private string _testPublicKey;
 	private string _testProjectTitle;
-	private int _focusedField = -1;
-	private List<FieldRect> _fields = new();
-	private List<ButtonRect> _buttons = new();
-	private Vector2 _mousePos;
-
-	private struct FieldRect
-	{
-		public Rect Rect;
-		public int Index;
-	}
 
 	private struct ButtonRect
 	{
@@ -56,23 +46,18 @@ public class SetupWindow : DockWindow
 	public SetupWindow()
 	{
 		Title = "Network Storage Setup";
-		Size = new Vector2( 480, 680 );
+		Size = new Vector2( 520, 720 );
 		MinimumSize = new Vector2( 400, 580 );
 
-		// Load existing config
 		SyncToolConfig.Load();
-		_projectId = SyncToolConfig.ProjectId;
-		_publicKey = SyncToolConfig.PublicApiKey;
-		_secretKey = SyncToolConfig.SecretKey;
-		_baseUrl = SyncToolConfig.BaseUrl;
-		_cdnUrl = SyncToolConfig.CdnUrl;
-		_dataFolder = SyncToolConfig.DataFolder;
 		_dataSourceIndex = SyncToolConfig.DataSource switch
 		{
 			SyncToolConfig.DataSourceMode.ApiOnly => 1,
 			SyncToolConfig.DataSourceMode.JsonOnly => 2,
 			_ => 0
 		};
+
+		CreateInputWidgets();
 	}
 
 	[Menu( "Editor", "Network Storage/Setup" )]
@@ -83,18 +68,50 @@ public class SetupWindow : DockWindow
 	}
 
 	// ──────────────────────────────────────────────────────
-	//  Rendering
+	//  Create real LineEdit widgets (children of the window)
+	// ──────────────────────────────────────────────────────
+
+	private void CreateInputWidgets()
+	{
+		_projectIdInput = CreateLineEdit( SyncToolConfig.ProjectId, "From sbox.cool dashboard" );
+		_publicKeyInput = CreateLineEdit( SyncToolConfig.PublicApiKey, "Public key — used by game client" );
+		_secretKeyInput = CreateLineEdit( SyncToolConfig.SecretKey, "Secret key — editor only, NEVER ships" );
+		_baseUrlInput = CreateLineEdit( SyncToolConfig.BaseUrl, "Default: https://api.sboxcool.com" );
+		_cdnUrlInput = CreateLineEdit( SyncToolConfig.CdnUrl, "Optional: storage.sboxcool.com" );
+		_dataFolderInput = CreateLineEdit( SyncToolConfig.DataFolder, "Subfolder under Editor/ (default: Network Storage)" );
+	}
+
+	private LineEdit CreateLineEdit( string value, string placeholder )
+	{
+		var input = new LineEdit( this );
+		input.Text = value ?? "";
+		input.PlaceholderText = placeholder;
+		input.Visible = true;
+		return input;
+	}
+
+	/// <summary>
+	/// Position a LineEdit at the given rect. Called during OnPaint so they track layout.
+	/// </summary>
+	private void PositionInput( LineEdit input, float x, float y, float w, float h )
+	{
+		input.Position = new Vector2( x, y );
+		input.Size = new Vector2( w, h );
+	}
+
+	// ──────────────────────────────────────────────────────
+	//  Rendering (Paint for chrome, real widgets for inputs)
 	// ──────────────────────────────────────────────────────
 
 	protected override void OnPaint()
 	{
 		base.OnPaint();
-		_fields.Clear();
 		_buttons.Clear();
 
 		var y = 38f;
 		var pad = 20f;
 		var w = Width - pad * 2;
+		var fieldH = 28f;
 
 		// ── Title ──
 		Paint.SetDefaultFont( size: 14, weight: 700 );
@@ -105,52 +122,76 @@ public class SetupWindow : DockWindow
 		// ── Description ──
 		Paint.SetDefaultFont( size: 9 );
 		Paint.SetPen( Color.White.WithAlpha( 0.5f ) );
-		Paint.DrawText( new Rect( pad, y, w, 14 ), "Credentials are stored in Editor/SyncTools/.env (gitignored, never published)", TextFlag.LeftCenter );
+		Paint.DrawText( new Rect( pad, y, w, 14 ), "Credentials are stored in Editor/ config files (gitignored, never published)", TextFlag.LeftCenter );
 		y += 22;
 
 		DrawSeparator( ref y, w, pad );
 
-		// ── Project ID ──
-		DrawInputField( ref y, pad, w, 0, "Project ID", _projectId, "From sbox.cool dashboard" );
+		// ── Input fields (label + real LineEdit widget) ──
+		DrawFieldLabel( ref y, pad, w, "Project ID" );
+		PositionInput( _projectIdInput, pad, y, w, fieldH );
+		y += fieldH + 6;
 
-		// ── Public API Key ──
-		DrawInputField( ref y, pad, w, 1, "Public API Key", _publicKey, "sbox_ns_ prefix — used by game client" );
+		DrawFieldLabel( ref y, pad, w, "Public API Key" );
+		PositionInput( _publicKeyInput, pad, y, w, fieldH );
+		y += fieldH + 2;
 
-		// ── Secret Key ──
-		DrawInputField( ref y, pad, w, 2, "Secret Key", MaskSecret( _secretKey ), "sbox_sk_ prefix — editor only, NEVER ships" );
-
-		// ── Base URL ──
-		DrawInputField( ref y, pad, w, 3, "Base URL", _baseUrl, "Default: https://api.sboxcool.com" );
-
-		// ── CDN URL ──
-		DrawInputField( ref y, pad, w, 4, "CDN URL", _cdnUrl, "Optional: storage.sboxcool.com" );
-
-		// ── Editor Data Folder ──
-		DrawInputField( ref y, pad, w, 5, "Editor Data Folder", _dataFolder, "Subfolder under Editor/ (default: Network Storage)" );
-
+		// Public key prefix hint
+		var pubKey = _publicKeyInput.Text?.Trim() ?? "";
+		if ( !string.IsNullOrEmpty( pubKey ) && !pubKey.StartsWith( "sbox_ns_" ) )
+		{
+			Paint.SetDefaultFont( size: 8 );
+			Paint.SetPen( Color.Orange.WithAlpha( 0.7f ) );
+			Paint.DrawText( new Rect( pad, y, w, 12 ), "Standard public keys start with sbox_ns_", TextFlag.LeftCenter );
+			y += 14;
+		}
 		y += 4;
+
+		DrawFieldLabel( ref y, pad, w, "Secret Key" );
+		PositionInput( _secretKeyInput, pad, y, w, fieldH );
+		y += fieldH + 2;
+
+		// Secret key prefix hint
+		var secKey = _secretKeyInput.Text?.Trim() ?? "";
+		if ( !string.IsNullOrEmpty( secKey ) && !secKey.StartsWith( "sbox_sk_" ) )
+		{
+			Paint.SetDefaultFont( size: 8 );
+			Paint.SetPen( Color.Orange.WithAlpha( 0.7f ) );
+			Paint.DrawText( new Rect( pad, y, w, 12 ), "Standard secret keys start with sbox_sk_", TextFlag.LeftCenter );
+			y += 14;
+		}
+		y += 4;
+
+		DrawFieldLabel( ref y, pad, w, "Base URL" );
+		PositionInput( _baseUrlInput, pad, y, w, fieldH );
+		y += fieldH + 6;
+
+		DrawFieldLabel( ref y, pad, w, "CDN URL" );
+		PositionInput( _cdnUrlInput, pad, y, w, fieldH );
+		y += fieldH + 6;
+
+		DrawFieldLabel( ref y, pad, w, "Editor Data Folder" );
+		PositionInput( _dataFolderInput, pad, y, w, fieldH );
+		y += fieldH + 8;
+
 		DrawSeparator( ref y, w, pad );
 
-		// ── Data Source Preference (for GET requests) ──
+		// ── Data Source Preference ──
 		Paint.SetDefaultFont( size: 10, weight: 600 );
 		Paint.SetPen( Color.White.WithAlpha( 0.7f ) );
 		Paint.DrawText( new Rect( pad, y, w, 18 ), "Data Source (GET requests)", TextFlag.LeftCenter );
 		y += 24;
 
-		// Three-option toggle (all on one row)
 		var thirdW = ( w - 16 ) / 3;
-		var toggleY = y;
-		DrawToggleButton( ref toggleY, pad, thirdW, 0, "API + Fallback", "API first, JSON fallback", _dataSourceIndex == 0 );
-		toggleY = y;
-		DrawToggleButton( ref toggleY, pad + thirdW + 8, thirdW, 1, "API Only", "Direct API, no fallback", _dataSourceIndex == 1 );
-		toggleY = y;
-		DrawToggleButton( ref toggleY, pad + ( thirdW + 8 ) * 2, thirdW, 2, "JSON Only", "Local files only", _dataSourceIndex == 2 );
-		y += 42 + 12;
+		DrawToggleButton( pad, y, thirdW, 0, "API + Fallback", _dataSourceIndex == 0 );
+		DrawToggleButton( pad + thirdW + 8, y, thirdW, 1, "API Only", _dataSourceIndex == 1 );
+		DrawToggleButton( pad + ( thirdW + 8 ) * 2, y, thirdW, 2, "JSON Only", _dataSourceIndex == 2 );
+		y += 38 + 12;
 
 		DrawSeparator( ref y, w, pad );
 
 		// ── Save button ──
-		var saveBtnH = 32f;
+		var saveBtnH = 34f;
 		var saveBtnRect = new Rect( pad, y, w, saveBtnH );
 		var saveHovered = saveBtnRect.IsInside( _mousePos );
 
@@ -179,7 +220,7 @@ public class SetupWindow : DockWindow
 		_buttons.Add( new ButtonRect { Rect = testBtnRect, Id = "test", OnClick = () => _ = TestConnection() } );
 		y += testBtnH + 8;
 
-		// ── Test results (per-credential breakdown) ──
+		// ── Test results ──
 		if ( _testProjectId != null )
 		{
 			DrawTestResult( ref y, pad, w, "Project ID", _testProjectId, _testProjectTitle );
@@ -204,107 +245,17 @@ public class SetupWindow : DockWindow
 		Paint.DrawText( new Rect( pad, y, w, 14 ), $"Saved to: {SyncToolConfig.EnvFilePath}", TextFlag.LeftCenter );
 	}
 
-	private void DrawInputField( ref float y, float pad, float w, int fieldIndex, string label, string value, string hint )
+	private void DrawFieldLabel( ref float y, float pad, float w, string label )
 	{
-		// Label
 		Paint.SetDefaultFont( size: 10, weight: 600 );
 		Paint.SetPen( Color.White.WithAlpha( 0.8f ) );
 		Paint.DrawText( new Rect( pad, y, w, 16 ), label, TextFlag.LeftCenter );
 		y += 18;
-
-		// Paste + Clear buttons on the right
-		var btnW = 42f;
-		var btnH = 22f;
-		var btnGap = 4f;
-		var btnY = y + 2;
-		var clearBtnRect = new Rect( pad + w - btnW, btnY, btnW, btnH );
-		var pasteBtnRect = new Rect( pad + w - btnW * 2 - btnGap, btnY, btnW, btnH );
-		var fieldW = w - btnW * 2 - btnGap * 2 - 4;
-
-		// Input box (narrower to make room for buttons)
-		var fieldH = 26f;
-		var fieldRect = new Rect( pad, y, fieldW, fieldH );
-		var focused = _focusedField == fieldIndex;
-		var hovered = fieldRect.IsInside( _mousePos );
-
-		var bgAlpha = focused ? 0.12f : hovered ? 0.08f : 0.04f;
-		var borderColor = focused ? Color.Cyan.WithAlpha( 0.5f ) : Color.White.WithAlpha( hovered ? 0.2f : 0.1f );
-
-		Paint.SetBrush( Color.White.WithAlpha( bgAlpha ) );
-		Paint.SetPen( borderColor );
-		Paint.DrawRect( fieldRect, 3 );
-
-		// Value or placeholder
-		Paint.SetDefaultFont( size: 10 );
-		if ( string.IsNullOrEmpty( value ) )
-		{
-			Paint.SetPen( Color.White.WithAlpha( 0.25f ) );
-			Paint.DrawText( new Rect( pad + 8, y, fieldW - 16, fieldH ), hint, TextFlag.LeftCenter );
-		}
-		else
-		{
-			Paint.SetPen( Color.White.WithAlpha( 0.9f ) );
-			Paint.DrawText( new Rect( pad + 8, y, fieldW - 16, fieldH ), value, TextFlag.LeftCenter );
-		}
-
-		// Cursor blink when focused
-		if ( focused )
-		{
-			var cursorX = pad + 8 + MeasureTextWidth( value ?? "" );
-			if ( cursorX > pad + fieldW - 8 ) cursorX = pad + fieldW - 8;
-			Paint.SetPen( Color.Cyan.WithAlpha( 0.8f ) );
-			Paint.DrawLine( new Vector2( cursorX, y + 5 ), new Vector2( cursorX, y + fieldH - 5 ) );
-		}
-
-		_fields.Add( new FieldRect { Rect = fieldRect, Index = fieldIndex } );
-
-		// ── Paste button ──
-		var pasteHovered = pasteBtnRect.IsInside( _mousePos );
-		Paint.SetBrush( Color.Cyan.WithAlpha( pasteHovered ? 0.2f : 0.08f ) );
-		Paint.SetPen( Color.Cyan.WithAlpha( pasteHovered ? 0.5f : 0.2f ) );
-		Paint.DrawRect( pasteBtnRect, 3 );
-		Paint.SetDefaultFont( size: 9, weight: 600 );
-		Paint.SetPen( Color.Cyan.WithAlpha( pasteHovered ? 1f : 0.7f ) );
-		Paint.DrawText( pasteBtnRect, "Paste", TextFlag.Center );
-
-		var fi = fieldIndex; // capture for lambda
-		_buttons.Add( new ButtonRect { Rect = pasteBtnRect, Id = $"paste_{fieldIndex}", OnClick = () => PasteIntoField( fi ) } );
-
-		// ── Clear button ──
-		var clearHovered = clearBtnRect.IsInside( _mousePos );
-		Paint.SetBrush( Color.Red.WithAlpha( clearHovered ? 0.2f : 0.08f ) );
-		Paint.SetPen( Color.Red.WithAlpha( clearHovered ? 0.5f : 0.2f ) );
-		Paint.DrawRect( clearBtnRect, 3 );
-		Paint.SetDefaultFont( size: 9, weight: 600 );
-		Paint.SetPen( Color.Red.WithAlpha( clearHovered ? 1f : 0.7f ) );
-		Paint.DrawText( clearBtnRect, "Clear", TextFlag.Center );
-
-		_buttons.Add( new ButtonRect { Rect = clearBtnRect, Id = $"clear_{fieldIndex}", OnClick = () => { SetFieldValue( fi, "" ); Update(); } } );
-
-		y += fieldH + 4;
-
-		// Hint below (for key validation)
-		if ( fieldIndex == 1 && !string.IsNullOrEmpty( _publicKey ) && !_publicKey.StartsWith( "sbox_ns_" ) )
-		{
-			Paint.SetDefaultFont( size: 8 );
-			Paint.SetPen( Color.Red.WithAlpha( 0.7f ) );
-			Paint.DrawText( new Rect( pad, y, w, 12 ), "Must start with sbox_ns_", TextFlag.LeftCenter );
-			y += 14;
-		}
-		else if ( fieldIndex == 2 && !string.IsNullOrEmpty( _secretKey ) && !_secretKey.StartsWith( "sbox_sk_" ) )
-		{
-			Paint.SetDefaultFont( size: 8 );
-			Paint.SetPen( Color.Red.WithAlpha( 0.7f ) );
-			Paint.DrawText( new Rect( pad, y, w, 12 ), "Must start with sbox_sk_", TextFlag.LeftCenter );
-			y += 14;
-		}
-
-		y += 4;
 	}
 
-	private void DrawToggleButton( ref float y, float x, float w, int index, string label, string desc, bool active )
+	private void DrawToggleButton( float x, float y, float w, int index, string label, bool active )
 	{
-		var h = 42f;
+		var h = 36f;
 		var rect = new Rect( x, y, w, h );
 		var hovered = rect.IsInside( _mousePos );
 
@@ -318,11 +269,7 @@ public class SetupWindow : DockWindow
 
 		Paint.SetDefaultFont( size: 10, weight: active ? 700 : 400 );
 		Paint.SetPen( color.WithAlpha( active ? 0.9f : 0.5f ) );
-		Paint.DrawText( new Rect( x, y + 4, w, 18 ), label, TextFlag.Center );
-
-		Paint.SetDefaultFont( size: 8 );
-		Paint.SetPen( color.WithAlpha( active ? 0.5f : 0.3f ) );
-		Paint.DrawText( new Rect( x, y + 20, w, 14 ), desc, TextFlag.Center );
+		Paint.DrawText( rect, label, TextFlag.Center );
 
 		if ( !active )
 		{
@@ -337,8 +284,6 @@ public class SetupWindow : DockWindow
 				}
 			} );
 		}
-
-		y += h + 4;
 	}
 
 	private void DrawSeparator( ref float y, float w, float pad )
@@ -348,56 +293,26 @@ public class SetupWindow : DockWindow
 		y += 10;
 	}
 
-	private string MaskSecret( string key )
+	private void DrawTestResult( ref float y, float pad, float w, string label, string result, string extra = null )
 	{
-		if ( string.IsNullOrEmpty( key ) ) return "";
-		if ( key.Length <= 12 ) return key;
-		return key[..12] + new string( '*', Math.Min( key.Length - 12, 20 ) );
-	}
+		if ( result == null ) return;
 
-	private float MeasureTextWidth( string text )
-	{
-		return text.Length * 6.5f;
-	}
+		var isOk = result.StartsWith( "Valid" ) || result.StartsWith( "Found" );
+		var color = isOk ? Color.Green : Color.Red;
 
-	// ──────────────────────────────────────────────────────
-	//  Clipboard (via PowerShell — bypasses s&box sandbox)
-	// ──────────────────────────────────────────────────────
+		Paint.SetDefaultFont( size: 9, weight: 600 );
+		Paint.SetPen( color.WithAlpha( 0.8f ) );
+		Paint.DrawText( new Rect( pad, y, 16, 15 ), isOk ? "+" : "x", TextFlag.Center );
 
-	private static string GetClipboardText()
-	{
-		try
-		{
-			var psi = new ProcessStartInfo
-			{
-				FileName = "powershell.exe",
-				Arguments = "-NoProfile -Command \"Get-Clipboard\"",
-				RedirectStandardOutput = true,
-				UseShellExecute = false,
-				CreateNoWindow = true
-			};
+		Paint.SetDefaultFont( size: 9 );
+		Paint.SetPen( Color.White.WithAlpha( 0.7f ) );
+		Paint.DrawText( new Rect( pad + 18, y, 80, 15 ), label, TextFlag.LeftCenter );
 
-			using var proc = Process.Start( psi );
-			var text = proc?.StandardOutput.ReadToEnd()?.Trim();
-			proc?.WaitForExit();
-			return text ?? "";
-		}
-		catch
-		{
-			return "";
-		}
-	}
+		var display = !string.IsNullOrEmpty( extra ) ? $"{result} — {extra}" : result;
+		Paint.SetPen( color.WithAlpha( 0.7f ) );
+		Paint.DrawText( new Rect( pad + 100, y, w - 100, 15 ), display, TextFlag.LeftCenter );
 
-	private void PasteIntoField( int fieldIndex )
-	{
-		var clip = GetClipboardText();
-		if ( !string.IsNullOrEmpty( clip ) )
-		{
-			// Replace the field entirely with clipboard content (paste replaces)
-			SetFieldValue( fieldIndex, clip );
-			_focusedField = fieldIndex;
-			Update();
-		}
+		y += 17;
 	}
 
 	// ──────────────────────────────────────────────────────
@@ -408,7 +323,6 @@ public class SetupWindow : DockWindow
 	{
 		base.OnMousePress( e );
 
-		// Check buttons
 		foreach ( var btn in _buttons )
 		{
 			if ( btn.Rect.IsInside( e.LocalPosition ) )
@@ -417,18 +331,6 @@ public class SetupWindow : DockWindow
 				return;
 			}
 		}
-
-		// Check input fields
-		_focusedField = -1;
-		foreach ( var field in _fields )
-		{
-			if ( field.Rect.IsInside( e.LocalPosition ) )
-			{
-				_focusedField = field.Index;
-				break;
-			}
-		}
-		Update();
 	}
 
 	protected override void OnMouseMove( MouseEvent e )
@@ -438,170 +340,22 @@ public class SetupWindow : DockWindow
 		Update();
 	}
 
-	protected override void OnKeyPress( KeyEvent e )
-	{
-		if ( _focusedField < 0 )
-		{
-			base.OnKeyPress( e );
-			return;
-		}
-
-		var handled = true;
-
-		if ( e.HasCtrl && e.Key == KeyCode.V )
-		{
-			PasteIntoField( _focusedField );
-		}
-		else if ( e.HasCtrl && e.Key == KeyCode.A )
-		{
-			// Select all = no-op visually, but next paste/type will replace
-		}
-		else if ( e.Key == KeyCode.Backspace )
-		{
-			RemoveChar();
-		}
-		else if ( e.Key == KeyCode.Tab )
-		{
-			_focusedField = ( _focusedField + 1 ) % 6;
-		}
-		else if ( e.Key == KeyCode.Escape )
-		{
-			_focusedField = -1;
-		}
-		else if ( e.Key == KeyCode.Enter )
-		{
-			SaveConfig();
-		}
-		else if ( !e.HasCtrl )
-		{
-			var c = KeyToChar( e.Key, e.HasShift );
-			if ( c.HasValue )
-				AppendChar( c.Value );
-			else
-				handled = false;
-		}
-		else
-		{
-			handled = false;
-		}
-
-		if ( handled )
-		{
-			Update();
-		}
-		else
-		{
-			base.OnKeyPress( e );
-		}
-	}
-
-	/// <summary>
-	/// Map a KeyCode to a character for text input.
-	/// Handles alphanumerics, underscore, dash, dot, colon, slash — enough for API keys and URLs.
-	/// </summary>
-	private static char? KeyToChar( KeyCode key, bool shift )
-	{
-		// Letters
-		if ( key >= KeyCode.A && key <= KeyCode.Z )
-		{
-			var c = (char)( 'a' + ( key - KeyCode.A ) );
-			return shift ? char.ToUpper( c ) : c;
-		}
-
-		// Digits (top row)
-		if ( key >= KeyCode.Num0 && key <= KeyCode.Num9 )
-			return (char)( '0' + ( key - KeyCode.Num0 ) );
-
-		// Common symbols for URLs and API keys
-		return key switch
-		{
-			KeyCode.Minus => shift ? '_' : '-',
-			KeyCode.Underscore => '_',
-			KeyCode.Period => '.',
-			KeyCode.Slash => '/',
-			KeyCode.Semicolon => shift ? ':' : ';',
-			KeyCode.Space => ' ',
-			KeyCode.Equal => shift ? '+' : '=',
-			_ => null
-		};
-	}
-
-	private void AppendChar( char c )
-	{
-		switch ( _focusedField )
-		{
-			case 0: _projectId += c; break;
-			case 1: _publicKey += c; break;
-			case 2: _secretKey += c; break;
-			case 3: _baseUrl += c; break;
-			case 4: _cdnUrl += c; break;
-			case 5: _dataFolder += c; break;
-		}
-	}
-
-	private void RemoveChar()
-	{
-		switch ( _focusedField )
-		{
-			case 0: if ( _projectId.Length > 0 ) _projectId = _projectId[..^1]; break;
-			case 1: if ( _publicKey.Length > 0 ) _publicKey = _publicKey[..^1]; break;
-			case 2: if ( _secretKey.Length > 0 ) _secretKey = _secretKey[..^1]; break;
-			case 3: if ( _baseUrl.Length > 0 ) _baseUrl = _baseUrl[..^1]; break;
-			case 4: if ( _cdnUrl.Length > 0 ) _cdnUrl = _cdnUrl[..^1]; break;
-			case 5: if ( _dataFolder.Length > 0 ) _dataFolder = _dataFolder[..^1]; break;
-		}
-	}
-
-	private string GetFieldValue( int field ) => field switch
-	{
-		0 => _projectId,
-		1 => _publicKey,
-		2 => _secretKey,
-		3 => _baseUrl,
-		4 => _cdnUrl,
-		5 => _dataFolder,
-		_ => ""
-	};
-
-	private void SetFieldValue( int field, string value )
-	{
-		switch ( field )
-		{
-			case 0: _projectId = value; break;
-			case 1: _publicKey = value; break;
-			case 2: _secretKey = value; break;
-			case 3: _baseUrl = value; break;
-			case 4: _cdnUrl = value; break;
-			case 5: _dataFolder = value; break;
-		}
-	}
-
 	// ──────────────────────────────────────────────────────
 	//  Actions
 	// ──────────────────────────────────────────────────────
 
 	private void SaveConfig()
 	{
-		// Validate
-		if ( string.IsNullOrEmpty( _projectId ) )
+		var projectId = _projectIdInput.Text?.Trim() ?? "";
+		var publicKey = _publicKeyInput.Text?.Trim() ?? "";
+		var secretKey = _secretKeyInput.Text?.Trim() ?? "";
+		var baseUrl = _baseUrlInput.Text?.Trim() ?? "";
+		var cdnUrl = _cdnUrlInput.Text?.Trim() ?? "";
+		var dataFolder = _dataFolderInput.Text?.Trim() ?? "";
+
+		if ( string.IsNullOrEmpty( projectId ) )
 		{
 			_status = "Project ID is required";
-			_statusColor = "red";
-			Update();
-			return;
-		}
-
-		if ( !string.IsNullOrEmpty( _secretKey ) && !_secretKey.StartsWith( "sbox_sk_" ) )
-		{
-			_status = "Secret key must start with sbox_sk_";
-			_statusColor = "red";
-			Update();
-			return;
-		}
-
-		if ( !string.IsNullOrEmpty( _publicKey ) && !_publicKey.StartsWith( "sbox_ns_" ) )
-		{
-			_status = "Public key must start with sbox_ns_";
 			_statusColor = "red";
 			Update();
 			return;
@@ -614,47 +368,38 @@ public class SetupWindow : DockWindow
 			_ => SyncToolConfig.DataSourceMode.ApiThenJson
 		};
 
-		SyncToolConfig.Save( _secretKey, _publicKey, _projectId, _baseUrl, dataSource, _dataFolder, _cdnUrl );
+		SyncToolConfig.Save( secretKey, publicKey, projectId, baseUrl, dataSource, dataFolder, cdnUrl );
 
-		_status = "Configuration saved successfully";
-		_statusColor = "green";
-		_focusedField = -1;
-		Update();
-	}
+		// Warn about non-standard prefixes but still save
+		var warnings = "";
+		if ( !string.IsNullOrEmpty( publicKey ) && !publicKey.StartsWith( "sbox_ns_" ) )
+			warnings += " (public key: non-standard prefix)";
+		if ( !string.IsNullOrEmpty( secretKey ) && !secretKey.StartsWith( "sbox_sk_" ) )
+			warnings += " (secret key: non-standard prefix)";
 
-	private void DrawTestResult( ref float y, float pad, float w, string label, string result, string extra = null )
-	{
-		if ( result == null ) return;
-
-		var isOk = result.StartsWith( "Valid" ) || result.StartsWith( "Found" );
-		var color = isOk ? Color.Green : Color.Red;
-		var icon = isOk ? "✓" : "✗";
-
-		Paint.SetDefaultFont( size: 9 );
-		Paint.SetPen( color.WithAlpha( 0.8f ) );
-		Paint.DrawText( new Rect( pad, y, 16, 15 ), icon, TextFlag.Center );
-
-		Paint.SetPen( Color.White.WithAlpha( 0.7f ) );
-		Paint.DrawText( new Rect( pad + 18, y, 80, 15 ), label, TextFlag.LeftCenter );
-
-		Paint.SetPen( color.WithAlpha( 0.7f ) );
-		Paint.DrawText( new Rect( pad + 100, y, w - 100, 15 ), result, TextFlag.LeftCenter );
-
-		if ( !string.IsNullOrEmpty( extra ) )
+		if ( !string.IsNullOrEmpty( warnings ) )
 		{
-			Paint.SetPen( Color.White.WithAlpha( 0.4f ) );
-			Paint.DrawText( new Rect( pad + 100, y, w - 100, 15 ), $"{result} — {extra}", TextFlag.LeftCenter );
+			_status = $"Saved with warnings:{warnings}";
+			_statusColor = "green";
+		}
+		else
+		{
+			_status = "Configuration saved successfully";
+			_statusColor = "green";
 		}
 
-		y += 17;
+		Update();
 	}
 
 	private async Task TestConnection()
 	{
-		// Save first so the config is up to date
 		SaveConfig();
 
-		if ( string.IsNullOrEmpty( _projectId ) || string.IsNullOrEmpty( _secretKey ) )
+		var projectId = _projectIdInput.Text?.Trim() ?? "";
+		var secretKey = _secretKeyInput.Text?.Trim() ?? "";
+		var publicKey = _publicKeyInput.Text?.Trim() ?? "";
+
+		if ( string.IsNullOrEmpty( projectId ) || string.IsNullOrEmpty( secretKey ) )
 		{
 			_status = "Need at least Project ID + Secret Key to test";
 			_statusColor = "red";
@@ -671,7 +416,7 @@ public class SetupWindow : DockWindow
 		_testProjectTitle = null;
 		Update();
 
-		var resp = await SyncToolApi.Validate( _publicKey );
+		var resp = await SyncToolApi.Validate( publicKey );
 
 		if ( !resp.HasValue )
 		{
@@ -686,7 +431,6 @@ public class SetupWindow : DockWindow
 
 		var result = resp.Value;
 
-		// Parse checks
 		if ( result.TryGetProperty( "checks", out var checks ) )
 		{
 			_testProjectId = GetCheckMessage( checks, "projectId" );
@@ -694,7 +438,6 @@ public class SetupWindow : DockWindow
 			_testPublicKey = GetCheckMessage( checks, "publicKey" );
 		}
 
-		// Get project title
 		if ( result.TryGetProperty( "project", out var proj ) && proj.ValueKind == JsonValueKind.Object )
 		{
 			_testProjectTitle = proj.TryGetProperty( "title", out var t ) ? t.GetString() : null;
