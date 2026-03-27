@@ -239,10 +239,52 @@ The server needs to resolve `{{templates}}` in `errorMessage` before sending. Th
 **Optimistic update not reverting**
 Make sure the endpoint call returns `null` on rejection. Check `ParseResponse` is detecting the error (look for `[NetworkStorage] slug: CODE — message` in the console). If you see the raw JSON with `ok: false` but no error log, the detection logic may need updating.
 
+## Management API Errors (Sync Tool)
+
+The Sync Tool uses `System.Net.Http.HttpClient` (allowed in editor context) to call the Management API. Unlike the runtime API, management endpoints return standard HTTP status codes with structured error bodies.
+
+Authentication requires two headers on every request:
+
+| Header | Value |
+|--------|-------|
+| `x-api-key` | `sbox_sk_...` (128-character secret key) |
+| `x-public-key` | `sbox_ns_...` (public API key) |
+
+When auth fails, the server returns HTTP 401 with a specific error code:
+
+| Code | Meaning |
+|------|---------|
+| `MISSING_SECRET_KEY` | `x-api-key` header missing or wrong prefix |
+| `MISSING_PUBLIC_KEY` | `x-public-key` header missing or wrong prefix |
+| `INVALID_SECRET_KEY` | Secret key not recognized |
+| `INVALID_PUBLIC_KEY` | Public key not recognized |
+| `PROJECT_MISMATCH` | Key belongs to a different project |
+| `KEY_DISABLED` | Key is disabled |
+| `KEY_UPGRADE_REQUIRED` | Old key format -- regenerate from dashboard |
+| `FORBIDDEN` | Key lacks required permission scope |
+
+All 401 responses include an `expected` object showing what the server needs:
+
+```json
+{
+  "ok": false,
+  "error": "MISSING_SECRET_KEY",
+  "message": "Missing or invalid x-api-key header. Must be a secret key (sbox_sk_*).",
+  "expected": {
+    "headers": {
+      "x-api-key": "sbox_sk_... (128-character secret key)",
+      "x-public-key": "sbox_ns_... (public API key)"
+    }
+  }
+}
+```
+
+The `SyncToolApi` class reads `error` and `message` from the response and surfaces them in the editor console via `LastErrorCode` / `LastErrorMessage`.
+
 ## s&box HTTP Constraints
 
-- **Only `Http.RequestStringAsync` is whitelisted** — `System.Net.Http.HttpClient` is blocked by s&box's sandbox
-- `Http.RequestStringAsync` **throws on HTTP 4xx/5xx** — the response body is lost
-- This is why condition rejections default to **HTTP 200** with `ok: false` — so the client can read the error details
+- **Only `Http.RequestStringAsync` is whitelisted** -- `System.Net.Http.HttpClient` is blocked by s&box's sandbox
+- `Http.RequestStringAsync` **throws on HTTP 4xx/5xx** -- the response body is lost
+- This is why condition rejections default to **HTTP 200** with `ok: false` -- so the client can read the error details
 - If you explicitly set `"status": 403` in a workflow's `onFail`, the client will only see the exception message, not the error JSON
 - `System.Net.Http.StringContent` IS allowed (needed for POST request bodies)

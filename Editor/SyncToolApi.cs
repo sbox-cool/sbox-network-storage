@@ -80,6 +80,15 @@ public static class SyncToolApi
 					{
 						Log.Warning( $"[SyncTool] Permission denied: {LastErrorMessage}" );
 					}
+					else if ( (int)response.StatusCode == 401 && errJson.TryGetProperty( "expected", out var expected ) )
+					{
+						if ( expected.TryGetProperty( "headers", out var headers ) )
+						{
+							Log.Warning( "[SyncTool] Expected headers:" );
+							foreach ( var h in headers.EnumerateObject() )
+								Log.Warning( $"[SyncTool]   {h.Name}: {h.Value.GetString()}" );
+						}
+					}
 				}
 				catch
 				{
