@@ -43,14 +43,18 @@ public static class SyncToolConfig
 	}
 
 	// ── Validation ──
+
+	/// <summary>True when all required credentials are present (project ID + both keys). Does not enforce key prefixes.</summary>
 	public static bool IsValid => !string.IsNullOrEmpty( SecretKey )
-		&& SecretKey.StartsWith( "sbox_sk_" )
 		&& !string.IsNullOrEmpty( PublicApiKey )
-		&& PublicApiKey.StartsWith( "sbox_ns_" )
 		&& !string.IsNullOrEmpty( ProjectId );
 
-	public static bool HasPublicKey => !string.IsNullOrEmpty( PublicApiKey )
-		&& PublicApiKey.StartsWith( "sbox_ns_" );
+	/// <summary>True when keys use the standard sbox_sk_ / sbox_ns_ prefixes.</summary>
+	public static bool HasStandardPrefixes =>
+		( string.IsNullOrEmpty( SecretKey ) || SecretKey.StartsWith( "sbox_sk_" ) )
+		&& ( string.IsNullOrEmpty( PublicApiKey ) || PublicApiKey.StartsWith( "sbox_ns_" ) );
+
+	public static bool HasPublicKey => !string.IsNullOrEmpty( PublicApiKey );
 
 	public static bool IsFullyConfigured => IsValid;
 

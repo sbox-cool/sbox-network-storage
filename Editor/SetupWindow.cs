@@ -36,6 +36,7 @@ public class SetupWindow : DockWindow
 	private string _testSecretKey;
 	private string _testPublicKey;
 	private string _testProjectTitle;
+	private string _testPermissions;
 
 	private struct ButtonRect
 	{
@@ -290,6 +291,19 @@ public class SetupWindow : DockWindow
 			DrawTestResult( ref y, pad, w, "Project ID", _testProjectId, _testProjectTitle );
 			DrawTestResult( ref y, pad, w, "Secret Key", _testSecretKey );
 			DrawTestResult( ref y, pad, w, "Public Key", _testPublicKey );
+
+			if ( !string.IsNullOrEmpty( _testPermissions ) )
+			{
+				y += 4;
+				Paint.SetDefaultFont( size: 8, weight: 600 );
+				Paint.SetPen( Color.White.WithAlpha( 0.5f ) );
+				Paint.DrawText( new Rect( pad, y, w, 12 ), "Key Permissions:", TextFlag.LeftCenter );
+				y += 14;
+				Paint.SetDefaultFont( size: 8 );
+				Paint.SetPen( Color.Cyan.WithAlpha( 0.7f ) );
+				Paint.DrawText( new Rect( pad + 8, y, w - 8, 12 ), _testPermissions, TextFlag.LeftCenter );
+				y += 14;
+			}
 			y += 4;
 		}
 
@@ -478,13 +492,14 @@ public class SetupWindow : DockWindow
 		_testSecretKey = null;
 		_testPublicKey = null;
 		_testProjectTitle = null;
+		_testPermissions = null;
 		Update();
 
 		var resp = await SyncToolApi.Validate( publicKey );
 
 		if ( !resp.HasValue )
 		{
-			_status = "Connection failed — could not reach server";
+			_status = "Connection failed -- could not reach server";
 			_statusColor = "red";
 			_testProjectId = "Connection failed";
 			_testSecretKey = "Connection failed";
@@ -494,6 +509,19 @@ public class SetupWindow : DockWindow
 		}
 
 		var result = resp.Value;
+
+		// Check for KEY_UPGRADE_REQUIRED error
+		if ( SyncToolApi.LastErrorCode == "KEY_UPGRADE_REQUIRED" ||
+		     (result.TryGetProperty( "error", out var errEl ) && errEl.GetString() == "KEY_UPGRADE_REQUIRED") )
+		{
+			_status = "Secret key uses an old format. Generate a new key at sbox.cool.";
+			_statusColor = "red";
+			_testProjectId = "Not checked";
+			_testSecretKey = "Old format -- regenerate on dashboard";
+			_testPublicKey = "Not checked";
+			Update();
+			return;
+		}
 
 		if ( result.TryGetProperty( "checks", out var checks ) )
 		{
@@ -507,8 +535,32 @@ public class SetupWindow : DockWindow
 			_testProjectTitle = proj.TryGetProperty( "title", out var t ) ? t.GetString() : null;
 		}
 
+		// Parse permissions if present
+		if ( result.TryGetProperty( "permissions", out var perms ) && perms.ValueKind == JsonValueKind.Object )
+		{
+			var parts = new List<string>();
+			var labels = new Dictionary<string, string>
+			{
+				{ "endpoints", "Endpoints" },
+				{ "collections", "Collections" },
+				{ "workflows", "Workflows" },
+				{ "game_values", "Game Values" },
+				{ "rate_limits", "Rate Limits" }
+			};
+			foreach ( var kv in labels )
+			{
+				if ( perms.TryGetProperty( kv.Key, out var val ) )
+				{
+					var access = val.GetString() ?? "rw";
+					var label = access == "rw" ? "RW" : access == "r" ? "R" : "-";
+					parts.Add( $"{kv.Value}: {label}" );
+				}
+			}
+			_testPermissions = string.Join( "  |  ", parts );
+		}
+
 		var allOk = result.TryGetProperty( "ok", out var okEl ) && okEl.ValueKind == JsonValueKind.True;
-		_status = allOk ? "All credentials validated" : "Some credentials failed — see details above";
+		_status = allOk ? "All credentials validated" : "Some credentials failed -- see details above";
 		_statusColor = allOk ? "green" : "red";
 		Update();
 	}

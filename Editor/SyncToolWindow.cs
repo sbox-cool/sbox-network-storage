@@ -1129,10 +1129,11 @@ public class SyncToolWindow : DockWindow
 			_status = $"Pushing {_endpointFiles.Length} endpoints...";
 			Update();
 			var ok = await DoPushAllEndpoints();
+			var failDetail = GetPushFailDetail( "endpoints" );
 			foreach ( var f in _endpointFiles )
 			{
 				var slug = Path.GetFileNameWithoutExtension( f );
-				var detail = ok ? "Pushed" : "Push failed";
+				var detail = ok ? "Pushed" : failDetail;
 				SetItemState( $"ep_{slug}", result: ok ? "OK" : "FAIL",
 					remoteDiffers: false, diffSummary: "", status: ok ? SyncStatus.InSync : null );
 				_syncLog.Add( new SyncLogEntry { Name = $"{slug}.json", Type = "Endpoint", Ok = ok, Detail = detail } );
@@ -1147,10 +1148,11 @@ public class SyncToolWindow : DockWindow
 			_status = $"Pushing {_collectionFiles.Length} collections...";
 			Update();
 			var ok = await DoPushCollections();
+			var failDetail = GetPushFailDetail( "collections" );
 			foreach ( var f in _collectionFiles )
 			{
 				var name = Path.GetFileNameWithoutExtension( f );
-				var detail = ok ? "Pushed" : "Push failed";
+				var detail = ok ? "Pushed" : failDetail;
 				SetItemState( $"col_{name}", result: ok ? "OK" : "FAIL",
 					remoteDiffers: false, diffSummary: "", status: ok ? SyncStatus.InSync : null );
 				_syncLog.Add( new SyncLogEntry { Name = $"{name}.json", Type = "Collection", Ok = ok, Detail = detail } );
@@ -1165,10 +1167,11 @@ public class SyncToolWindow : DockWindow
 			_status = $"Pushing {_workflowFiles.Length} workflows...";
 			Update();
 			var ok = await DoPushAllWorkflows();
+			var failDetail = GetPushFailDetail( "workflows" );
 			foreach ( var f in _workflowFiles )
 			{
 				var name = Path.GetFileNameWithoutExtension( f );
-				var detail = ok ? "Pushed" : "Push failed";
+				var detail = ok ? "Pushed" : failDetail;
 				SetItemState( $"wf_{name}", result: ok ? "OK" : "FAIL",
 					remoteDiffers: false, diffSummary: "", status: ok ? SyncStatus.InSync : null );
 				_syncLog.Add( new SyncLogEntry { Name = $"{name}.json", Type = "Workflow", Ok = ok, Detail = detail } );
@@ -1521,6 +1524,20 @@ public class SyncToolWindow : DockWindow
 			_busyItem = null;
 			Update();
 		}
+	}
+
+	/// <summary>
+	/// Get a human-readable failure message after a failed push, using SyncToolApi error state.
+	/// </summary>
+	private static string GetPushFailDetail( string resource )
+	{
+		if ( SyncToolApi.LastErrorCode == "KEY_UPGRADE_REQUIRED" )
+			return "Key uses old format -- regenerate at sbox.cool";
+		if ( SyncToolApi.LastErrorCode == "FORBIDDEN" )
+			return $"No write permission for {resource}";
+		if ( !string.IsNullOrEmpty( SyncToolApi.LastErrorMessage ) )
+			return SyncToolApi.LastErrorMessage;
+		return "Push failed";
 	}
 
 	// ──────────────────────────────────────────────────────

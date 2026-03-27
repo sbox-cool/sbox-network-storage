@@ -15,13 +15,27 @@ public static class SyncToolApi
 	private static readonly HttpClient _http = new();
 
 	/// <summary>
+	/// Last error code from the server (e.g., "KEY_UPGRADE_REQUIRED", "FORBIDDEN").
+	/// Reset on each request. Null if the last request succeeded or had no structured error.
+	/// </summary>
+	public static string LastErrorCode { get; private set; }
+
+	/// <summary>
+	/// Last error message from the server.
+	/// </summary>
+	public static string LastErrorMessage { get; private set; }
+
+	/// <summary>
 	/// Make an authenticated request to the management API.
 	/// </summary>
 	public static async Task<JsonElement?> Request( string method, string path, JsonElement? body = null )
 	{
+		LastErrorCode = null;
+		LastErrorMessage = null;
+
 		if ( !SyncToolConfig.IsValid )
 		{
-			Log.Warning( "[SyncTool] Config not valid — load .env first" );
+			Log.Warning( "[SyncTool] Config not valid -- load .env first" );
 			return null;
 		}
 
@@ -30,7 +44,7 @@ public static class SyncToolApi
 		var request = new HttpRequestMessage( new HttpMethod( method ), url );
 		request.Headers.Add( "x-api-key", SyncToolConfig.SecretKey );
 		request.Headers.Add( "x-public-key", SyncToolConfig.PublicApiKey );
-		request.Headers.Add( "User-Agent", "SyncTool-sbox/1.0" );
+		request.Headers.Add( "User-Agent", "SyncTool-sbox/2.0" );
 
 		if ( body.HasValue )
 		{
@@ -49,12 +63,27 @@ public static class SyncToolApi
 				try
 				{
 					var errJson = JsonSerializer.Deserialize<JsonElement>( text );
-					var msg = errJson.TryGetProperty( "message", out var m ) ? m.GetString() : text;
-					Log.Warning( $"[SyncTool] → {msg}" );
+					if ( errJson.TryGetProperty( "error", out var errCode ) )
+						LastErrorCode = errCode.GetString();
+					if ( errJson.TryGetProperty( "message", out var errMsg ) )
+						LastErrorMessage = errMsg.GetString();
+
+					var msg = LastErrorMessage ?? text;
+					Log.Warning( $"[SyncTool] -> {msg}" );
+
+					// Surface specific error types
+					if ( LastErrorCode == "KEY_UPGRADE_REQUIRED" )
+					{
+						Log.Warning( "[SyncTool] Your secret key uses an old format. Generate a new one at sbox.cool." );
+					}
+					else if ( LastErrorCode == "FORBIDDEN" )
+					{
+						Log.Warning( $"[SyncTool] Permission denied: {LastErrorMessage}" );
+					}
 				}
 				catch
 				{
-					Log.Warning( $"[SyncTool] → {text[..Math.Min( text.Length, 200 )]}" );
+					Log.Warning( $"[SyncTool] -> {text[..Math.Min( text.Length, 200 )]}" );
 				}
 				return null;
 			}
@@ -89,16 +118,19 @@ public static class SyncToolApi
 	/// <summary>
 	/// Validate credentials against the server.
 	/// Sends secret key via x-api-key header and optionally public key via x-public-key header.
-	/// Returns { ok, project, checks: { projectId, secretKey, publicKey } }
+	/// Returns { ok, project, checks, permissions? }
 	/// </summary>
 	public static async Task<JsonElement?> Validate( string publicKey = null )
 	{
+		LastErrorCode = null;
+		LastErrorMessage = null;
+
 		if ( !SyncToolConfig.IsValid ) return null;
 
 		var url = $"{SyncToolConfig.BaseUrl}/{SyncToolConfig.ApiVersion}/manage/{SyncToolConfig.ProjectId}/validate";
 		var request = new HttpRequestMessage( HttpMethod.Get, url );
 		request.Headers.Add( "x-api-key", SyncToolConfig.SecretKey );
-		request.Headers.Add( "User-Agent", "SyncTool-sbox/1.0" );
+		request.Headers.Add( "User-Agent", "SyncTool-sbox/2.0" );
 
 		if ( !string.IsNullOrEmpty( publicKey ) )
 			request.Headers.Add( "x-public-key", publicKey );
@@ -107,7 +139,17 @@ public static class SyncToolApi
 		{
 			var response = await _http.SendAsync( request );
 			var text = await response.Content.ReadAsStringAsync();
-			return JsonSerializer.Deserialize<JsonElement>( text );
+			var result = JsonSerializer.Deserialize<JsonElement>( text );
+
+			// Check for error codes in the response
+			if ( result.TryGetProperty( "error", out var errCode ) )
+			{
+				LastErrorCode = errCode.GetString();
+				if ( result.TryGetProperty( "message", out var errMsg ) )
+					LastErrorMessage = errMsg.GetString();
+			}
+
+			return result;
 		}
 		catch ( Exception ex )
 		{
