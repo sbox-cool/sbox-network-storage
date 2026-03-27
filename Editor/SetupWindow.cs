@@ -27,6 +27,7 @@ public class SetupWindow : DockWindow
 	private string _status = "";
 	private string _statusColor = "white";
 	private int _dataSourceIndex;
+	private bool _secretKeyMasked = true;
 	private List<ButtonRect> _buttons = new();
 	private Vector2 _mousePos;
 
@@ -147,8 +148,71 @@ public class SetupWindow : DockWindow
 		}
 		y += 4;
 
+		// Secret Key — with show/hide toggle
+		var toggleW = 48f;
+		var toggleGap = 6f;
+		var fieldInputW = w - toggleW - toggleGap;
+
+		// Label
 		DrawFieldLabel( ref y, pad, w, "Secret Key" );
-		PositionInput( _secretKeyInput, pad, y, w, fieldH );
+
+		if ( _secretKeyMasked )
+		{
+			// Hide the real input, draw a masked box with dots
+			_secretKeyInput.Visible = false;
+
+			var maskedRect = new Rect( pad, y, fieldInputW, fieldH );
+			var maskedHovered = maskedRect.IsInside( _mousePos );
+
+			Paint.SetBrush( Color.White.WithAlpha( maskedHovered ? 0.08f : 0.04f ) );
+			Paint.SetPen( Color.White.WithAlpha( maskedHovered ? 0.2f : 0.1f ) );
+			Paint.DrawRect( maskedRect, 3 );
+
+			Paint.SetDefaultFont( size: 12 );
+			var secText = _secretKeyInput.Text?.Trim() ?? "";
+			if ( string.IsNullOrEmpty( secText ) )
+			{
+				Paint.SetPen( Color.White.WithAlpha( 0.25f ) );
+				Paint.SetDefaultFont( size: 10 );
+				Paint.DrawText( new Rect( pad + 8, y, fieldInputW - 16, fieldH ), "Secret key — editor only, NEVER ships", TextFlag.LeftCenter );
+			}
+			else
+			{
+				Paint.SetPen( Color.White.WithAlpha( 0.6f ) );
+				var dots = new string( '\u2022', Math.Min( secText.Length, 40 ) );
+				Paint.DrawText( new Rect( pad + 8, y, fieldInputW - 16, fieldH ), dots, TextFlag.LeftCenter );
+			}
+		}
+		else
+		{
+			// Show the real input
+			_secretKeyInput.Visible = true;
+			PositionInput( _secretKeyInput, pad, y, fieldInputW, fieldH );
+		}
+
+		// Show/Hide toggle button
+		var toggleRect = new Rect( pad + fieldInputW + toggleGap, y, toggleW, fieldH );
+		var toggleHovered = toggleRect.IsInside( _mousePos );
+		var toggleColor = Color.Cyan;
+
+		Paint.SetBrush( toggleColor.WithAlpha( toggleHovered ? 0.2f : 0.08f ) );
+		Paint.SetPen( toggleColor.WithAlpha( toggleHovered ? 0.5f : 0.2f ) );
+		Paint.DrawRect( toggleRect, 3 );
+		Paint.SetDefaultFont( size: 9, weight: 600 );
+		Paint.SetPen( toggleColor.WithAlpha( toggleHovered ? 1f : 0.7f ) );
+		Paint.DrawText( toggleRect, _secretKeyMasked ? "Show" : "Hide", TextFlag.Center );
+
+		_buttons.Add( new ButtonRect
+		{
+			Rect = toggleRect,
+			Id = "toggle_secret",
+			OnClick = () =>
+			{
+				_secretKeyMasked = !_secretKeyMasked;
+				Update();
+			}
+		} );
+
 		y += fieldH + 2;
 
 		// Secret key prefix hint
