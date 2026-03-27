@@ -41,9 +41,15 @@ public static class SyncToolApi
 
 		var url = $"{SyncToolConfig.BaseUrl}/{SyncToolConfig.ApiVersion}/manage/{SyncToolConfig.ProjectId}/{path}";
 
+		var sk = SyncToolConfig.SecretKey ?? "";
+		var pk = SyncToolConfig.PublicApiKey ?? "";
+		Log.Info( $"[SyncTool] {method} {url}" );
+		Log.Info( $"[SyncTool]   x-api-key: {( sk.Length > 20 ? sk[..16] + "..." + sk[^4..] : sk.Length > 0 ? "(too short: " + sk.Length + " chars)" : "(empty)" )} ({sk.Length} chars)" );
+		Log.Info( $"[SyncTool]   x-public-key: {( pk.Length > 20 ? pk[..16] + "..." + pk[^4..] : pk.Length > 0 ? pk : "(empty)" )} ({pk.Length} chars)" );
+
 		var request = new HttpRequestMessage( new HttpMethod( method ), url );
-		request.Headers.Add( "x-api-key", SyncToolConfig.SecretKey );
-		request.Headers.Add( "x-public-key", SyncToolConfig.PublicApiKey );
+		request.Headers.Add( "x-api-key", sk );
+		request.Headers.Add( "x-public-key", pk );
 		request.Headers.Add( "User-Agent", "SyncTool-sbox/2.0" );
 
 		if ( body.HasValue )
@@ -71,6 +77,10 @@ public static class SyncToolApi
 					var msg = LastErrorMessage ?? text;
 					Log.Warning( $"[SyncTool] -> {msg}" );
 
+					// Show what the server received vs what we sent
+					if ( errJson.TryGetProperty( "received", out var received ) )
+						Log.Warning( $"[SyncTool] Server received: {received}" );
+
 					// Surface specific error types
 					if ( LastErrorCode == "KEY_UPGRADE_REQUIRED" )
 					{
@@ -79,15 +89,6 @@ public static class SyncToolApi
 					else if ( LastErrorCode == "FORBIDDEN" )
 					{
 						Log.Warning( $"[SyncTool] Permission denied: {LastErrorMessage}" );
-					}
-					else if ( (int)response.StatusCode == 401 && errJson.TryGetProperty( "expected", out var expected ) )
-					{
-						if ( expected.TryGetProperty( "headers", out var headers ) )
-						{
-							Log.Warning( "[SyncTool] Expected headers:" );
-							foreach ( var h in headers.EnumerateObject() )
-								Log.Warning( $"[SyncTool]   {h.Name}: {h.Value.GetString()}" );
-						}
 					}
 				}
 				catch
@@ -134,11 +135,22 @@ public static class SyncToolApi
 		LastErrorCode = null;
 		LastErrorMessage = null;
 
-		if ( !SyncToolConfig.IsValid ) return null;
+		if ( !SyncToolConfig.IsValid )
+		{
+			Log.Warning( "[SyncTool] Validate: config not valid" );
+			return null;
+		}
 
 		var url = $"{SyncToolConfig.BaseUrl}/{SyncToolConfig.ApiVersion}/manage/{SyncToolConfig.ProjectId}/validate";
+		var sk = SyncToolConfig.SecretKey ?? "";
+		var pk = publicKey ?? "";
+
+		Log.Info( $"[SyncTool] Validate: GET {url}" );
+		Log.Info( $"[SyncTool]   x-api-key: {( sk.Length > 20 ? sk[..16] + "..." + sk[^4..] : sk.Length > 0 ? "(short: " + sk.Length + " chars)" : "(empty)" )}" );
+		Log.Info( $"[SyncTool]   x-public-key: {( pk.Length > 0 ? pk : "(not sent)" )}" );
+
 		var request = new HttpRequestMessage( HttpMethod.Get, url );
-		request.Headers.Add( "x-api-key", SyncToolConfig.SecretKey );
+		request.Headers.Add( "x-api-key", sk );
 		request.Headers.Add( "User-Agent", "SyncTool-sbox/2.0" );
 
 		if ( !string.IsNullOrEmpty( publicKey ) )
@@ -148,6 +160,18 @@ public static class SyncToolApi
 		{
 			var response = await _http.SendAsync( request );
 			var text = await response.Content.ReadAsStringAsync();
+
+			Log.Info( $"[SyncTool] Validate: HTTP {(int)response.StatusCode} — {text[..Math.Min( text.Length, 500 )]}" );
+
+			if ( !response.IsSuccessStatusCode )
+			{
+				LastErrorCode = $"HTTP_{(int)response.StatusCode}";
+				LastErrorMessage = $"Server returned HTTP {(int)response.StatusCode}. Response: {text[..Math.Min( text.Length, 300 )]}";
+				Log.Warning( $"[SyncTool] Validate failed: HTTP {(int)response.StatusCode}" );
+				Log.Warning( $"[SyncTool]   Response: {text[..Math.Min( text.Length, 500 )]}" );
+				return null;
+			}
+
 			var result = JsonSerializer.Deserialize<JsonElement>( text );
 
 			// Check for error codes in the response
@@ -156,6 +180,7 @@ public static class SyncToolApi
 				LastErrorCode = errCode.GetString();
 				if ( result.TryGetProperty( "message", out var errMsg ) )
 					LastErrorMessage = errMsg.GetString();
+				Log.Warning( $"[SyncTool] Validate error: {LastErrorCode} — {LastErrorMessage}" );
 			}
 
 			return result;

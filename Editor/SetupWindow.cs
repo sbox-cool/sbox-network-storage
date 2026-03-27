@@ -499,11 +499,13 @@ public class SetupWindow : DockWindow
 
 		if ( !resp.HasValue )
 		{
-			_status = "Connection failed -- could not reach server";
+			var errDetail = SyncToolApi.LastErrorMessage ?? "Could not reach server";
+			_status = $"Validation failed: {errDetail}";
 			_statusColor = "red";
-			_testProjectId = "Connection failed";
-			_testSecretKey = "Connection failed";
-			_testPublicKey = "Connection failed";
+			_testProjectId = SyncToolApi.LastErrorCode ?? "Connection failed";
+			_testSecretKey = SyncToolApi.LastErrorCode ?? "Connection failed";
+			_testPublicKey = SyncToolApi.LastErrorCode ?? "Connection failed";
+			Log.Warning( $"[SyncTool] Validate returned null — LastError: {SyncToolApi.LastErrorCode} — {SyncToolApi.LastErrorMessage}" );
 			Update();
 			return;
 		}
@@ -560,8 +562,24 @@ public class SetupWindow : DockWindow
 		}
 
 		var allOk = result.TryGetProperty( "ok", out var okEl ) && okEl.ValueKind == JsonValueKind.True;
-		_status = allOk ? "All credentials validated" : "Some credentials failed -- see details above";
-		_statusColor = allOk ? "green" : "red";
+		if ( allOk )
+		{
+			_status = "All credentials validated";
+			_statusColor = "green";
+		}
+		else
+		{
+			// Build a meaningful error message from the check results
+			var failedChecks = new List<string>();
+			if ( _testProjectId != null && _testProjectId != "Found" ) failedChecks.Add( $"Project: {_testProjectId}" );
+			if ( _testSecretKey != null && _testSecretKey != "Valid" ) failedChecks.Add( $"Secret key: {_testSecretKey}" );
+			if ( _testPublicKey != null && _testPublicKey != "Valid" && _testPublicKey != "Not provided" ) failedChecks.Add( $"Public key: {_testPublicKey}" );
+
+			_status = failedChecks.Count > 0
+				? $"Failed: {string.Join( " | ", failedChecks )}"
+				: "Validation failed — check console for details";
+			_statusColor = "red";
+		}
 		Update();
 	}
 
