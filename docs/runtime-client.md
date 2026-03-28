@@ -1,5 +1,7 @@
 # Network Storage — Runtime Client
 
+> **Note:** For the most up-to-date documentation, visit https://sbox.cool/wiki/network-storage-v3 — these repo docs may be outdated.
+
 The runtime client (`NetworkStorageClient`) is what your game code uses to interact with the sbox.cool backend at runtime. It ships with your game (unlike the editor tools).
 
 ## Auto-Configuration (Recommended)

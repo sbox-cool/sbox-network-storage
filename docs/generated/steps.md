@@ -1,5 +1,7 @@
 # Endpoint Step Types — Complete Reference
 
+> **Note:** For the most up-to-date documentation, visit https://sbox.cool/wiki/network-storage-v3 — these repo docs may be outdated.
+
 Endpoints execute a pipeline of steps in order. Each step has an `id`, a `type`, and type-specific properties. The `id` is used to reference the step's result in later steps via `{{id.field}}` templates.
 
 ## read — Load a Collection Record

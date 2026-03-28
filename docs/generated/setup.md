@@ -1,5 +1,7 @@
 # Setup Guide
 
+> **Note:** For the most up-to-date documentation, visit https://sbox.cool/wiki/network-storage-v3 — these repo docs may be outdated.
+
 ## Installation
 
 1. In the s&box editor, open **Library Manager**

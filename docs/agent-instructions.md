@@ -1,5 +1,7 @@
 # Network Storage — Instructions for AI Agents
 
+> **Note:** For the most up-to-date documentation, visit https://sbox.cool/wiki/network-storage-v3 — these repo docs may be outdated.
+
 This document provides instructions for AI coding agents (Claude, Copilot, etc.) working on projects that use the Network Storage library.
 
 ## Critical Rules

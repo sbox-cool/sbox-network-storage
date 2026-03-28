@@ -1,5 +1,7 @@
 # Endpoints
 
+> **Note:** For the most up-to-date documentation, visit https://sbox.cool/wiki/network-storage-v3 — these repo docs may be outdated.
+
 Endpoints are server-side pipelines that your game calls via the API. Each endpoint is a JSON file in `Editor/Network Storage/endpoints/`.
 
 ## Endpoint JSON Format

@@ -1,5 +1,7 @@
 # Error Patterns — Diagnosis Reference
 
+> **Note:** For the most up-to-date documentation, visit https://sbox.cool/wiki/network-storage-v3 — these repo docs may be outdated.
+
 This document lists all error patterns recognized by the MCP's `diagnose_error` tool. When an error message matches one of these patterns, the tool returns the explanation and suggested fixes.
 
 ## Server Error Codes

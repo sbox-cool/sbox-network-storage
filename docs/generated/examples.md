@@ -1,5 +1,7 @@
 # Examples — Common Game Scenarios
 
+> **Note:** For the most up-to-date documentation, visit https://sbox.cool/wiki/network-storage-v3 — these repo docs may be outdated.
+
 Pre-built JSON examples for common game patterns. These are the same examples available via the MCP's `get_examples` tool.
 
 ## Player Data

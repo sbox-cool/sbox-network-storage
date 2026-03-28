@@ -1,5 +1,7 @@
 # Constraints & Limits
 
+> **Note:** For the most up-to-date documentation, visit https://sbox.cool/wiki/network-storage-v3 — these repo docs may be outdated.
+
 ## Naming Rules
 
 | Entity | Pattern | Description |

@@ -1,5 +1,7 @@
 # Network Storage — Error Handling & Rejection Guide
 
+> **Note:** For the most up-to-date documentation, visit https://sbox.cool/wiki/network-storage-v3 — these repo docs may be outdated.
+
 How endpoint rejections, workflow validation failures, and network errors flow through the system.
 
 ## How Rejections Work

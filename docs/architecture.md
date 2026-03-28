@@ -1,5 +1,7 @@
 # Network Storage — Architecture
 
+> **Note:** For the most up-to-date documentation, visit https://sbox.cool/wiki/network-storage-v3 — these repo docs may be outdated.
+
 ## Overview
 
 Network Storage is an s&box editor library that provides a complete backend-as-a-service for s&box games. It connects your game to the sbox.cool cloud platform for persistent player data, game configuration, and server-side logic — all managed through JSON files in your editor.

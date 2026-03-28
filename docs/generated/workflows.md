@@ -1,5 +1,7 @@
 # Workflows
 
+> **Note:** For the most up-to-date documentation, visit https://sbox.cool/wiki/network-storage-v3 — these repo docs may be outdated.
+
 Workflows are reusable logic blocks that endpoints can reference. Each workflow is a JSON file in `Editor/Network Storage/workflows/`. Workflows support two formats: the **legacy condition-only format** (a single condition check) and the **enhanced multi-step format** (a full pipeline with typed params and returns).
 
 ## Legacy Condition-Only Format

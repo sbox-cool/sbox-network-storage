@@ -1,5 +1,7 @@
 # Template Syntax — `{{template}}` Reference
 
+> **Note:** For the most up-to-date documentation, visit https://sbox.cool/wiki/network-storage-v3 — these repo docs may be outdated.
+
 Templates let you reference dynamic values in endpoint steps. They are resolved at execution time by the server.
 
 ## Syntax

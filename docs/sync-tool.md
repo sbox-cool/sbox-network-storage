@@ -1,5 +1,7 @@
 # Network Storage — Sync Tool
 
+> **Note:** For the most up-to-date documentation, visit https://sbox.cool/wiki/network-storage-v3 — these repo docs may be outdated.
+
 The Sync Tool is the main editor window for managing your game's backend data. Open it via **Editor → Network Storage → Sync Tool**.
 
 ## What It Does

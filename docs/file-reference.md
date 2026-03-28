@@ -1,5 +1,7 @@
 # Network Storage — File Reference
 
+> **Note:** For the most up-to-date documentation, visit https://sbox.cool/wiki/network-storage-v3 — these repo docs may be outdated.
+
 ## Project Data Files
 
 All game data lives in `Editor/Network Storage/` (configurable via Setup). This folder is the **source of truth** for your backend configuration.

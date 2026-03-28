@@ -1,5 +1,7 @@
 # Sync Tool
 
+> **Note:** For the most up-to-date documentation, visit https://sbox.cool/wiki/network-storage-v3 — these repo docs may be outdated.
+
 Open via **Editor → Network Storage → Sync Tool**.
 
 ## What It Does

@@ -1,5 +1,7 @@
 # Collections
 
+> **Note:** For the most up-to-date documentation, visit https://sbox.cool/wiki/network-storage-v3 — these repo docs may be outdated.
+
 Collections define where and how your data is stored. Each collection is a JSON file in `Editor/Network Storage/collections/`.
 
 ## Collection JSON Format

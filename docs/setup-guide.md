@@ -1,5 +1,7 @@
 # Network Storage — Setup Guide
 
+> **Note:** For the most up-to-date documentation, visit https://sbox.cool/wiki/network-storage-v3 — these repo docs may be outdated.
+
 > **New here?** Start with the [Getting Started](getting-started.md) guide for a complete walkthrough including creating collections, endpoints, and workflows.
 
 ## Installation

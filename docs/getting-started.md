@@ -1,5 +1,7 @@
 # Network Storage — Getting Started
 
+> **Note:** For the most up-to-date documentation, visit https://sbox.cool/wiki/network-storage-v3 — these repo docs may be outdated.
+
 A complete walkthrough: configure your credentials, verify they work, create collections/endpoints/workflows, and make your first API call — all in under 10 minutes.
 
 ## 1. Create a Project on sbox.cool

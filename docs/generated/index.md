@@ -1,5 +1,7 @@
 # Generated Documentation — MCP Reference
 
+> **Note:** For the most up-to-date documentation, visit https://sbox.cool/wiki/network-storage-v3 — these repo docs may be outdated.
+
 Documentation generated from the Network Storage MCP server logic. These docs mirror the exact content, validation rules, examples, and error patterns embedded in the MCP tools.
 
 ## Core Concepts
