@@ -61,7 +61,7 @@ public class SyncToolWindow : DockWindow
 		public Action OnClick;
 	}
 
-	private enum SyncStatus { Unknown, InSync, LocalOnly, RemoteOnly, Differs }
+	private enum SyncStatus { Unknown, InSync, LocalOnly, RemoteOnly, Differs, MergeAvailable }
 
 	private struct ItemState
 	{
@@ -303,6 +303,13 @@ public class SyncToolWindow : DockWindow
 				Paint.DrawText( new Rect( sx, y, 100, 16 ), $"▲ {mismatchCount} mismatch", TextFlag.LeftCenter );
 				sx += 90;
 			}
+			var mergeLogCount = _syncLog.Count( e => e.Detail != null && e.Detail.Contains( "merge available" ) );
+			if ( mergeLogCount > 0 )
+			{
+				Paint.SetPen( Color.Green.WithAlpha( 0.8f ) );
+				Paint.DrawText( new Rect( sx, y, 100, 16 ), $"⇄ {mergeLogCount} to merge", TextFlag.LeftCenter );
+				sx += 90;
+			}
 			if ( failCount > 0 )
 			{
 				Paint.SetPen( Color.Red.WithAlpha( 0.8f ) );
@@ -318,9 +325,12 @@ public class SyncToolWindow : DockWindow
 					// Icon
 					var isMismatch = entry.Detail != null && entry.Detail.Contains( "Mismatch" );
 					var isVerified = entry.Detail != null && entry.Detail.Contains( "Verified" );
-					var icon = entry.Ok ? ( isVerified ? "●" : "✓" ) : ( isMismatch ? "▲" : "✗" );
-					var iconColor = entry.Ok
-						? ( isVerified ? Color.Cyan.WithAlpha( 0.7f ) : Color.Green.WithAlpha( 0.6f ) )
+					var isMergeAvail = entry.Detail != null && entry.Detail.Contains( "merge available" );
+					var icon = isMergeAvail ? "⇄"
+						: entry.Ok ? ( isVerified ? "●" : "✓" )
+						: ( isMismatch ? "▲" : "✗" );
+					var iconColor = isMergeAvail ? Color.Green.WithAlpha( 0.7f )
+						: entry.Ok ? ( isVerified ? Color.Cyan.WithAlpha( 0.7f ) : Color.Green.WithAlpha( 0.6f ) )
 						: ( isMismatch ? Color.Orange.WithAlpha( 0.8f ) : Color.Red.WithAlpha( 0.7f ) );
 
 					Paint.SetDefaultFont( size: 9 );
@@ -500,7 +510,7 @@ public class SyncToolWindow : DockWindow
 		_items.TryGetValue( id, out var state );
 		var hasResult = !string.IsNullOrEmpty( state.SyncResult );
 		var hasStatusBadge = _hasCheckedRemote || hasResult;
-		var hasIndicator = hasResult || state.RemoteDiffers || ( _hasCheckedRemote && state.Status != SyncStatus.Unknown );
+		var hasIndicator = hasResult || state.RemoteDiffers || state.Status == SyncStatus.MergeAvailable || ( _hasCheckedRemote && state.Status != SyncStatus.Unknown );
 
 		// Icon
 		if ( hasResult )
@@ -509,6 +519,12 @@ public class SyncToolWindow : DockWindow
 			Paint.SetPen( iconColor );
 			Paint.SetDefaultFont( size: 9 );
 			Paint.DrawText( new Rect( pad + 2, y, 18, rowH ), state.SyncResult == "OK" ? "✓" : "✗", TextFlag.Center );
+		}
+		else if ( state.Status == SyncStatus.MergeAvailable )
+		{
+			Paint.SetPen( Color.Green.WithAlpha( 0.8f ) );
+			Paint.SetDefaultFont( size: 9 );
+			Paint.DrawText( new Rect( pad + 2, y, 18, rowH ), "⇄", TextFlag.Center );
 		}
 		else if ( state.RemoteDiffers || state.Status == SyncStatus.Differs )
 		{
@@ -538,8 +554,18 @@ public class SyncToolWindow : DockWindow
 		var contentX = pad + ( hasIndicator ? 22 : 8 );
 		var btnY = y + ( rowH - btnH ) / 2;
 
-		// Pull button — LEFT side (only if remote has changes to pull)
-		if ( state.RemoteDiffers )
+		// Pull/Merge button — LEFT side (only if remote has changes to pull or merge)
+		if ( state.Status == SyncStatus.MergeAvailable )
+		{
+			var mergeW = 52f;
+			var mergeRect = new Rect( contentX, btnY, mergeW, btnH );
+			var capturedMergeId = id;
+			var capturedMergeName = name;
+			DrawSmallButton( mergeRect, "Merge", Color.Green, $"merge_{id}",
+				() => OpenMergeView( capturedMergeId, capturedMergeName ) );
+			contentX += mergeW + 6;
+		}
+		else if ( state.RemoteDiffers )
 		{
 			var pullRect = new Rect( contentX, btnY, btnW, btnH );
 			DrawSmallButton( pullRect, "Pull", Color.Cyan, $"pull_{id}", pullAction );
@@ -561,6 +587,7 @@ public class SyncToolWindow : DockWindow
 				SyncStatus.LocalOnly => ("Local, not pushed", Color.Yellow.WithAlpha( 0.7f )),
 				SyncStatus.RemoteOnly => ("Remote only", Color.Cyan.WithAlpha( 0.7f )),
 				SyncStatus.Differs => ("Changed", Color.Orange.WithAlpha( 0.7f )),
+				SyncStatus.MergeAvailable => ("Merge available", Color.Green.WithAlpha( 0.7f )),
 				_ => ("", Color.White.WithAlpha( 0.3f ))
 			};
 
@@ -583,16 +610,18 @@ public class SyncToolWindow : DockWindow
 		y += rowH + 1;
 
 		// Diff/status details (below the row)
-		if ( !string.IsNullOrEmpty( state.DiffSummary ) && ( state.RemoteDiffers || state.Status == SyncStatus.LocalOnly ) )
+		if ( !string.IsNullOrEmpty( state.DiffSummary ) && ( state.RemoteDiffers || state.Status == SyncStatus.LocalOnly || state.Status == SyncStatus.MergeAvailable ) )
 		{
 			// Summary text
-			var summaryColor = state.Status == SyncStatus.LocalOnly ? Color.Yellow.WithAlpha( 0.6f ) : Color.Orange.WithAlpha( 0.6f );
+			var summaryColor = state.Status == SyncStatus.MergeAvailable ? Color.Green.WithAlpha( 0.6f )
+				: state.Status == SyncStatus.LocalOnly ? Color.Yellow.WithAlpha( 0.6f )
+				: Color.Orange.WithAlpha( 0.6f );
 			Paint.SetDefaultFont( size: 8 );
 			Paint.SetPen( summaryColor );
 			Paint.DrawText( new Rect( pad + 22, y, w - 80, 14 ), state.DiffSummary, TextFlag.LeftCenter );
 
 			// Action buttons on the diff line
-			if ( state.Status != SyncStatus.LocalOnly )
+			if ( state.Status != SyncStatus.LocalOnly && state.Status != SyncStatus.MergeAvailable )
 			{
 				var btnX = pad + w - 4;
 
@@ -892,9 +921,22 @@ public class SyncToolWindow : DockWindow
 
 						if ( differs )
 						{
-							SetItemState( id, remoteDiffers: true, status: SyncStatus.Differs,
-								diffSummary: DiffEndpoint( localJson, remoteJson, slug ),
-								localJson: PrettyJson( localJson ), remoteJson: PrettyJson( remoteJson ) );
+							// Classify: is the diff only server-added defaults?
+							var (addedFields, changedFields, isDefaultsOnly) = MergeViewWindow.AnalyzeDifferences(
+								PrettyJson( localJson ), PrettyJson( remoteJson ) );
+
+							if ( isDefaultsOnly && changedFields.Count == 0 )
+							{
+								SetItemState( id, remoteDiffers: true, status: SyncStatus.MergeAvailable,
+									diffSummary: $"Server added {addedFields.Count} default field(s) — click Merge to accept",
+									localJson: PrettyJson( localJson ), remoteJson: PrettyJson( remoteJson ) );
+							}
+							else
+							{
+								SetItemState( id, remoteDiffers: true, status: SyncStatus.Differs,
+									diffSummary: DiffEndpoint( localJson, remoteJson, slug ),
+									localJson: PrettyJson( localJson ), remoteJson: PrettyJson( remoteJson ) );
+							}
 							diffs++;
 						}
 						else
@@ -950,9 +992,22 @@ public class SyncToolWindow : DockWindow
 
 					if ( differs )
 					{
-						SetItemState( id, remoteDiffers: true, status: SyncStatus.Differs,
-							diffSummary: DiffCollectionSchema( localJson, remoteJson ),
-							localJson: PrettyJson( localJson ), remoteJson: PrettyJson( remoteJson ) );
+						// Classify: is the diff only server-added defaults?
+						var (addedFields, changedFields, isDefaultsOnly) = MergeViewWindow.AnalyzeDifferences(
+							PrettyJson( localJson ), PrettyJson( remoteJson ) );
+
+						if ( isDefaultsOnly && changedFields.Count == 0 )
+						{
+							SetItemState( id, remoteDiffers: true, status: SyncStatus.MergeAvailable,
+								diffSummary: $"Server added {addedFields.Count} default field(s) — click Merge to accept",
+								localJson: PrettyJson( localJson ), remoteJson: PrettyJson( remoteJson ) );
+						}
+						else
+						{
+							SetItemState( id, remoteDiffers: true, status: SyncStatus.Differs,
+								diffSummary: DiffCollectionSchema( localJson, remoteJson ),
+								localJson: PrettyJson( localJson ), remoteJson: PrettyJson( remoteJson ) );
+						}
 						diffs++;
 					}
 					else
@@ -1011,8 +1066,21 @@ public class SyncToolWindow : DockWindow
 
 					if ( differs )
 					{
-						SetItemState( id, remoteDiffers: true, status: SyncStatus.Differs, diffSummary: "Content differs",
-							localJson: PrettyJson( localJson ), remoteJson: PrettyJson( remoteJson ) );
+						// Classify: is the diff only server-added defaults?
+						var (addedFields, changedFields, isDefaultsOnly) = MergeViewWindow.AnalyzeDifferences(
+							PrettyJson( localJson ), PrettyJson( remoteJson ) );
+
+						if ( isDefaultsOnly && changedFields.Count == 0 )
+						{
+							SetItemState( id, remoteDiffers: true, status: SyncStatus.MergeAvailable,
+								diffSummary: $"Server added {addedFields.Count} default field(s) — click Merge to accept",
+								localJson: PrettyJson( localJson ), remoteJson: PrettyJson( remoteJson ) );
+						}
+						else
+						{
+							SetItemState( id, remoteDiffers: true, status: SyncStatus.Differs, diffSummary: "Content differs",
+								localJson: PrettyJson( localJson ), remoteJson: PrettyJson( remoteJson ) );
+						}
 						diffs++;
 					}
 					else
@@ -1197,8 +1265,11 @@ public class SyncToolWindow : DockWindow
 		var failCount = _syncLog.Count( e => !e.Ok );
 		var mismatchCount = _syncLog.Count( e => e.Detail != null && e.Detail.Contains( "Mismatch" ) );
 		var verifiedCount = _syncLog.Count( e => e.Detail != null && e.Detail.Contains( "Verified" ) );
+		var mergeCount = _syncLog.Count( e => e.Detail != null && e.Detail.Contains( "merge available" ) );
 
-		if ( mismatchCount > 0 )
+		if ( mergeCount > 0 && mismatchCount == 0 && failCount == 0 )
+			_status = $"Pushed OK — {mergeCount} item(s) have server defaults to merge";
+		else if ( mismatchCount > 0 )
 			_status = $"Done: {okCount} pushed, {mismatchCount} mismatch(es) — check diffs";
 		else if ( failCount > 0 )
 			_status = $"Done: {okCount - failCount} OK, {failCount} failed";
@@ -1261,13 +1332,27 @@ public class SyncToolWindow : DockWindow
 						}
 						else
 						{
-							entry.Detail = "Mismatch — pushed but remote differs. See diff";
-							entry.Ok = false;
-							var id = $"ep_{slug}";
-							var localJson = localEpBySlug.TryGetValue( slug, out var lj ) ? lj : "";
-							SetItemState( id, remoteDiffers: true, status: SyncStatus.Differs,
-								diffSummary: "Post-push verification failed — remote doesn't match local",
-								localJson: PrettyJson( localJson ), remoteJson: PrettyJson( JsonSerializer.Serialize( remoteLocal ) ) );
+							var eid = $"ep_{slug}";
+							var localPretty = localEpBySlug.TryGetValue( slug, out var lj ) ? PrettyJson( lj ) : "{}";
+							var remotePretty = PrettyJson( JsonSerializer.Serialize( remoteLocal ) );
+							var (addedFields, changedFields, isDefaultsOnly) = MergeViewWindow.AnalyzeDifferences( localPretty, remotePretty );
+
+							if ( isDefaultsOnly && changedFields.Count == 0 )
+							{
+								entry.Detail = $"Server added {addedFields.Count} default(s) — merge available";
+								entry.Ok = true;
+								SetItemState( eid, remoteDiffers: true, status: SyncStatus.MergeAvailable,
+									diffSummary: $"Server added {addedFields.Count} default field(s) — click Merge to accept",
+									localJson: localPretty, remoteJson: remotePretty );
+							}
+							else
+							{
+								entry.Detail = "Mismatch — pushed but remote differs. See diff";
+								entry.Ok = false;
+								SetItemState( eid, remoteDiffers: true, status: SyncStatus.Differs,
+									diffSummary: "Post-push verification failed — remote doesn't match local",
+									localJson: localPretty, remoteJson: remotePretty );
+							}
 						}
 						_syncLog[logIdx] = entry;
 					}
@@ -1294,13 +1379,27 @@ public class SyncToolWindow : DockWindow
 					}
 					else
 					{
-						entry.Detail = "Mismatch — pushed but remote differs. See diff";
-						entry.Ok = false;
-						var id = $"col_{colName}";
-						SetItemState( id, remoteDiffers: true, status: SyncStatus.Differs,
-							diffSummary: "Post-push verification failed — remote doesn't match local",
-							localJson: PrettyJson( localColByName.GetValueOrDefault( colName, "" ) ),
-							remoteJson: PrettyJson( JsonSerializer.Serialize( remoteLocal ) ) );
+						var cid = $"col_{colName}";
+						var localPretty = PrettyJson( localColByName.GetValueOrDefault( colName, "{}" ) );
+						var remotePretty = PrettyJson( JsonSerializer.Serialize( remoteLocal ) );
+						var (addedFields, changedFields, isDefaultsOnly) = MergeViewWindow.AnalyzeDifferences( localPretty, remotePretty );
+
+						if ( isDefaultsOnly && changedFields.Count == 0 )
+						{
+							entry.Detail = $"Server added {addedFields.Count} default(s) — merge available";
+							entry.Ok = true;
+							SetItemState( cid, remoteDiffers: true, status: SyncStatus.MergeAvailable,
+								diffSummary: $"Server added {addedFields.Count} default field(s) — click Merge to accept",
+								localJson: localPretty, remoteJson: remotePretty );
+						}
+						else
+						{
+							entry.Detail = "Mismatch — pushed but remote differs. See diff";
+							entry.Ok = false;
+							SetItemState( cid, remoteDiffers: true, status: SyncStatus.Differs,
+								diffSummary: "Post-push verification failed — remote doesn't match local",
+								localJson: localPretty, remoteJson: remotePretty );
+						}
 					}
 					_syncLog[logIdx] = entry;
 				}
@@ -1326,13 +1425,27 @@ public class SyncToolWindow : DockWindow
 					}
 					else
 					{
-						entry.Detail = "Mismatch — pushed but remote differs. See diff";
-						entry.Ok = false;
-						var id = $"wf_{wfId}";
-						SetItemState( id, remoteDiffers: true, status: SyncStatus.Differs,
-							diffSummary: "Post-push verification failed — remote doesn't match local",
-							localJson: PrettyJson( localWfById.GetValueOrDefault( wfId, "" ) ),
-							remoteJson: PrettyJson( JsonSerializer.Serialize( remoteLocal ) ) );
+						var wid = $"wf_{wfId}";
+						var localPretty = PrettyJson( localWfById.GetValueOrDefault( wfId, "{}" ) );
+						var remotePretty = PrettyJson( JsonSerializer.Serialize( remoteLocal ) );
+						var (addedFields, changedFields, isDefaultsOnly) = MergeViewWindow.AnalyzeDifferences( localPretty, remotePretty );
+
+						if ( isDefaultsOnly && changedFields.Count == 0 )
+						{
+							entry.Detail = $"Server added {addedFields.Count} default(s) — merge available";
+							entry.Ok = true;
+							SetItemState( wid, remoteDiffers: true, status: SyncStatus.MergeAvailable,
+								diffSummary: $"Server added {addedFields.Count} default field(s) — click Merge to accept",
+								localJson: localPretty, remoteJson: remotePretty );
+						}
+						else
+						{
+							entry.Detail = "Mismatch — pushed but remote differs. See diff";
+							entry.Ok = false;
+							SetItemState( wid, remoteDiffers: true, status: SyncStatus.Differs,
+								diffSummary: "Post-push verification failed — remote doesn't match local",
+								localJson: localPretty, remoteJson: remotePretty );
+						}
 					}
 					_syncLog[logIdx] = entry;
 				}
@@ -1939,6 +2052,71 @@ public class SyncToolWindow : DockWindow
 				}
 			}
 		);
+	}
+
+	/// <summary>
+	/// Open the MergeViewWindow showing server-added fields with explanations.
+	/// </summary>
+	private void OpenMergeView( string id, string name )
+	{
+		if ( !_items.TryGetValue( id, out var state ) ) return;
+
+		var (added, changed, _) = MergeViewWindow.AnalyzeDifferences( state.LocalJson ?? "{}", state.RemoteJson ?? "{}" );
+
+		var resourceType = id.StartsWith( "ep_" ) ? "endpoint"
+			: id.StartsWith( "col_" ) ? "collection"
+			: "workflow";
+
+		var capturedId = id;
+		var window = new MergeViewWindow( name, resourceType, added, changed, () => DoMergeItem( capturedId ) );
+		window.Show();
+	}
+
+	/// <summary>
+	/// Accept the server's version by saving the remote JSON to the local file.
+	/// </summary>
+	private void DoMergeItem( string id )
+	{
+		_items.TryGetValue( id, out var state );
+		if ( string.IsNullOrEmpty( state.RemoteJson ) ) return;
+
+		try
+		{
+			// Pretty-print for consistent formatting
+			var json = PrettyJson( state.RemoteJson );
+
+			if ( id.StartsWith( "ep_" ) )
+			{
+				var slug = id[3..];
+				var dir = SyncToolConfig.Abs( SyncToolConfig.EndpointsPath );
+				if ( !Directory.Exists( dir ) ) Directory.CreateDirectory( dir );
+				File.WriteAllText( Path.Combine( dir, $"{slug}.json" ), json );
+			}
+			else if ( id.StartsWith( "col_" ) )
+			{
+				var colName = id[4..];
+				var dir = SyncToolConfig.Abs( SyncToolConfig.CollectionsPath );
+				if ( !Directory.Exists( dir ) ) Directory.CreateDirectory( dir );
+				File.WriteAllText( Path.Combine( dir, $"{colName}.json" ), json );
+			}
+			else if ( id.StartsWith( "wf_" ) )
+			{
+				var wfId = id[3..];
+				var dir = SyncToolConfig.Abs( SyncToolConfig.WorkflowsPath );
+				if ( !Directory.Exists( dir ) ) Directory.CreateDirectory( dir );
+				File.WriteAllText( Path.Combine( dir, $"{wfId}.json" ), json );
+			}
+
+			SetItemState( id, result: "OK", remoteDiffers: false, status: SyncStatus.InSync, diffSummary: "" );
+			_status = $"Merged server defaults for {id}";
+			RefreshFileList();
+			Update();
+		}
+		catch ( Exception ex )
+		{
+			_status = $"Merge failed: {ex.Message}";
+			Update();
+		}
 	}
 
 	private void OpenDiffView( string id, string name )
