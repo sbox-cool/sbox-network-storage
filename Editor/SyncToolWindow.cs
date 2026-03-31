@@ -1254,6 +1254,21 @@ public class SyncToolWindow : DockWindow
 
 		await VerifyPushResults( localEpBySlug );
 
+		// ── Auto-generate typed C# files from the pushed schemas ──
+		_busyItem = "codegen";
+		_status = "Generating typed C# code...";
+		Update();
+
+		try
+		{
+			var filesWritten = CodeGenerator.Generate();
+			_syncLog.Add( new SyncLogEntry { Name = "Code Generation", Type = "CodeGen", Ok = true, Detail = $"{filesWritten} files written to Code/Data/NetworkStorage/" } );
+		}
+		catch ( Exception ex )
+		{
+			_syncLog.Add( new SyncLogEntry { Name = "Code Generation", Type = "CodeGen", Ok = false, Detail = ex.Message } );
+		}
+
 		// Invalidate cached remote data — next check will fetch fresh
 		ClearAllRemoteDiffs();
 		_remoteEndpoints = null;
@@ -1531,6 +1546,20 @@ public class SyncToolWindow : DockWindow
 			// Add to sync log
 			_syncLog.Add( new SyncLogEntry { Name = itemName, Type = itemType, Ok = ok, Detail = ok ? "Pushed" : "Push failed" } );
 
+			// Regenerate typed C# files so Code/Data/NetworkStorage/ stays in sync
+			if ( ok )
+			{
+				try
+				{
+					var filesWritten = CodeGenerator.Generate();
+					_syncLog.Add( new SyncLogEntry { Name = "Code Generation", Type = "CodeGen", Ok = true, Detail = $"{filesWritten} files written to Code/Data/NetworkStorage/" } );
+				}
+				catch ( Exception ex )
+				{
+					_syncLog.Add( new SyncLogEntry { Name = "Code Generation", Type = "CodeGen", Ok = false, Detail = ex.Message } );
+				}
+			}
+
 			// Invalidate cached remote data so next Check for Updates is fresh,
 			// but preserve other items' diff state so they don't disappear
 			_remoteEndpoints = null;
@@ -1611,6 +1640,16 @@ public class SyncToolWindow : DockWindow
 				SetItemState( id, result: "OK", remoteDiffers: false, diffSummary: "",
 					status: SyncStatus.InSync );
 				RefreshFileList();
+
+				// Regenerate typed C# files so Code/Data/NetworkStorage/ reflects the pulled data
+				try
+				{
+					CodeGenerator.Generate();
+				}
+				catch ( Exception ex )
+				{
+					Log.Warning( $"[SyncTool] Code generation after pull failed: {ex.Message}" );
+				}
 
 				// Invalidate cached remote data so next Check is fresh,
 				// but keep _hasCheckedRemote and other items' state so they don't disappear

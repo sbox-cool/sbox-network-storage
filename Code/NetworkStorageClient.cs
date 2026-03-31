@@ -238,7 +238,7 @@ public static class NetworkStorage
 
 	// ── Internals ──
 
-	private static void EnsureConfigured()
+	public static void EnsureConfigured()
 	{
 		if ( !IsConfigured )
 			AutoConfigure();
