@@ -57,6 +57,16 @@ public static class NetworkStorage
 	}
 
 	/// <summary>
+	/// Reset the auto-configure guard so AutoConfigure() can retry.
+	/// Call this when the initial attempt failed and you want to retry
+	/// (e.g. non-host client whose filesystem wasn't mounted yet).
+	/// </summary>
+	public static void ResetAutoConfigureFlag()
+	{
+		_autoConfigAttempted = false;
+	}
+
+	/// <summary>
 	/// Auto-configure from network-storage.credentials.json.
 	/// Called automatically on first API use.
 	/// </summary>
