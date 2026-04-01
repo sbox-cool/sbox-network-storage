@@ -883,15 +883,33 @@ public class SyncToolWindow : DockWindow
 			if ( !string.IsNullOrEmpty( wfId ) ) localWfById[wfId] = wf;
 		}
 
-		// ── Check endpoints ──
-		var remoteSlugs = new HashSet<string>();
-		_remoteEndpoints = await SyncToolApi.GetEndpoints();
+		// ── Fetch all 3 resource types in parallel ──
+		var remoteEpsTask = SyncToolApi.GetEndpoints();
+		var remoteColsTask = SyncToolApi.GetCollections();
+		var remoteWfsTask = SyncToolApi.GetWorkflows();
+
+		await Task.WhenAll( remoteEpsTask, remoteColsTask, remoteWfsTask );
+
+		_remoteEndpoints = await remoteEpsTask;
+		_remoteCollections = await remoteColsTask;
+		_remoteWorkflows = await remoteWfsTask;
+
 		if ( !_remoteEndpoints.HasValue )
 		{
 			_status = "Failed to fetch endpoints from server — check Base URL and credentials";
 			_hasCheckedRemote = true;
 			return;
 		}
+
+		if ( !_remoteCollections.HasValue )
+		{
+			_status = "Failed to fetch collections from server — check Base URL and credentials";
+			_hasCheckedRemote = true;
+			return;
+		}
+
+		// ── Process endpoints ──
+		var remoteSlugs = new HashSet<string>();
 		{
 			var data = _remoteEndpoints.Value;
 			if ( data.TryGetProperty( "data", out var d ) ) data = d;
@@ -964,13 +982,6 @@ public class SyncToolWindow : DockWindow
 
 		// ── Check collections ──
 		var remoteColNames = new HashSet<string>();
-		_remoteCollections = await SyncToolApi.GetCollections();
-		if ( !_remoteCollections.HasValue )
-		{
-			_status = "Failed to fetch collections from server — check Base URL and credentials";
-			_hasCheckedRemote = true;
-			return;
-		}
 		{
 			var remoteCollections = SyncToolTransforms.ServerToCollections( _remoteCollections.Value );
 			foreach ( var (colName, remoteLocal) in remoteCollections )
@@ -1033,7 +1044,6 @@ public class SyncToolWindow : DockWindow
 
 		// ── Check workflows ──
 		var remoteWfIds = new HashSet<string>();
-		_remoteWorkflows = await SyncToolApi.GetWorkflows();
 		if ( _remoteWorkflows.HasValue )
 		{
 			var workflows = SyncToolTransforms.ServerToWorkflows( _remoteWorkflows.Value );
@@ -1190,62 +1200,62 @@ public class SyncToolWindow : DockWindow
 				localEpBySlug[slug] = NormalizeJson( JsonSerializer.Serialize( ep ) );
 		}
 
-		// Push all endpoints
+		// ── Push all resources in parallel ──
+		_busyItem = "push_all";
+		_status = "Pushing all resources...";
+		Update();
+
+		var pushEpTask = _endpointFiles.Length > 0 ? DoPushAllEndpoints() : Task.FromResult( false );
+		var pushColTask = _collectionFiles.Length > 0 ? DoPushCollections() : Task.FromResult( false );
+		var pushWfTask = _workflowFiles.Length > 0 ? DoPushAllWorkflows() : Task.FromResult( false );
+
+		await Task.WhenAll( pushEpTask, pushColTask, pushWfTask );
+
+		var epOk = _endpointFiles.Length > 0 ? await pushEpTask : false;
+		var colOk = _collectionFiles.Length > 0 ? await pushColTask : false;
+		var wfOk = _workflowFiles.Length > 0 ? await pushWfTask : false;
+
+		// ── Log push results ──
 		if ( _endpointFiles.Length > 0 )
 		{
-			_busyItem = "push_ep_all";
-			_status = $"Pushing {_endpointFiles.Length} endpoints...";
-			Update();
-			var ok = await DoPushAllEndpoints();
 			var failDetail = GetPushFailDetail( "endpoints" );
 			foreach ( var f in _endpointFiles )
 			{
 				var slug = Path.GetFileNameWithoutExtension( f );
-				var detail = ok ? "Pushed" : failDetail;
-				SetItemState( $"ep_{slug}", result: ok ? "OK" : "FAIL",
-					remoteDiffers: false, diffSummary: "", status: ok ? SyncStatus.InSync : null );
-				_syncLog.Add( new SyncLogEntry { Name = $"{slug}.json", Type = "Endpoint", Ok = ok, Detail = detail } );
+				var detail = epOk ? "Pushed" : failDetail;
+				SetItemState( $"ep_{slug}", result: epOk ? "OK" : "FAIL",
+					remoteDiffers: false, diffSummary: "", status: epOk ? SyncStatus.InSync : null );
+				_syncLog.Add( new SyncLogEntry { Name = $"{slug}.json", Type = "Endpoint", Ok = epOk, Detail = detail } );
 			}
-			ScrollToBottom();
 		}
 
-		// Push collections
 		if ( _collectionFiles.Length > 0 )
 		{
-			_busyItem = "push_col";
-			_status = $"Pushing {_collectionFiles.Length} collections...";
-			Update();
-			var ok = await DoPushCollections();
 			var failDetail = GetPushFailDetail( "collections" );
 			foreach ( var f in _collectionFiles )
 			{
 				var name = Path.GetFileNameWithoutExtension( f );
-				var detail = ok ? "Pushed" : failDetail;
-				SetItemState( $"col_{name}", result: ok ? "OK" : "FAIL",
-					remoteDiffers: false, diffSummary: "", status: ok ? SyncStatus.InSync : null );
-				_syncLog.Add( new SyncLogEntry { Name = $"{name}.json", Type = "Collection", Ok = ok, Detail = detail } );
+				var detail = colOk ? "Pushed" : failDetail;
+				SetItemState( $"col_{name}", result: colOk ? "OK" : "FAIL",
+					remoteDiffers: false, diffSummary: "", status: colOk ? SyncStatus.InSync : null );
+				_syncLog.Add( new SyncLogEntry { Name = $"{name}.json", Type = "Collection", Ok = colOk, Detail = detail } );
 			}
-			ScrollToBottom();
 		}
 
-		// Push workflows
 		if ( _workflowFiles.Length > 0 )
 		{
-			_busyItem = "push_wf";
-			_status = $"Pushing {_workflowFiles.Length} workflows...";
-			Update();
-			var ok = await DoPushAllWorkflows();
 			var failDetail = GetPushFailDetail( "workflows" );
 			foreach ( var f in _workflowFiles )
 			{
 				var name = Path.GetFileNameWithoutExtension( f );
-				var detail = ok ? "Pushed" : failDetail;
-				SetItemState( $"wf_{name}", result: ok ? "OK" : "FAIL",
-					remoteDiffers: false, diffSummary: "", status: ok ? SyncStatus.InSync : null );
-				_syncLog.Add( new SyncLogEntry { Name = $"{name}.json", Type = "Workflow", Ok = ok, Detail = detail } );
+				var detail = wfOk ? "Pushed" : failDetail;
+				SetItemState( $"wf_{name}", result: wfOk ? "OK" : "FAIL",
+					remoteDiffers: false, diffSummary: "", status: wfOk ? SyncStatus.InSync : null );
+				_syncLog.Add( new SyncLogEntry { Name = $"{name}.json", Type = "Workflow", Ok = wfOk, Detail = detail } );
 			}
-			ScrollToBottom();
 		}
+
+		ScrollToBottom();
 
 		// ── Auto-verify: re-fetch remote and compare to local ──
 		_busyItem = "verify";
@@ -1319,8 +1329,18 @@ public class SyncToolWindow : DockWindow
 					localWfById[wfId] = NormalizeJson( JsonSerializer.Serialize( wf ) );
 			}
 
-			// Fetch remote endpoints
-			var remoteEps = await SyncToolApi.GetEndpoints();
+			// Fetch all 3 resource types in parallel
+			var remoteEpsTask = SyncToolApi.GetEndpoints();
+			var remoteColsTask = SyncToolApi.GetCollections();
+			var remoteWfsTask = SyncToolApi.GetWorkflows();
+
+			await Task.WhenAll( remoteEpsTask, remoteColsTask, remoteWfsTask );
+
+			var remoteEps = await remoteEpsTask;
+			var remoteCols = await remoteColsTask;
+			var remoteWfs = await remoteWfsTask;
+
+			// Process endpoint results
 			if ( remoteEps.HasValue )
 			{
 				var data = remoteEps.Value;
@@ -1374,8 +1394,7 @@ public class SyncToolWindow : DockWindow
 				}
 			}
 
-			// Fetch remote collections
-			var remoteCols = await SyncToolApi.GetCollections();
+			// Process collection results
 			if ( remoteCols.HasValue )
 			{
 				var collections = SyncToolTransforms.ServerToCollections( remoteCols.Value );
@@ -1420,8 +1439,7 @@ public class SyncToolWindow : DockWindow
 				}
 			}
 
-			// Fetch remote workflows
-			var remoteWfs = await SyncToolApi.GetWorkflows();
+			// Process workflow results
 			if ( remoteWfs.HasValue )
 			{
 				var workflows = SyncToolTransforms.ServerToWorkflows( remoteWfs.Value );

@@ -32,6 +32,12 @@ public static class SyncToolConfig
 	// ── Preferences ──
 	public static DataSourceMode DataSource { get; private set; } = DataSourceMode.ApiThenJson;
 
+	/// <summary>
+	/// When true, the game host proxies Network Storage API calls on behalf of non-host clients.
+	/// Required when non-host clients can't generate valid s&amp;box auth tokens (P2P multiplayer).
+	/// </summary>
+	public static bool ProxyEnabled { get; set; }
+
 	// ── Configurable data folder ──
 	private static string _dataFolder = "Network Storage";
 
@@ -157,6 +163,7 @@ public static class SyncToolConfig
 		ApiVersion = "v3";
 		DataSource = DataSourceMode.ApiThenJson;
 		DataFolder = "Network Storage";
+		ProxyEnabled = true;
 
 		// ── Try new split config first ──
 		if ( File.Exists( Abs( ProjectConfigFile ) ) )
@@ -205,6 +212,10 @@ public static class SyncToolConfig
 				_ => DataSourceMode.ApiThenJson
 			};
 		}
+		// Only override the default when the property is explicitly present in the file.
+		// If absent, leave ProxyEnabled at its default (true) set in Load().
+		if ( json.TryGetProperty( "proxyEnabled", out var pe ) )
+			ProxyEnabled = pe.GetBoolean();
 	}
 
 	private static void LoadSecretConfig( string path )
@@ -282,7 +293,8 @@ public static class SyncToolConfig
 				DataSourceMode.ApiOnly => "api_only",
 				DataSourceMode.JsonOnly => "json_only",
 				_ => "api_then_json"
-			}
+			},
+			["proxyEnabled"] = ProxyEnabled
 		};
 		File.WriteAllText( Abs( ProjectConfigFile ), JsonSerializer.Serialize( publicConfig, _jsonOptions ) );
 		Log.Info( "[SyncTool] Public config saved to config/public/projectConfig.json" );
@@ -293,20 +305,41 @@ public static class SyncToolConfig
 		Log.Info( "[SyncTool] Secret key saved to config/secret/secret_key.json" );
 
 		// ── Write runtime credentials (ships with game, NO secret key) ──
+		// Merges into existing file — preserves any fields set by other tools.
 		if ( !string.IsNullOrEmpty( ProjectId ) )
 		{
-			var runtimeCreds = new Dictionary<string, string>
-			{
-				["projectId"] = ProjectId,
-				["publicKey"] = PublicApiKey,
-				["baseUrl"] = BaseUrl,
-				["cdnUrl"] = CdnUrl,
-				["apiVersion"] = ApiVersion
-			};
-			var credsJson = JsonSerializer.Serialize( runtimeCreds, _jsonOptions );
+			var credsPath = Abs( RuntimeCredentialsFile );
+			var merged = new Dictionary<string, object>();
 
-			// Write to Assets/ (s&box mounts this for runtime FileSystem access)
-			File.WriteAllText( Abs( RuntimeCredentialsFile ), credsJson );
+			// Read existing file to preserve fields we don't own
+			if ( File.Exists( credsPath ) )
+			{
+				try
+				{
+					var existing = JsonSerializer.Deserialize<JsonElement>( File.ReadAllText( credsPath ) );
+					foreach ( var prop in existing.EnumerateObject() )
+					{
+						merged[prop.Name] = prop.Value.ValueKind switch
+						{
+							JsonValueKind.True => (object)true,
+							JsonValueKind.False => false,
+							JsonValueKind.Number => prop.Value.TryGetInt64( out var l ) ? l : prop.Value.GetDouble(),
+							_ => prop.Value.GetString() ?? ""
+						};
+					}
+				}
+				catch { /* Corrupt file — start fresh */ }
+			}
+
+			// Overwrite only the fields this save owns
+			merged["projectId"] = ProjectId;
+			merged["publicKey"] = PublicApiKey;
+			merged["baseUrl"] = BaseUrl;
+			merged["cdnUrl"] = CdnUrl ?? "";
+			merged["apiVersion"] = ApiVersion;
+			merged["proxyEnabled"] = ProxyEnabled;
+
+			File.WriteAllText( credsPath, JsonSerializer.Serialize( merged, _jsonOptions ) );
 			Log.Info( "[SyncTool] Runtime credentials written to Assets/network-storage.credentials.json" );
 		}
 
@@ -329,6 +362,19 @@ public static class SyncToolConfig
 		DataSource = mode;
 		if ( File.Exists( Abs( ProjectConfigFile ) ) )
 			Save( SecretKey, PublicApiKey, ProjectId, BaseUrl, mode );
+	}
+
+	/// <summary>
+	/// Update the proxy-enabled preference and re-save config.
+	/// Also pushes the setting to the runtime client immediately.
+	/// </summary>
+	public static void SetProxyEnabled( bool enabled )
+	{
+		ProxyEnabled = enabled;
+		NetworkStorage.ProxyEnabled = enabled;
+		if ( File.Exists( Abs( ProjectConfigFile ) ) )
+			Save( SecretKey, PublicApiKey, ProjectId, BaseUrl, DataSource, DataFolder, CdnUrl );
+		Log.Info( $"[SyncTool] Proxy mode {( enabled ? "ENABLED" : "DISABLED" )}" );
 	}
 
 	// ──────────────────────────────────────────────────────
@@ -536,7 +582,8 @@ public static class SyncToolConfig
 			["cdnUrl"] = "",
 			["apiVersion"] = "v3",
 			["dataFolder"] = "Network Storage",
-			["dataSource"] = "api_then_json"
+			["dataSource"] = "api_then_json",
+			["proxyEnabled"] = true
 		};
 		File.WriteAllText( Abs( ProjectConfigFile ), JsonSerializer.Serialize( publicConfig, _jsonOptions ) );
 

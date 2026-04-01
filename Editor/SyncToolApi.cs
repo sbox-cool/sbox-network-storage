@@ -12,7 +12,7 @@ using Sandbox;
 /// </summary>
 public static class SyncToolApi
 {
-	private static readonly HttpClient _http = new();
+	private static readonly HttpClient _http = new() { Timeout = TimeSpan.FromSeconds( 30 ) };
 
 	/// <summary>
 	/// Last error code from the server (e.g., "KEY_UPGRADE_REQUIRED", "FORBIDDEN").

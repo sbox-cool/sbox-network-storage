@@ -72,24 +72,14 @@ public static class CodeGenerator
 	}
 
 	/// <summary>
-	/// Write Assets/network-storage.credentials.json from current SyncToolConfig.
-	/// This is the file the runtime client reads via NetworkStorage.AutoConfigure()
-	/// when the Editor is not available (i.e. in published games).
+	/// Update Assets/network-storage.credentials.json with current SyncToolConfig values.
+	/// Merges into the existing file rather than overwriting — unknown fields (e.g. proxyEnabled)
+	/// set by the Settings window or other tools are preserved.
 	/// </summary>
 	private static void WriteRuntimeCredentials()
 	{
 		if ( string.IsNullOrEmpty( SyncToolConfig.ProjectId ) ) return;
 
-		var creds = new Dictionary<string, string>
-		{
-			["projectId"] = SyncToolConfig.ProjectId,
-			["publicKey"] = SyncToolConfig.PublicApiKey,
-			["baseUrl"] = SyncToolConfig.BaseUrl,
-			["cdnUrl"] = SyncToolConfig.CdnUrl ?? "",
-			["apiVersion"] = SyncToolConfig.ApiVersion
-		};
-
-		var json = JsonSerializer.Serialize( creds, new JsonSerializerOptions { WriteIndented = true } );
 		var path = SyncToolConfig.Abs( SyncToolConfig.RuntimeCredentialsFile );
 
 		// Ensure Assets/ directory exists
@@ -97,7 +87,35 @@ public static class CodeGenerator
 		if ( !Directory.Exists( assetsDir ) )
 			Directory.CreateDirectory( assetsDir );
 
-		File.WriteAllText( path, json );
+		// Read existing file to preserve fields we don't own (e.g. proxyEnabled)
+		var merged = new Dictionary<string, object>();
+		if ( File.Exists( path ) )
+		{
+			try
+			{
+				var existing = JsonSerializer.Deserialize<JsonElement>( File.ReadAllText( path ) );
+				foreach ( var prop in existing.EnumerateObject() )
+				{
+					merged[prop.Name] = prop.Value.ValueKind switch
+					{
+						JsonValueKind.True => (object)true,
+						JsonValueKind.False => false,
+						JsonValueKind.Number => prop.Value.TryGetInt64( out var l ) ? l : prop.Value.GetDouble(),
+						_ => prop.Value.GetString() ?? ""
+					};
+				}
+			}
+			catch { /* Corrupt file — start fresh */ }
+		}
+
+		// Overwrite only the fields this generator owns
+		merged["projectId"] = SyncToolConfig.ProjectId;
+		merged["publicKey"] = SyncToolConfig.PublicApiKey;
+		merged["baseUrl"] = SyncToolConfig.BaseUrl;
+		merged["cdnUrl"] = SyncToolConfig.CdnUrl ?? "";
+		merged["apiVersion"] = SyncToolConfig.ApiVersion;
+
+		File.WriteAllText( path, JsonSerializer.Serialize( merged, new JsonSerializerOptions { WriteIndented = true } ) );
 	}
 
 	// ──────────────────────────────────────────────────────
@@ -183,15 +201,16 @@ public static class CodeGenerator
 	{
 		if ( string.IsNullOrEmpty( SyncToolConfig.ProjectId ) ) return false;
 
+		var proxyEnabledLiteral = SyncToolConfig.ProxyEnabled ? "true" : "false";
+
 		var sb = new StringBuilder();
 		sb.Append( FileHeader );
 		sb.AppendLine( "namespace Sandbox;" );
 		sb.AppendLine();
 		sb.AppendLine( "/// <summary>" );
-		sb.AppendLine( "/// Network Storage project configuration (optional convenience class)." );
-		sb.AppendLine( "/// The runtime client auto-configures from network-storage.credentials.json," );
-		sb.AppendLine( "/// so you can use NetworkStorage.EnsureConfigured() directly instead." );
+		sb.AppendLine( "/// Network Storage project configuration — auto-generated from Editor → Network Storage → Sync Tool." );
 		sb.AppendLine( "/// The public key (sbox_ns_ prefix) is safe to embed — it is NOT a secret." );
+		sb.AppendLine( "/// Runtime settings (e.g. ProxyEnabled) are controlled via Editor → Network Storage → Settings." );
 		sb.AppendLine( "/// </summary>" );
 		sb.AppendLine( "public static class NSConfig" );
 		sb.AppendLine( "{" );
@@ -199,6 +218,13 @@ public static class CodeGenerator
 		sb.AppendLine( $"\tpublic const string PublicKey = \"{Escape( SyncToolConfig.PublicApiKey )}\";" );
 		sb.AppendLine( $"\tpublic const string BaseUrl = \"{Escape( SyncToolConfig.BaseUrl )}\";" );
 		sb.AppendLine( $"\tpublic const string ApiVersion = \"{Escape( SyncToolConfig.ApiVersion )}\";" );
+		sb.AppendLine();
+		sb.AppendLine( "\t/// <summary>" );
+		sb.AppendLine( "\t/// Whether the game host proxies Network Storage API calls for non-host clients." );
+		sb.AppendLine( "\t/// Enable for editor/local testing. Disable in production when every player has their own Steam account." );
+		sb.AppendLine( "\t/// Controlled via Editor → Network Storage → Settings." );
+		sb.AppendLine( "\t/// </summary>" );
+		sb.AppendLine( $"\tpublic const bool ProxyEnabled = {proxyEnabledLiteral};" );
 		sb.AppendLine();
 		sb.AppendLine( "\t/// <summary>Configure the NetworkStorage runtime client. Delegates to NetworkStorage.EnsureConfigured().</summary>" );
 		sb.AppendLine( "\tpublic static void EnsureConfigured() => NetworkStorage.EnsureConfigured();" );
