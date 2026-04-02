@@ -25,6 +25,9 @@ public class SyncToolWindow : DockWindow
 	private Vector2 _mousePos;
 	private bool _hasCheckedRemote;
 
+	// Generate state
+	private bool _generateBusy;
+
 	// Cached file lists
 	private string[] _endpointFiles = Array.Empty<string>();
 	private string[] _collectionFiles = Array.Empty<string>(); // collections/{name}.json
@@ -165,6 +168,13 @@ public class SyncToolWindow : DockWindow
 		// ── Begin scrollable content ──
 		_scrollAreaTop = y;
 		y -= _scrollY;
+
+		// ── Data Sources ──
+		if ( SyncToolConfig.SyncMappings.Count > 0 )
+		{
+			DrawDataSourcesSection( ref y, pad, w );
+			DrawSeparator( ref y, w, pad );
+		}
 
 		// ── Endpoints ──
 		var localEpCount = _endpointFiles.Length;
@@ -668,6 +678,145 @@ public class SyncToolWindow : DockWindow
 		}
 
 		y += 1;
+	}
+
+	// ──────────────────────────────────────────────────────
+	//  Data Sources (C# → Collection sync mappings)
+	// ──────────────────────────────────────────────────────
+
+	private void DrawDataSourcesSection( ref float y, float pad, float w )
+	{
+		DrawSectionHeader( ref y, pad, w, $"DATA SOURCES ({SyncToolConfig.SyncMappings.Count})" );
+
+		foreach ( var mapping in SyncToolConfig.SyncMappings )
+		{
+			var csPath = SyncToolConfig.GetMappingCsPath( mapping );
+			var colPath = SyncToolConfig.GetMappingCollectionPath( mapping );
+			var csExists = File.Exists( csPath ) || Directory.Exists( csPath );
+			var colExists = File.Exists( colPath );
+
+			var rowH = 28f;
+			var btnW = 68f;
+			var btnH = 20f;
+			var rowRect = new Rect( pad, y, w, rowH );
+			var hovered = rowRect.IsInside( _mousePos );
+
+			if ( hovered )
+			{
+				Paint.SetBrush( Color.White.WithAlpha( 0.03f ) );
+				Paint.SetPen( Color.Transparent );
+				Paint.DrawRect( rowRect, 3 );
+			}
+
+			// Status icon
+			var statusColor = csExists && colExists ? Color.Green.WithAlpha( 0.6f )
+				: csExists ? Color.Yellow.WithAlpha( 0.7f )
+				: Color.Red.WithAlpha( 0.7f );
+			Paint.SetDefaultFont( size: 9 );
+			Paint.SetPen( statusColor );
+			Paint.DrawText( new Rect( pad + 2, y, 18, rowH ),
+				csExists && colExists ? "✓" : csExists ? "●" : "✗", TextFlag.Center );
+
+			// Mapping label
+			Paint.SetDefaultFont( size: 9 );
+			Paint.SetPen( Color.White.WithAlpha( 0.75f ) );
+			Paint.DrawText( new Rect( pad + 22, y, w - btnW - 30, rowH ),
+				$"{mapping.CsFile} → {mapping.Collection}.json", TextFlag.LeftCenter );
+
+			// Generate button
+			if ( csExists )
+			{
+				var btnY = y + ( rowH - btnH ) / 2;
+				var btnRect = new Rect( pad + w - btnW - 4, btnY, btnW, btnH );
+				var genId = $"gen_{mapping.Collection}";
+				var isBusyGen = _generateBusy && _busyItem == genId;
+				var capturedCollection = mapping.Collection;
+				DrawSmallButton( btnRect, isBusyGen ? "..." : "Generate", Color.Green, genId,
+					() => ConfirmDialog.Show(
+						"Generate Collection Data",
+						$"This will overwrite {capturedCollection}.json with data parsed from your C# source files.",
+						() => _ = RunGenerate( capturedCollection ),
+						"Local JSON will be regenerated from C# definitions" ) );
+			}
+
+			y += rowH + 1;
+
+			// Description
+			if ( !string.IsNullOrEmpty( mapping.Description ) )
+			{
+				Paint.SetDefaultFont( size: 8 );
+				Paint.SetPen( Color.White.WithAlpha( 0.35f ) );
+				Paint.DrawText( new Rect( pad + 22, y, w - 30, 14 ), mapping.Description, TextFlag.LeftCenter );
+				y += 16;
+			}
+		}
+
+	}
+
+	private async Task RunGenerate( string collectionFilter )
+	{
+		if ( _generateBusy ) return;
+		_generateBusy = true;
+		_busyItem = collectionFilter != null ? $"gen_{collectionFilter}" : "generate_all";
+		_status = "Generating collection data from C# sources...";
+		Update();
+
+		try
+		{
+			var syncPy = SyncToolConfig.Abs( SyncToolConfig.SyncPyPath );
+			if ( !File.Exists( syncPy ) )
+			{
+				_status = $"sync.py not found at {SyncToolConfig.SyncPyPath}";
+				return;
+			}
+
+			var projectRoot = SyncToolConfig.ProjectRoot;
+			var args = $"\"{syncPy}\" --project-root \"{projectRoot}\" --generate";
+			if ( collectionFilter != null )
+				args += $" --collection \"{collectionFilter}\"";
+
+			var psi = new ProcessStartInfo
+			{
+				FileName = "python",
+				Arguments = args,
+				WorkingDirectory = SyncToolConfig.ProjectRoot,
+				RedirectStandardOutput = true,
+				RedirectStandardError = true,
+				UseShellExecute = false,
+				CreateNoWindow = true
+			};
+
+			var process = Process.Start( psi );
+			if ( process == null )
+			{
+				_status = "Failed to start Python — is it installed?";
+				return;
+			}
+
+			var stdout = await Task.Run( () => process.StandardOutput.ReadToEnd() );
+			var stderr = await Task.Run( () => process.StandardError.ReadToEnd() );
+			process.WaitForExit( 30000 );
+
+			// Log output to console, not inline
+			if ( !string.IsNullOrWhiteSpace( stdout ) )
+				Log.Info( $"[SyncTool] sync.py output:\n{stdout}" );
+			if ( !string.IsNullOrWhiteSpace( stderr ) )
+				Log.Warning( $"[SyncTool] sync.py errors:\n{stderr}" );
+
+			_status = process.ExitCode == 0 ? "Generation complete" : $"Generation failed (exit {process.ExitCode})";
+			RefreshFileList();
+		}
+		catch ( Exception ex )
+		{
+			_status = $"Generate failed: {ex.Message}";
+			Log.Warning( $"[SyncTool] Generate error: {ex.Message}" );
+		}
+		finally
+		{
+			_generateBusy = false;
+			_busyItem = null;
+			Update();
+		}
 	}
 
 	// ──────────────────────────────────────────────────────

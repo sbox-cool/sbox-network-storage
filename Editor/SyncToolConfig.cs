@@ -38,6 +38,21 @@ public static class SyncToolConfig
 	/// </summary>
 	public static bool ProxyEnabled { get; set; }
 
+	// ── Sync Mappings (C# data files → collection JSON) ──
+
+	/// <summary>
+	/// Configured mappings from C# data files to collection JSON files.
+	/// Used by sync.py to generate collection data from code.
+	/// </summary>
+	public static List<SyncMapping> SyncMappings { get; private set; } = new();
+
+	public class SyncMapping
+	{
+		public string CsFile { get; set; } = "";
+		public string Collection { get; set; } = "";
+		public string Description { get; set; } = "";
+	}
+
 	// ── Configurable data folder ──
 	private static string _dataFolder = "Network Storage";
 
@@ -216,6 +231,21 @@ public static class SyncToolConfig
 		// If absent, leave ProxyEnabled at its default (true) set in Load().
 		if ( json.TryGetProperty( "proxyEnabled", out var pe ) )
 			ProxyEnabled = pe.GetBoolean();
+
+		// Sync mappings
+		SyncMappings.Clear();
+		if ( json.TryGetProperty( "syncMappings", out var mappings ) && mappings.ValueKind == JsonValueKind.Array )
+		{
+			foreach ( var m in mappings.EnumerateArray() )
+			{
+				SyncMappings.Add( new SyncMapping
+				{
+					CsFile = m.TryGetProperty( "csFile", out var cs ) ? cs.GetString() ?? "" : "",
+					Collection = m.TryGetProperty( "collection", out var col ) ? col.GetString() ?? "" : "",
+					Description = m.TryGetProperty( "description", out var desc ) ? desc.GetString() ?? "" : ""
+				} );
+			}
+		}
 	}
 
 	private static void LoadSecretConfig( string path )
@@ -296,6 +326,17 @@ public static class SyncToolConfig
 			},
 			["proxyEnabled"] = ProxyEnabled
 		};
+
+		if ( SyncMappings.Count > 0 )
+		{
+			publicConfig["syncMappings"] = SyncMappings.Select( m => new Dictionary<string, string>
+			{
+				["csFile"] = m.CsFile,
+				["collection"] = m.Collection,
+				["description"] = m.Description
+			} ).ToList();
+		}
+
 		File.WriteAllText( Abs( ProjectConfigFile ), JsonSerializer.Serialize( publicConfig, _jsonOptions ) );
 		Log.Info( "[SyncTool] Public config saved to config/public/projectConfig.json" );
 
@@ -363,6 +404,33 @@ public static class SyncToolConfig
 		if ( File.Exists( Abs( ProjectConfigFile ) ) )
 			Save( SecretKey, PublicApiKey, ProjectId, BaseUrl, mode );
 	}
+
+	/// <summary>
+	/// Update sync mappings and re-save config.
+	/// </summary>
+	public static void SaveSyncMappings( List<SyncMapping> mappings )
+	{
+		SyncMappings = mappings ?? new();
+		if ( File.Exists( Abs( ProjectConfigFile ) ) )
+			Save( SecretKey, PublicApiKey, ProjectId, BaseUrl, DataSource, DataFolder, CdnUrl );
+		Log.Info( $"[SyncTool] Saved {SyncMappings.Count} sync mapping(s)" );
+	}
+
+	/// <summary>
+	/// Get the absolute path to a sync mapping's C# file.
+	/// The csFile path is relative to the project root.
+	/// </summary>
+	public static string GetMappingCsPath( SyncMapping mapping )
+		=> Abs( mapping.CsFile );
+
+	/// <summary>
+	/// Get the absolute path to a sync mapping's collection JSON file.
+	/// </summary>
+	public static string GetMappingCollectionPath( SyncMapping mapping )
+		=> Abs( $"{CollectionsPath}/{mapping.Collection}.json" );
+
+	/// <summary>Path to sync.py script inside the network-storage library.</summary>
+	public static string SyncPyPath => "Libraries/sboxcool.network-storage/Editor/sync.py";
 
 	/// <summary>
 	/// Update the proxy-enabled preference and re-save config.

@@ -1,11 +1,12 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Sandbox;
 using Editor;
 
 /// <summary>
 /// Settings window for Network Storage runtime behavior.
-/// Configure multiplayer proxy mode and other runtime options.
+/// Configure multiplayer proxy mode, sync mappings, and other runtime options.
 ///
 /// Access via Editor menu → Network Storage → Settings.
 /// </summary>
@@ -21,6 +22,16 @@ public class SettingsWindow : DockWindow
 	private float _scrollY;
 	private float _contentHeight;
 
+	// ── Sync mapping editor state ──
+	private List<MappingRow> _mappingRows = new();
+
+	private class MappingRow
+	{
+		public LineEdit CsFileInput;
+		public LineEdit CollectionInput;
+		public LineEdit DescriptionInput;
+	}
+
 	private struct ButtonRect
 	{
 		public Rect Rect;
@@ -31,11 +42,12 @@ public class SettingsWindow : DockWindow
 	public SettingsWindow()
 	{
 		Title = "Network Storage Settings";
-		Size = new Vector2( 520, 480 );
-		MinimumSize = new Vector2( 400, 320 );
+		Size = new Vector2( 520, 600 );
+		MinimumSize = new Vector2( 400, 400 );
 
 		SyncToolConfig.Load();
 		_proxyEnabled = SyncToolConfig.ProxyEnabled;
+		RebuildMappingWidgets();
 	}
 
 	[Menu( "Editor", "Network Storage/Settings" )]
@@ -74,10 +86,151 @@ public class SettingsWindow : DockWindow
 
 		DrawSeparator( ref y, w, pad );
 
-		// ── Multiplayer Proxy Section ──
+		var lineH = 15f;
+
+		// ── Sync Mappings (C# → Collection) — first ──
+		Paint.SetDefaultFont( size: 11, weight: 700 );
+		Paint.SetPen( Color.White.WithAlpha( 0.9f ) );
+		Paint.DrawText( new Rect( pad, y, w, 20 ), "Data Source Mappings", TextFlag.LeftCenter );
+		y += 26;
+
+		Paint.SetDefaultFont( size: 9 );
+		Paint.SetPen( Color.White.WithAlpha( 0.45f ) );
+		DrawWrappedText( ref y, pad, w, lineH + 2,
+			"Map C# data files or directories to collection JSON. " +
+			"The Sync Tool's Generate button parses C# records and " +
+			"writes the collection JSON automatically." );
+		y += 12;
+
+		// ── Mapping rows with LineEdit widgets ──
+		var inputH = 22f;
+		var removeBtnW = 20f;
+		var gap = 4f;
+
+		for ( int i = 0; i < _mappingRows.Count; i++ )
+		{
+			var row = _mappingRows[i];
+
+			// Row number + remove button
+			Paint.SetDefaultFont( size: 9, weight: 600 );
+			Paint.SetPen( Color.White.WithAlpha( 0.4f ) );
+			Paint.DrawText( new Rect( pad, y, 16, inputH ), $"{i + 1}.", TextFlag.RightCenter );
+
+			// C# source path
+			Paint.SetDefaultFont( size: 8 );
+			Paint.SetPen( Color.White.WithAlpha( 0.5f ) );
+			Paint.DrawText( new Rect( pad + 22, y - 12, w * 0.55f, 12 ), "C# source (file or directory)", TextFlag.LeftCenter );
+			PositionInput( row.CsFileInput, pad + 22, y, w * 0.55f - gap, inputH );
+
+			// Collection name
+			Paint.DrawText( new Rect( pad + 22 + w * 0.55f, y - 12, w * 0.35f, 12 ), "Collection name", TextFlag.LeftCenter );
+			PositionInput( row.CollectionInput, pad + 22 + w * 0.55f, y, w * 0.35f - removeBtnW - gap * 2, inputH );
+
+			// Remove button
+			var removeBtnRect = new Rect( pad + w - removeBtnW, y, removeBtnW, inputH );
+			var removeScreenRect = new Rect( pad + w - removeBtnW, y + _scrollY, removeBtnW, inputH );
+			var removeHovered = removeScreenRect.IsInside( _mousePos );
+
+			Paint.SetBrush( Color.Red.WithAlpha( removeHovered ? 0.2f : 0.08f ) );
+			Paint.SetPen( Color.Red.WithAlpha( removeHovered ? 0.6f : 0.25f ) );
+			Paint.DrawRect( removeBtnRect, 3 );
+			Paint.SetDefaultFont( size: 11, weight: 700 );
+			Paint.SetPen( Color.Red.WithAlpha( removeHovered ? 1f : 0.6f ) );
+			Paint.DrawText( removeBtnRect, "×", TextFlag.Center );
+
+			var capturedIndex = i;
+			_buttons.Add( new ButtonRect
+			{
+				Rect = removeScreenRect,
+				Id = $"remove_mapping_{i}",
+				OnClick = () => RemoveMapping( capturedIndex )
+			} );
+
+			y += inputH + gap;
+
+			// Description field
+			Paint.SetDefaultFont( size: 8 );
+			Paint.SetPen( Color.White.WithAlpha( 0.5f ) );
+			Paint.DrawText( new Rect( pad + 22, y - 1, 80, 12 ), "Description", TextFlag.LeftCenter );
+			PositionInput( row.DescriptionInput, pad + 22 + 64, y, w - 22 - 64 - removeBtnW - gap, inputH - 2 );
+
+			y += inputH + 8;
+		}
+
+		// Add mapping button
+		var addBtnW = 130f;
+		var addBtnH = 26f;
+		var addBtnRect = new Rect( pad, y, addBtnW, addBtnH );
+		var addBtnScreenRect = new Rect( pad, y + _scrollY, addBtnW, addBtnH );
+		var addBtnHovered = addBtnScreenRect.IsInside( _mousePos );
+
+		Paint.SetBrush( Color.Green.WithAlpha( addBtnHovered ? 0.15f : 0.06f ) );
+		Paint.SetPen( Color.Green.WithAlpha( addBtnHovered ? 0.5f : 0.2f ) );
+		Paint.DrawRect( addBtnRect, 4 );
+		Paint.SetDefaultFont( size: 9, weight: 600 );
+		Paint.SetPen( Color.Green.WithAlpha( addBtnHovered ? 0.9f : 0.6f ) );
+		Paint.DrawText( addBtnRect, "+ Add Mapping", TextFlag.Center );
+
+		_buttons.Add( new ButtonRect
+		{
+			Rect = addBtnScreenRect,
+			Id = "add_mapping",
+			OnClick = AddMapping
+		} );
+
+		// Save mappings button (next to add)
+		var saveMappingsBtnW = 130f;
+		var saveMappingsBtnRect = new Rect( pad + addBtnW + 8, y, saveMappingsBtnW, addBtnH );
+		var saveMappingsScreenRect = new Rect( pad + addBtnW + 8, y + _scrollY, saveMappingsBtnW, addBtnH );
+		var saveMappingsHovered = saveMappingsScreenRect.IsInside( _mousePos );
+
+		var mappingsDirty = AreMappingsDirty();
+		var saveMappingsColor = mappingsDirty ? Color.Cyan : Color.White;
+		Paint.SetBrush( saveMappingsColor.WithAlpha( saveMappingsHovered ? 0.15f : 0.06f ) );
+		Paint.SetPen( saveMappingsColor.WithAlpha( saveMappingsHovered ? 0.5f : 0.2f ) );
+		Paint.DrawRect( saveMappingsBtnRect, 4 );
+		Paint.SetDefaultFont( size: 9, weight: 600 );
+		Paint.SetPen( saveMappingsColor.WithAlpha( saveMappingsHovered ? 0.9f : 0.6f ) );
+		Paint.DrawText( saveMappingsBtnRect, "Save Mappings", TextFlag.Center );
+
+		_buttons.Add( new ButtonRect
+		{
+			Rect = saveMappingsScreenRect,
+			Id = "save_mappings",
+			OnClick = SaveMappings
+		} );
+
+		y += addBtnH + 12;
+
+		// ── Multiplayer Auth Proxy ──
+		DrawSeparator( ref y, w, pad );
+
 		Paint.SetDefaultFont( size: 11, weight: 700 );
 		Paint.SetPen( Color.White.WithAlpha( 0.9f ) );
 		Paint.DrawText( new Rect( pad, y, w, 20 ), "Multiplayer Auth Proxy", TextFlag.LeftCenter );
+
+		// Info button (next to title)
+		var infoBtnW = 40f;
+		var infoBtnH = 20f;
+		var infoBtnX = pad + w - infoBtnW;
+		var infoBtnRect = new Rect( infoBtnX, y, infoBtnW, infoBtnH );
+		var infoBtnScreenRect = new Rect( infoBtnX, y + _scrollY, infoBtnW, infoBtnH );
+		var infoBtnHovered = infoBtnScreenRect.IsInside( _mousePos );
+
+		Paint.SetBrush( Color.White.WithAlpha( infoBtnHovered ? 0.12f : 0.05f ) );
+		Paint.SetPen( Color.White.WithAlpha( infoBtnHovered ? 0.4f : 0.2f ) );
+		Paint.DrawRect( infoBtnRect, 3 );
+		Paint.SetDefaultFont( size: 9, weight: 600 );
+		Paint.SetPen( Color.White.WithAlpha( infoBtnHovered ? 0.9f : 0.55f ) );
+		Paint.DrawText( infoBtnRect, "Info", TextFlag.Center );
+
+		_buttons.Add( new ButtonRect
+		{
+			Rect = infoBtnScreenRect,
+			Id = "proxy_info",
+			OnClick = ProxyInfoDialog.Open
+		} );
+
 		y += 26;
 
 		// Checkbox + label
@@ -95,7 +248,7 @@ public class SettingsWindow : DockWindow
 		{
 			Paint.SetDefaultFont( size: 14, weight: 700 );
 			Paint.SetPen( Color.Cyan );
-			Paint.DrawText( checkboxRect, "✓", TextFlag.Center );
+			Paint.DrawText( checkboxRect, "\u2713", TextFlag.Center );
 		}
 
 		Paint.SetDefaultFont( size: 10, weight: 600 );
@@ -116,7 +269,7 @@ public class SettingsWindow : DockWindow
 
 		y += checkboxSize + 14;
 
-		// ── Save button ──
+		// Save button
 		var btnW = 120f;
 		var btnH = 30f;
 		var btnRect = new Rect( pad, y, btnW, btnH );
@@ -148,94 +301,6 @@ public class SettingsWindow : DockWindow
 		} );
 
 		y += btnH + 20;
-
-		// ── Explanation box ──
-		var lineH = 15f;
-		var boxPad = 12f;
-		var boxTop = y;
-		var boxH = lineH * 9 + boxPad * 2;
-		var boxRect = new Rect( pad, y, w, boxH );
-
-		Paint.SetBrush( Color.White.WithAlpha( 0.03f ) );
-		Paint.SetPen( Color.White.WithAlpha( 0.08f ) );
-		Paint.DrawRect( boxRect, 4 );
-
-		var textX = pad + boxPad;
-		var textW = w - boxPad * 2;
-		y += boxPad;
-
-		Paint.SetDefaultFont( size: 9, weight: 600 );
-		Paint.SetPen( Color.White.WithAlpha( 0.7f ) );
-		Paint.DrawText( new Rect( textX, y, textW, lineH ), "What this does:", TextFlag.LeftCenter );
-		y += lineH + 2;
-
-		Paint.SetDefaultFont( size: 9 );
-		Paint.SetPen( Color.White.WithAlpha( 0.5f ) );
-		DrawWrappedText( ref y, textX, textW, lineH,
-			"Steam auth tokens are tied to the Steam session. When running " +
-			"multiple editor instances on the same machine (same Steam account), " +
-			"only the primary session can generate valid tokens — so editor " +
-			"clients fail to authenticate directly." );
-		y += 4;
-		DrawWrappedText( ref y, textX, textW, lineH,
-			"When enabled, non-host clients route API calls through the host " +
-			"via RPC. The host authenticates with its own valid token and calls " +
-			"the backend on the client's behalf using a signed proxy request." );
-		y += 8;
-
-		Paint.SetDefaultFont( size: 9, weight: 600 );
-		var recColor = _proxyEnabled ? Color.Cyan : Color.Yellow;
-		Paint.SetPen( recColor.WithAlpha( 0.8f ) );
-		Paint.DrawText( new Rect( textX, y, textW, lineH ), _proxyEnabled ? "Status: Enabled" : "Status: Disabled", TextFlag.LeftCenter );
-		y += lineH + 2;
-
-		Paint.SetDefaultFont( size: 9 );
-		Paint.SetPen( Color.White.WithAlpha( 0.45f ) );
-		DrawWrappedText( ref y, textX, textW, lineH,
-			"Enable for local development and editor testing. In production, " +
-			"each player uses their own Steam account and can authenticate " +
-			"directly — you can safely disable this then." );
-
-		y = boxTop + boxH + 12;
-
-		DrawSeparator( ref y, w, pad );
-
-		// ── Security note ──
-		Paint.SetDefaultFont( size: 10, weight: 600 );
-		Paint.SetPen( Color.Yellow.WithAlpha( 0.7f ) );
-		Paint.DrawText( new Rect( pad, y, w, 18 ), "Security Notes", TextFlag.LeftCenter );
-		y += 24;
-
-		Paint.SetDefaultFont( size: 9 );
-		Paint.SetPen( Color.White.WithAlpha( 0.45f ) );
-		DrawWrappedText( ref y, pad, w, lineH,
-			"When proxy is enabled, the host can make API calls on behalf of " +
-			"any connected player. This is safe for P2P games where the host " +
-			"is already trusted (they control the game session)." );
-		y += 4;
-		DrawWrappedText( ref y, pad, w, lineH,
-			"The backend verifies both the host's auth token (Facepunch-validated) " +
-			"and an HMAC signature scoped to your project and endpoint, preventing " +
-			"cross-server replay attacks." );
-
-		y += 16;
-
-		// ── Integration hint ──
-		DrawSeparator( ref y, w, pad );
-
-		Paint.SetDefaultFont( size: 10, weight: 600 );
-		Paint.SetPen( Color.White.WithAlpha( 0.6f ) );
-		Paint.DrawText( new Rect( pad, y, w, 18 ), "Integration", TextFlag.LeftCenter );
-		y += 22;
-
-		Paint.SetDefaultFont( size: 9 );
-		Paint.SetPen( Color.White.WithAlpha( 0.4f ) );
-		DrawWrappedText( ref y, pad, w, lineH,
-			"Add NetworkStorageProxyComponent to each player's GameObject via " +
-			"PlayerSpawner. This component registers the proxy delegates that " +
-			"route non-host requests through the host via Broadcast RPC." );
-
-		y += 20;
 
 		// Bottom padding so content isn't flush against the edge
 		y += 100;
@@ -306,6 +371,102 @@ public class SettingsWindow : DockWindow
 		Paint.SetPen( Color.White.WithAlpha( 0.08f ) );
 		Paint.DrawLine( new Vector2( pad, y ), new Vector2( pad + w, y ) );
 		y += 10;
+	}
+
+	// ──────────────────────────────────────────────────────
+	//  Sync mapping helpers
+	// ──────────────────────────────────────────────────────
+
+	private void PositionInput( LineEdit input, float x, float y, float w, float h )
+	{
+		input.Position = new Vector2( x, y );
+		input.Size = new Vector2( w, h );
+	}
+
+	private LineEdit CreateLineEdit( string value, string placeholder )
+	{
+		var input = new LineEdit( this );
+		input.Text = value ?? "";
+		input.PlaceholderText = placeholder;
+		input.Visible = true;
+		return input;
+	}
+
+	private void RebuildMappingWidgets()
+	{
+		// Destroy old widgets
+		foreach ( var row in _mappingRows )
+		{
+			row.CsFileInput?.Destroy();
+			row.CollectionInput?.Destroy();
+			row.DescriptionInput?.Destroy();
+		}
+		_mappingRows.Clear();
+
+		// Create widgets for current mappings
+		foreach ( var mapping in SyncToolConfig.SyncMappings )
+		{
+			_mappingRows.Add( new MappingRow
+			{
+				CsFileInput = CreateLineEdit( mapping.CsFile, "Code/Fishing" ),
+				CollectionInput = CreateLineEdit( mapping.Collection, "game_values" ),
+				DescriptionInput = CreateLineEdit( mapping.Description, "Optional description" )
+			} );
+		}
+	}
+
+	private void AddMapping()
+	{
+		_mappingRows.Add( new MappingRow
+		{
+			CsFileInput = CreateLineEdit( "", "Code/Fishing" ),
+			CollectionInput = CreateLineEdit( "", "game_values" ),
+			DescriptionInput = CreateLineEdit( "", "Optional description" )
+		} );
+		Update();
+	}
+
+	private void RemoveMapping( int index )
+	{
+		if ( index < 0 || index >= _mappingRows.Count ) return;
+		var row = _mappingRows[index];
+		row.CsFileInput?.Destroy();
+		row.CollectionInput?.Destroy();
+		row.DescriptionInput?.Destroy();
+		_mappingRows.RemoveAt( index );
+		Update();
+	}
+
+	private void SaveMappings()
+	{
+		var mappings = _mappingRows
+			.Where( r => !string.IsNullOrWhiteSpace( r.CsFileInput?.Text ) && !string.IsNullOrWhiteSpace( r.CollectionInput?.Text ) )
+			.Select( r => new SyncToolConfig.SyncMapping
+			{
+				CsFile = r.CsFileInput.Text.Trim(),
+				Collection = r.CollectionInput.Text.Trim(),
+				Description = r.DescriptionInput?.Text?.Trim() ?? ""
+			} )
+			.ToList();
+
+		SyncToolConfig.SaveSyncMappings( mappings );
+		_saved = true;
+		_savedTimer = 2f;
+		Update();
+	}
+
+	private bool AreMappingsDirty()
+	{
+		var current = SyncToolConfig.SyncMappings;
+		if ( _mappingRows.Count != current.Count ) return true;
+		for ( int i = 0; i < _mappingRows.Count; i++ )
+		{
+			if ( i >= current.Count ) return true;
+			if ( _mappingRows[i].CsFileInput?.Text != current[i].CsFile ) return true;
+			if ( _mappingRows[i].CollectionInput?.Text != current[i].Collection ) return true;
+			if ( ( _mappingRows[i].DescriptionInput?.Text ?? "" ) != ( current[i].Description ?? "" ) ) return true;
+		}
+		return false;
 	}
 
 	// ──────────────────────────────────────────────────────
