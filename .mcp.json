@@ -4,6 +4,10 @@
       "command": "node",
       "args": ["--import", "tsx/esm", "index.ts"],
       "cwd": "mcp"
+    },
+    "superdocs": {
+      "type": "url",
+      "url": "https://superdocs.sbox.cool/mcp"
     }
   }
 }
