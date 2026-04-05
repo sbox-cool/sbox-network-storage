@@ -160,7 +160,7 @@ public class TestWindow : DockWindow
 		return null;
 	}
 
-	/// <summary>Generate smart input JSON for an endpoint using schema + game values.</summary>
+	/// <summary>Generate smart input JSON for an endpoint using schema + game values + condition scanning.</summary>
 	private string GenerateSmartInput( JsonElement endpoint )
 	{
 		if ( !endpoint.TryGetProperty( "input", out var inputSchema ) ) return "{}";
@@ -173,25 +173,18 @@ public class TestWindow : DockWindow
 
 			if ( type == "string" )
 			{
-				// Try to resolve from game values
 				var resolved = FindIdValue( prop.Name );
 				if ( resolved != null )
-				{
 					input[prop.Name] = resolved;
-				}
 				else if ( prop.Value.TryGetProperty( "default", out var def ) )
-				{
 					input[prop.Name] = def.GetString();
-				}
 				else if ( prop.Value.TryGetProperty( "enum", out var enumVals ) && enumVals.ValueKind == JsonValueKind.Array )
 				{
 					var first = enumVals.EnumerateArray().FirstOrDefault();
 					input[prop.Name] = first.ValueKind == JsonValueKind.String ? first.GetString() : "";
 				}
 				else
-				{
-					input[prop.Name] = prop.Name; // fallback: use field name as placeholder
-				}
+					input[prop.Name] = prop.Name;
 			}
 			else if ( type == "number" )
 			{
@@ -206,9 +199,56 @@ public class TestWindow : DockWindow
 			{
 				input[prop.Name] = prop.Value.TryGetProperty( "default", out var def ) && def.GetBoolean();
 			}
+			else if ( type == "array" )
+			{
+				input[prop.Name] = Array.Empty<object>();
+			}
+		}
+
+		// Scan condition steps for input value constraints (e.g., any: [input.ore_id == "unidentified_t1"])
+		if ( endpoint.TryGetProperty( "steps", out var steps ) && steps.ValueKind == JsonValueKind.Array )
+		{
+			foreach ( var step in steps.EnumerateArray() )
+			{
+				if ( !step.TryGetProperty( "type", out var stepType ) || stepType.GetString() != "condition" ) continue;
+				if ( !step.TryGetProperty( "check", out var check ) ) continue;
+				ScanCheckForConstraints( check, input );
+			}
 		}
 
 		return JsonSerializer.Serialize( input, new JsonSerializerOptions { WriteIndented = true } );
+	}
+
+	/// <summary>Scan a condition check for input value constraints (any: [input.X == "literal"]).</summary>
+	private void ScanCheckForConstraints( JsonElement check, Dictionary<string, object> input )
+	{
+		if ( check.TryGetProperty( "any", out var any ) && any.ValueKind == JsonValueKind.Array )
+		{
+			foreach ( var sub in any.EnumerateArray() )
+			{
+				var field = sub.TryGetProperty( "field", out var f ) ? f.GetString() : "";
+				var op = sub.TryGetProperty( "op", out var o ) ? o.GetString() : "";
+				if ( op != "==" && op != "eq" ) continue;
+				if ( !sub.TryGetProperty( "value", out var val ) || val.ValueKind != JsonValueKind.String ) continue;
+				var valStr = val.GetString();
+				if ( string.IsNullOrEmpty( field ) || string.IsNullOrEmpty( valStr ) || valStr.Contains( "{{" ) ) continue;
+
+				if ( field.StartsWith( "input." ) )
+				{
+					var inputField = field.Substring( 6 );
+					if ( input.ContainsKey( inputField ) )
+					{
+						input[inputField] = valStr;
+						return;
+					}
+				}
+			}
+		}
+		if ( check.TryGetProperty( "all", out var all ) && all.ValueKind == JsonValueKind.Array )
+		{
+			foreach ( var sub in all.EnumerateArray() )
+				ScanCheckForConstraints( sub, input );
+		}
 	}
 
 	// ──────────────────────────────────────────────────────

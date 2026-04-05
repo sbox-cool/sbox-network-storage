@@ -32,18 +32,10 @@ public class SyncToolWindow : DockWindow
 	private string[] _endpointFiles = Array.Empty<string>();
 	private string[] _collectionFiles = Array.Empty<string>(); // collections/{name}.json
 	private string[] _workflowFiles = Array.Empty<string>(); // workflows/{id}.json
-	private string[] _testFiles = Array.Empty<string>(); // tests/{id}.json
-
 	// Remote data cache (from last check)
 	private JsonElement? _remoteEndpoints;
 	private JsonElement? _remoteCollections;
 	private JsonElement? _remoteWorkflows;
-	private JsonElement? _remoteTests;
-
-	// ── Test results ──
-	private string _testResultSummary;
-	private Color _testResultColor = Color.White;
-	private JsonElement? _lastTestRunResult;
 
 	// ── Scroll state ──
 	private float _scrollY;
@@ -116,10 +108,6 @@ public class SyncToolWindow : DockWindow
 			? Directory.GetFiles( wfDir, "*.json" ).OrderBy( f => f ).ToArray()
 			: Array.Empty<string>();
 
-		var testDir = SyncToolConfig.Abs( SyncToolConfig.TestsPath );
-		_testFiles = Directory.Exists( testDir )
-			? Directory.GetFiles( testDir, "*.json" ).OrderBy( f => f ).ToArray()
-			: Array.Empty<string>();
 	}
 
 	// ──────────────────────────────────────────────────────
@@ -140,33 +128,17 @@ public class SyncToolWindow : DockWindow
 		Paint.SetPen( Color.White );
 		Paint.DrawText( new Rect( pad, y, w * 0.55f, 22 ), "Network Storage Sync", TextFlag.LeftCenter );
 
-		// Push All + Run All Tests buttons (next to header)
+		// Push All + Test All buttons (next to header)
 		if ( SyncToolConfig.IsValid )
 		{
 			var btnW2 = 70f;
-			var testAllW = 80f;
 			var pushAllRect = new Rect( pad + w - btnW2, y, btnW2, 22 );
 			DrawSmallButton( pushAllRect, "Push All", Color.Green, "push_all", () => _ = PushAll() );
-			var testAllRect = new Rect( pad + w - btnW2 - testAllW - 6, y, testAllW, 22 );
-			DrawSmallButton( testAllRect, _busy && _busyItem == "run_tests" ? "Running..." : "Test All", Color.Cyan, "run_all_tests", _busy ? null : () => RunAllTestsFromSync() );
+
+			var testAllRect = new Rect( pad + w - btnW2 * 2 - 6, y, btnW2, 22 );
+			DrawSmallButton( testAllRect, "Test All", Color.Yellow, "test_all", () => TestResultsWindow.OpenAndRun() );
 		}
 		y += 30;
-
-		// Test result summary (if available)
-		if ( !string.IsNullOrEmpty( _testResultSummary ) )
-		{
-			Paint.SetDefaultFont( size: 9 );
-			Paint.SetPen( _testResultColor );
-			var summaryRect = new Rect( pad, y, w - 90, 16 );
-			Paint.DrawText( summaryRect, _testResultSummary, TextFlag.LeftCenter );
-
-			if ( _lastTestRunResult.HasValue )
-			{
-				var openBtnRect = new Rect( pad + w - 86, y - 2, 82, 20 );
-				DrawSmallButton( openBtnRect, "Open Report", Color.White, "open_test_report", OpenTestReport );
-			}
-			y += 22;
-		}
 
 		// ── Config status ──
 		if ( !SyncToolConfig.IsValid )
@@ -228,11 +200,9 @@ public class SyncToolWindow : DockWindow
 				var hasLocal = localFile != null;
 				var info = hasLocal ? GetEndpointInfo( localFile ) : "remote only";
 
-				var capturedSlug = slug;
 				DrawResourceRow( ref y, pad, w, $"{slug}.json", info, id,
 					hasLocal ? () => PushItem( id ) : null,
-					() => PullItem( id ),
-					hasLocal ? () => RunTestsForEndpoint( capturedSlug ) : null );
+					() => PullItem( id ) );
 			}
 		}
 		else
@@ -305,41 +275,6 @@ public class SyncToolWindow : DockWindow
 			y += 22;
 		}
 
-		DrawSeparator( ref y, w, pad );
-
-		// ── Tests (only user-created, skip auto-generated) ──
-		var manualTestFiles = _testFiles.Where( f => !IsAutoTest( f ) ).ToArray();
-		var localTestIds = manualTestFiles.Select( f => Path.GetFileNameWithoutExtension( f ) ).ToHashSet();
-		var remoteTestIds = GetRemoteTestIds();
-		var allTestIds = new HashSet<string>( localTestIds );
-		foreach ( var id3 in remoteTestIds ) allTestIds.Add( id3 );
-
-		var autoCount = _testFiles.Length - manualTestFiles.Length;
-		var testLabel = autoCount > 0 ? $"TESTS ({allTestIds.Count} manual, {autoCount} auto hidden)" : $"TESTS ({allTestIds.Count})";
-		DrawSectionHeader( ref y, pad, w, testLabel );
-
-		if ( allTestIds.Count > 0 )
-		{
-			foreach ( var testId in allTestIds.OrderBy( n => n ) )
-			{
-				var itemId = $"test_{testId}";
-				var hasLocal = localTestIds.Contains( testId );
-				var info = hasLocal ? GetTestInfo( manualTestFiles.FirstOrDefault( f => Path.GetFileNameWithoutExtension( f ) == testId ) ) : "remote only";
-
-				DrawResourceRow( ref y, pad, w, $"{testId}.json", info, itemId,
-					hasLocal ? () => PushItem( itemId ) : null,
-					() => PullItem( itemId ) );
-			}
-		}
-		else
-		{
-			Paint.SetDefaultFont( size: 10 );
-			Paint.SetPen( Color.White.WithAlpha( 0.3f ) );
-			Paint.DrawText( new Rect( pad + 8, y, w, 16 ), "No manual test files (auto tests hidden)", TextFlag.LeftCenter );
-			y += 22;
-		}
-
-		y += 8;
 		DrawSeparator( ref y, w, pad );
 
 		// ── Status bar ──
@@ -482,11 +417,11 @@ public class SyncToolWindow : DockWindow
 		if ( SyncToolConfig.IsValid )
 		{
 			var btnW2 = 70f;
-			var testAllW = 80f;
 			var pushAllRect = new Rect( pad + w - btnW2, y, btnW2, 22 );
 			DrawSmallButton( pushAllRect, "Push All", Color.Green, "push_all", () => _ = PushAll() );
-			var testAllRect = new Rect( pad + w - btnW2 - testAllW - 6, y, testAllW, 22 );
-			DrawSmallButton( testAllRect, _busy && _busyItem == "run_tests" ? "Running..." : "Test All", Color.Cyan, "run_all_tests", _busy ? null : () => RunAllTestsFromSync() );
+
+			var testAllRect = new Rect( pad + w - btnW2 * 2 - 6, y, btnW2, 22 );
+			DrawSmallButton( testAllRect, "Test All", Color.Yellow, "test_all", () => TestResultsWindow.OpenAndRun() );
 		}
 		y += 30;
 
@@ -571,7 +506,7 @@ public class SyncToolWindow : DockWindow
 	}
 
 	private void DrawResourceRow( ref float y, float pad, float w, string name, string info, string id,
-		Action pushAction, Action pullAction, Action testAction = null )
+		Action pushAction, Action pullAction )
 	{
 		var rowH = 28f;
 		var btnW = 48f;
@@ -656,7 +591,7 @@ public class SyncToolWindow : DockWindow
 		// Calculate right-side button area width
 		var rightBtnsW = 4f;
 		if ( pushAction != null ) rightBtnsW += btnW + 4;
-		if ( testAction != null ) rightBtnsW += btnW + 4;
+		if ( id.StartsWith( "ep_" ) ) rightBtnsW += 38 + 4; // test button
 
 		Paint.SetDefaultFont( size: 10 );
 		Paint.SetPen( Color.White.WithAlpha( 0.9f ) );
@@ -685,20 +620,23 @@ public class SyncToolWindow : DockWindow
 			}
 		}
 
-		// Test button — RIGHT side, before Push
+		// Push + Test buttons — RIGHT side
 		var rightX = pad + w - 4;
 		if ( pushAction != null )
 		{
 			rightX -= btnW;
 			var pushRect = new Rect( rightX, btnY, btnW, btnH );
 			DrawSmallButton( pushRect, "Push", Color.White, $"push_{id}", pushAction );
-			rightX -= 4;
 		}
-		if ( testAction != null )
+
+		// Test button (endpoints only)
+		if ( id.StartsWith( "ep_" ) )
 		{
-			rightX -= btnW;
-			var testRect = new Rect( rightX, btnY, btnW, btnH );
-			DrawSmallButton( testRect, "Test", Color.Cyan, $"test_{id}", _busy ? null : testAction );
+			var testW = 38f;
+			rightX -= testW + 4;
+			var testRect = new Rect( rightX, btnY, testW, btnH );
+			var slug = id[3..];
+			DrawSmallButton( testRect, "Test", Color.Yellow, $"test_{id}", () => TestResultsWindow.OpenAndRun( slug ) );
 		}
 
 		y += rowH + 1;
@@ -1022,52 +960,6 @@ public class SyncToolWindow : DockWindow
 		catch { return ""; }
 	}
 
-	private List<string> GetRemoteTestIds()
-	{
-		if ( !_remoteTests.HasValue ) return new List<string>();
-		var data = _remoteTests.Value;
-		if ( data.TryGetProperty( "data", out var d ) ) data = d;
-		if ( data.ValueKind != JsonValueKind.Array ) return new List<string>();
-
-		var ids = new List<string>();
-		foreach ( var t in data.EnumerateArray() )
-		{
-			if ( t.TryGetProperty( "id", out var id ) )
-				ids.Add( id.GetString() );
-		}
-		return ids;
-	}
-
-	private string GetTestInfo( string filePath )
-	{
-		try
-		{
-			var text = File.ReadAllText( filePath );
-			var t = JsonSerializer.Deserialize<JsonElement>( text );
-			var name = t.TryGetProperty( "name", out var n ) ? n.GetString() : "";
-			var endpoint = t.TryGetProperty( "endpoint", out var ep ) ? ep.GetString() : "";
-			return !string.IsNullOrEmpty( name ) ? name : endpoint;
-		}
-		catch { return ""; }
-	}
-
-	/// <summary>Returns true if a test file contains the "auto" tag (auto-generated, not user-created).</summary>
-	private bool IsAutoTest( string filePath )
-	{
-		try
-		{
-			var text = File.ReadAllText( filePath );
-			var t = JsonSerializer.Deserialize<JsonElement>( text );
-			if ( t.TryGetProperty( "tags", out var tags ) && tags.ValueKind == JsonValueKind.Array )
-			{
-				foreach ( var tag in tags.EnumerateArray() )
-					if ( tag.GetString() == "auto" ) return true;
-			}
-		}
-		catch { }
-		return false;
-	}
-
 	private string GetEndpointInfo( string filePath )
 	{
 		try
@@ -1144,7 +1036,6 @@ public class SyncToolWindow : DockWindow
 		var localEndpoints = SyncToolConfig.LoadEndpoints();
 		var localCollections = SyncToolConfig.LoadCollections();
 		var localWorkflows = SyncToolConfig.LoadWorkflows();
-		var localTests = SyncToolConfig.LoadTests();
 
 		var localEpBySlug = new Dictionary<string, JsonElement>();
 		foreach ( var ep in localEndpoints )
@@ -1164,25 +1055,16 @@ public class SyncToolWindow : DockWindow
 			if ( !string.IsNullOrEmpty( wfId ) ) localWfById[wfId] = wf;
 		}
 
-		var localTestById = new Dictionary<string, JsonElement>();
-		foreach ( var t in localTests )
-		{
-			var tId = t.TryGetProperty( "id", out var id ) ? id.GetString() : "";
-			if ( !string.IsNullOrEmpty( tId ) ) localTestById[tId] = t;
-		}
-
-		// ── Fetch all 4 resource types in parallel ──
+		// ── Fetch all 3 resource types in parallel ──
 		var remoteEpsTask = SyncToolApi.GetEndpoints();
 		var remoteColsTask = SyncToolApi.GetCollections();
 		var remoteWfsTask = SyncToolApi.GetWorkflows();
-		var remoteTestsTask = SyncToolApi.GetTests();
 
-		await Task.WhenAll( remoteEpsTask, remoteColsTask, remoteWfsTask, remoteTestsTask );
+		await Task.WhenAll( remoteEpsTask, remoteColsTask, remoteWfsTask );
 
 		_remoteEndpoints = await remoteEpsTask;
 		_remoteCollections = await remoteColsTask;
 		_remoteWorkflows = await remoteWfsTask;
-		_remoteTests = await remoteTestsTask;
 
 		if ( !_remoteEndpoints.HasValue )
 		{
@@ -1405,56 +1287,6 @@ public class SyncToolWindow : DockWindow
 			}
 		}
 
-		// ── Check tests ──
-		var remoteTestIdSet = new HashSet<string>();
-		if ( _remoteTests.HasValue )
-		{
-			var testsMap = SyncToolTransforms.ServerToTests( _remoteTests.Value );
-			foreach ( var (testId, remoteLocal) in testsMap )
-			{
-				remoteTestIdSet.Add( testId );
-				var id = $"test_{testId}";
-				var remoteJson = JsonSerializer.Serialize( remoteLocal, new JsonSerializerOptions { WriteIndented = true } );
-
-				if ( !localTestById.TryGetValue( testId, out var localTest ) )
-				{
-					SetItemState( id, remoteDiffers: true, status: SyncStatus.RemoteOnly,
-						diffSummary: "Remote only — no local file",
-						localJson: "", remoteJson: PrettyJson( remoteJson ) );
-					diffs++;
-				}
-				else
-				{
-					var localJson = JsonSerializer.Serialize( localTest, new JsonSerializerOptions { WriteIndented = true } );
-					if ( NormalizeJson( remoteJson ) != NormalizeJson( localJson ) )
-					{
-						SetItemState( id, remoteDiffers: true, status: SyncStatus.Differs,
-							diffSummary: "Content differs",
-							localJson: PrettyJson( localJson ), remoteJson: PrettyJson( remoteJson ) );
-						diffs++;
-					}
-					else
-					{
-						SetItemState( id, remoteDiffers: false, status: SyncStatus.InSync,
-							localJson: PrettyJson( localJson ), remoteJson: PrettyJson( remoteJson ) );
-					}
-				}
-			}
-		}
-
-		foreach ( var testId in localTestById.Keys )
-		{
-			if ( !remoteTestIdSet.Contains( testId ) )
-			{
-				var id = $"test_{testId}";
-				var localJson = JsonSerializer.Serialize( localTestById[testId], new JsonSerializerOptions { WriteIndented = true } );
-				SetItemState( id, remoteDiffers: false, status: SyncStatus.LocalOnly,
-					diffSummary: "Local only — not pushed to server",
-					localJson: PrettyJson( localJson ), remoteJson: "" );
-				localOnlyCount++;
-			}
-		}
-
 		_hasCheckedRemote = true;
 		var parts = new List<string>();
 		if ( diffs > 0 ) parts.Add( $"{diffs} remote diff(s)" );
@@ -1549,15 +1381,12 @@ public class SyncToolWindow : DockWindow
 		var pushEpTask = _endpointFiles.Length > 0 ? DoPushAllEndpoints() : Task.FromResult( false );
 		var pushColTask = _collectionFiles.Length > 0 ? DoPushCollections() : Task.FromResult( false );
 		var pushWfTask = _workflowFiles.Length > 0 ? DoPushAllWorkflows() : Task.FromResult( false );
-		var manualTests = _testFiles.Where( f => !IsAutoTest( f ) ).ToArray();
-		var pushTestTask = manualTests.Length > 0 ? DoPushAllTests() : Task.FromResult( false );
 
-		await Task.WhenAll( pushEpTask, pushColTask, pushWfTask, pushTestTask );
+		await Task.WhenAll( pushEpTask, pushColTask, pushWfTask );
 
 		var epOk = _endpointFiles.Length > 0 ? await pushEpTask : false;
 		var colOk = _collectionFiles.Length > 0 ? await pushColTask : false;
 		var wfOk = _workflowFiles.Length > 0 ? await pushWfTask : false;
-		var testOk = manualTests.Length > 0 ? await pushTestTask : false;
 
 		// ── Log push results ──
 		if ( _endpointFiles.Length > 0 )
@@ -1599,19 +1428,6 @@ public class SyncToolWindow : DockWindow
 			}
 		}
 
-		if ( manualTests.Length > 0 )
-		{
-			var failDetail = GetPushFailDetail( "tests" );
-			foreach ( var f in manualTests )
-			{
-				var name = Path.GetFileNameWithoutExtension( f );
-				var detail = testOk ? "Pushed" : failDetail;
-				SetItemState( $"test_{name}", result: testOk ? "OK" : "FAIL",
-					remoteDiffers: false, diffSummary: "", status: testOk ? SyncStatus.InSync : null );
-				_syncLog.Add( new SyncLogEntry { Name = $"{name}.json", Type = "Test", Ok = testOk, Detail = detail } );
-			}
-		}
-
 		ScrollToBottom();
 
 		// ── Auto-verify: re-fetch remote and compare to local ──
@@ -1641,7 +1457,6 @@ public class SyncToolWindow : DockWindow
 		_remoteEndpoints = null;
 		_remoteCollections = null;
 		_remoteWorkflows = null;
-		_remoteTests = null;
 		_hasCheckedRemote = false;
 
 		var okCount = _syncLog.Count( e => e.Ok );
@@ -1859,7 +1674,6 @@ public class SyncToolWindow : DockWindow
 		var label = id.StartsWith( "ep_" ) ? $"endpoint '{id[3..]}'"
 			: id.StartsWith( "col_" ) ? $"collection '{id[4..]}'"
 			: id.StartsWith( "wf_" ) ? $"workflow '{id[3..]}'"
-			: id.StartsWith( "test_" ) ? $"test '{id[5..]}'"
 			: "resource";
 
 		if ( state.RemoteDiffers )
@@ -1908,12 +1722,6 @@ public class SyncToolWindow : DockWindow
 				ok = await DoPushAllWorkflows();
 				itemName = $"{id[3..]}.json";
 				itemType = "Workflow";
-			}
-			else if ( id.StartsWith( "test_" ) )
-			{
-				ok = await DoPushAllTests();
-				itemName = $"{id[5..]}.json";
-				itemType = "Test";
 			}
 			else
 			{
@@ -1977,7 +1785,6 @@ public class SyncToolWindow : DockWindow
 		var label = id.StartsWith( "ep_" ) ? $"endpoint '{id[3..]}'"
 			: id.StartsWith( "col_" ) ? $"collection '{id[4..]}'"
 			: id.StartsWith( "wf_" ) ? $"workflow '{id[3..]}'"
-			: id.StartsWith( "test_" ) ? $"test '{id[5..]}'"
 			: "resource";
 		_items.TryGetValue( id, out var pullState );
 
@@ -2013,11 +1820,6 @@ public class SyncToolWindow : DockWindow
 			{
 				var wfId = id[3..];
 				ok = await DoPullSingleWorkflow( wfId );
-			}
-			else if ( id.StartsWith( "test_" ) )
-			{
-				var testId = id[5..];
-				ok = await DoPullSingleTest( testId );
 			}
 			else
 			{
@@ -2171,26 +1973,6 @@ public class SyncToolWindow : DockWindow
 		return resp.HasValue;
 	}
 
-	private async Task<bool> DoPushAllTests()
-	{
-		// Only push manual (non-auto) tests
-		var localTests = SyncToolConfig.LoadTests();
-		var manualOnly = localTests.Where( t =>
-		{
-			if ( t.TryGetProperty( "tags", out var tags ) && tags.ValueKind == JsonValueKind.Array )
-			{
-				foreach ( var tag in tags.EnumerateArray() )
-					if ( tag.GetString() == "auto" ) return false;
-			}
-			return true;
-		} ).ToList();
-		if ( manualOnly.Count == 0 ) return false;
-		var existing = await SyncToolApi.GetTests();
-		var serverFmt = SyncToolTransforms.TestsToServer( manualOnly, existing );
-		var resp = await SyncToolApi.PushTests( serverFmt );
-		return resp.HasValue;
-	}
-
 	// ──────────────────────────────────────────────────────
 	//  Pull implementation
 	// ──────────────────────────────────────────────────────
@@ -2283,213 +2065,6 @@ public class SyncToolWindow : DockWindow
 			Log.Warning( $"[SyncTool] Pull workflow {wfId} failed: {ex.Message}" );
 			return false;
 		}
-	}
-
-	private async Task<bool> DoPullSingleTest( string testId )
-	{
-		var resp = _remoteTests ?? await SyncToolApi.GetTests();
-		if ( !resp.HasValue ) return false;
-		try
-		{
-			var testsMap = SyncToolTransforms.ServerToTests( resp.Value );
-			if ( !testsMap.TryGetValue( testId, out var local ) ) return false;
-			var dir = SyncToolConfig.Abs( SyncToolConfig.TestsPath );
-			if ( !Directory.Exists( dir ) ) Directory.CreateDirectory( dir );
-			File.WriteAllText( Path.Combine( dir, $"{testId}.json" ),
-				JsonSerializer.Serialize( local, new JsonSerializerOptions { WriteIndented = true } ) );
-			return true;
-		}
-		catch ( Exception ex )
-		{
-			Log.Warning( $"[SyncTool] Pull test {testId} failed: {ex.Message}" );
-			return false;
-		}
-	}
-
-	// ──────────────────────────────────────────────────────
-	//  Test execution from Sync Tool
-	// ──────────────────────────────────────────────────────
-
-	private void RunAllTestsFromSync()
-	{
-		_scrollY = 0;
-		Update();
-		TestResultsWindow.OpenAndRun();
-	}
-
-	private void RunTestsForEndpoint( string slug )
-	{
-		TestResultsWindow.OpenAndRun( slug );
-	}
-
-	private async Task _unusedTestPlaceholder()
-	{
-		// Keep compiler happy - HandleTestResult is still used by the summary display
-		try
-		{
-			var body = JsonSerializer.Deserialize<JsonElement>( "{}" );
-			var resp = await SyncToolApi.RunAllTests( body );
-			HandleTestResult( resp );
-		}
-		catch ( Exception ex )
-		{
-			_testResultSummary = $"Error: {ex.Message}";
-			_testResultColor = Color.Red;
-		}
-		finally { _busy = false; _busyItem = null; Update(); }
-	}
-
-	private void HandleTestResult( JsonElement? resp )
-	{
-		if ( !resp.HasValue )
-		{
-			_testResultSummary = $"Request failed: {SyncToolApi.LastErrorMessage ?? "unknown error"}";
-			_testResultColor = Color.Red;
-			return;
-		}
-
-		_lastTestRunResult = resp;
-		var result = resp.Value;
-
-		if ( result.TryGetProperty( "summary", out var summary ) )
-		{
-			var total = summary.TryGetProperty( "total", out var t ) ? t.GetInt32() : 0;
-			var passed = summary.TryGetProperty( "passed", out var p ) ? p.GetInt32() : 0;
-			var failed = summary.TryGetProperty( "failed", out var f ) ? f.GetInt32() : 0;
-
-			_testResultSummary = $"Passed: {passed}/{total}   Failed: {failed}/{total}";
-			_testResultColor = failed == 0 ? Color.Green : failed < total ? Color.Orange : Color.Red;
-		}
-		else
-		{
-			_testResultSummary = "Tests completed (no summary)";
-			_testResultColor = Color.White;
-		}
-	}
-
-	private void OpenTestReport()
-	{
-		if ( !_lastTestRunResult.HasValue ) return;
-		var result = _lastTestRunResult.Value;
-
-		var sb = new System.Text.StringBuilder();
-		sb.AppendLine( "# Endpoint Test Report" );
-		sb.AppendLine( $"Generated: {DateTime.Now:yyyy-MM-dd HH:mm:ss}" );
-		sb.AppendLine();
-
-		if ( result.TryGetProperty( "summary", out var summary ) )
-		{
-			var total = summary.TryGetProperty( "total", out var t ) ? t.GetInt32() : 0;
-			var passed = summary.TryGetProperty( "passed", out var p ) ? p.GetInt32() : 0;
-			var failed = summary.TryGetProperty( "failed", out var f ) ? f.GetInt32() : 0;
-			sb.AppendLine( $"## Summary" );
-			sb.AppendLine( $"- **Total:** {total}" );
-			sb.AppendLine( $"- **Passed:** {passed}" );
-			sb.AppendLine( $"- **Failed:** {failed}" );
-			sb.AppendLine();
-		}
-
-		if ( result.TryGetProperty( "results", out var results ) && results.ValueKind == JsonValueKind.Array )
-		{
-			// Failed tests first
-			var failedTests = results.EnumerateArray().Where( r => r.TryGetProperty( "passed", out var p ) && !p.GetBoolean() ).ToList();
-			var passedTests = results.EnumerateArray().Where( r => r.TryGetProperty( "passed", out var p ) && p.GetBoolean() ).ToList();
-
-			if ( failedTests.Count > 0 )
-			{
-				sb.AppendLine( $"## Failed Tests ({failedTests.Count})" );
-				sb.AppendLine();
-				foreach ( var test in failedTests )
-					AppendTestDetail( sb, test );
-			}
-
-			if ( passedTests.Count > 0 )
-			{
-				sb.AppendLine( $"## Passed Tests ({passedTests.Count})" );
-				sb.AppendLine();
-				foreach ( var test in passedTests )
-					AppendTestDetail( sb, test );
-			}
-		}
-
-		var tmpPath = Path.Combine( Path.GetTempPath(), "ns_test_report.md" );
-		File.WriteAllText( tmpPath, sb.ToString() );
-		EditorUtility.OpenFile( tmpPath );
-		_status = $"Report saved to {tmpPath}";
-		Update();
-	}
-
-	private void AppendTestDetail( System.Text.StringBuilder sb, JsonElement test )
-	{
-		var name = test.TryGetProperty( "name", out var n ) ? n.GetString() : "?";
-		var endpoint = test.TryGetProperty( "endpoint", out var ep ) ? ep.GetString() : "?";
-		var method = test.TryGetProperty( "method", out var m ) ? m.GetString() : "POST";
-		var passed = test.TryGetProperty( "passed", out var p ) && p.GetBoolean();
-		var reason = test.TryGetProperty( "reason", out var r ) ? r.GetString() : null;
-		var timing = test.TryGetProperty( "timing", out var tm ) && tm.TryGetProperty( "total", out var tt ) ? tt.GetDouble() : 0;
-
-		sb.AppendLine( $"### {( passed ? "PASS" : "FAIL" )} — {name}" );
-		sb.AppendLine( $"- **Endpoint:** `{method} {endpoint}`" );
-		sb.AppendLine( $"- **Timing:** {timing}ms" );
-		if ( !string.IsNullOrEmpty( reason ) )
-			sb.AppendLine( $"- **Reason:** {reason}" );
-
-		// Input
-		if ( test.TryGetProperty( "input", out var input ) )
-		{
-			sb.AppendLine( $"- **Input:**" );
-			sb.AppendLine( "```json" );
-			sb.AppendLine( JsonSerializer.Serialize( input, new JsonSerializerOptions { WriteIndented = true } ) );
-			sb.AppendLine( "```" );
-		}
-
-		// Expected
-		if ( test.TryGetProperty( "expect", out var expect ) )
-		{
-			sb.AppendLine( $"- **Expected:** `{JsonSerializer.Serialize( expect )}`" );
-		}
-
-		// Result
-		if ( test.TryGetProperty( "result", out var res ) )
-		{
-			var resOk = res.TryGetProperty( "ok", out var rok ) && rok.GetBoolean();
-			var resStatus = res.TryGetProperty( "status", out var rs ) ? rs.GetInt32() : 0;
-			sb.AppendLine( $"- **Result:** ok={resOk}, status={resStatus}" );
-			if ( res.TryGetProperty( "body", out var body ) )
-			{
-				sb.AppendLine( "```json" );
-				sb.AppendLine( JsonSerializer.Serialize( body, new JsonSerializerOptions { WriteIndented = true } ) );
-				sb.AppendLine( "```" );
-			}
-		}
-
-		// Steps
-		if ( test.TryGetProperty( "steps", out var steps ) && steps.ValueKind == JsonValueKind.Array && steps.GetArrayLength() > 0 )
-		{
-			sb.AppendLine( "- **Steps:**" );
-			foreach ( var step in steps.EnumerateArray() )
-			{
-				var sid = step.TryGetProperty( "id", out var si ) ? si.GetString() : "?";
-				var stype = step.TryGetProperty( "type", out var st ) ? st.GetString() : "?";
-				var spass = !step.TryGetProperty( "passed", out var sp ) || sp.ValueKind != JsonValueKind.False;
-				var swarn = step.TryGetProperty( "warning", out _ );
-				var icon = swarn ? "⚠️" : spass ? "✅" : "❌";
-				var detail = "";
-				if ( step.TryGetProperty( "result", out var sr ) && sr.ValueKind != JsonValueKind.Null && sr.ValueKind != JsonValueKind.Object )
-					detail = $" = `{sr}`";
-				sb.AppendLine( $"  - {icon} `{sid}` ({stype}){detail}" );
-			}
-		}
-
-		// Warnings
-		if ( test.TryGetProperty( "warnings", out var warnings ) && warnings.ValueKind == JsonValueKind.Array && warnings.GetArrayLength() > 0 )
-		{
-			sb.AppendLine( "- **Warnings:**" );
-			foreach ( var w in warnings.EnumerateArray() )
-				sb.AppendLine( $"  - ⚠️ {w.GetString()}" );
-		}
-
-		sb.AppendLine();
 	}
 
 	// ──────────────────────────────────────────────────────
@@ -2757,14 +2332,6 @@ public class SyncToolWindow : DockWindow
 				if ( !Directory.Exists( dir ) ) Directory.CreateDirectory( dir );
 				File.WriteAllText( Path.Combine( dir, $"{wfId}.json" ), json );
 			}
-			else if ( id.StartsWith( "test_" ) )
-			{
-				var testId = id[5..];
-				var dir = SyncToolConfig.Abs( SyncToolConfig.TestsPath );
-				if ( !Directory.Exists( dir ) ) Directory.CreateDirectory( dir );
-				File.WriteAllText( Path.Combine( dir, $"{testId}.json" ), json );
-			}
-
 			SetItemState( id, result: "OK", remoteDiffers: false, status: SyncStatus.InSync, diffSummary: "" );
 			_status = $"Merged server defaults for {id}";
 			RefreshFileList();
