@@ -133,6 +133,9 @@ public static class SyncToolConfig
 	/// <summary>Path to the workflows directory.</summary>
 	public static string WorkflowsPath => $"{SyncToolsPath}/workflows";
 
+	/// <summary>Path to the tests directory.</summary>
+	public static string TestsPath => $"{SyncToolsPath}/tests";
+
 	/// <summary>Legacy paths for auto-migration.</summary>
 	public static string LegacyCollectionSchemaPath => $"{SyncToolsPath}/collection_schema.json";
 
@@ -592,6 +595,50 @@ public static class SyncToolConfig
 		Log.Info( $"[SyncTool] Saved workflows/{id}.json" );
 	}
 
+	/// <summary>Load all test definitions from the tests/ directory.</summary>
+	public static List<JsonElement> LoadTests()
+	{
+		var list = new List<JsonElement>();
+		var files = FindFiles( TestsPath, "*.json" );
+
+		foreach ( var file in files )
+		{
+			var fullPath = Abs( $"{TestsPath}/{file}" );
+			var text = File.ReadAllText( fullPath );
+			var test = JsonSerializer.Deserialize<JsonElement>( text );
+
+			if ( !test.TryGetProperty( "id", out _ ) )
+			{
+				var id = Path.GetFileNameWithoutExtension( file );
+				var dict = JsonSerializer.Deserialize<Dictionary<string, object>>( text );
+				dict["id"] = id;
+				test = JsonSerializer.Deserialize<JsonElement>( JsonSerializer.Serialize( dict ) );
+			}
+
+			list.Add( test );
+		}
+
+		return list;
+	}
+
+	/// <summary>Save test definitions as individual JSON files.</summary>
+	public static void SaveTests( List<Dictionary<string, object>> tests )
+	{
+		EnsureSyncToolsDir();
+		EnsureDir( TestsPath );
+
+		foreach ( var file in FindFiles( TestsPath, "*.json" ) )
+			File.Delete( Abs( $"{TestsPath}/{file}" ) );
+
+		foreach ( var test in tests )
+		{
+			var id = test.TryGetValue( "id", out var s ) ? s?.ToString() ?? "unknown" : "unknown";
+			File.WriteAllText( Abs( $"{TestsPath}/{id}.json" ), JsonSerializer.Serialize( test, _writeOptions ) );
+		}
+
+		Log.Info( $"[SyncTool] Saved {tests.Count} test files to tests/" );
+	}
+
 	/// <summary>Save a collection to collections/{name}.json.</summary>
 	public static void SaveCollection( string name, Dictionary<string, object> data )
 	{
@@ -614,7 +661,8 @@ public static class SyncToolConfig
 		return File.Exists( Abs( LegacyCollectionSchemaPath ) )
 			|| FindFiles( CollectionsPath, "*.json" ).Length > 0
 			|| FindFiles( EndpointsPath, "*.json" ).Length > 0
-			|| FindFiles( WorkflowsPath, "*.json" ).Length > 0;
+			|| FindFiles( WorkflowsPath, "*.json" ).Length > 0
+			|| FindFiles( TestsPath, "*.json" ).Length > 0;
 	}
 
 	private static void EnsureSyncToolsDir()
@@ -626,6 +674,7 @@ public static class SyncToolConfig
 		EnsureDir( CollectionsPath );
 		EnsureDir( EndpointsPath );
 		EnsureDir( WorkflowsPath );
+		EnsureDir( TestsPath );
 	}
 
 	// ──────────────────────────────────────────────────────

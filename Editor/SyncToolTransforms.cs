@@ -284,6 +284,75 @@ public static class SyncToolTransforms
 		return JsonSerializer.Deserialize<JsonElement>( JsonSerializer.Serialize( result ) );
 	}
 
+	// ── Tests ──
+
+	/// <summary>Parse server tests response into id → local dict pairs.</summary>
+	public static Dictionary<string, Dictionary<string, object>> ServerToTests( JsonElement serverResponse )
+	{
+		var result = new Dictionary<string, Dictionary<string, object>>();
+		var data = serverResponse;
+		if ( data.TryGetProperty( "data", out var d ) ) data = d;
+		if ( data.ValueKind != JsonValueKind.Array ) return result;
+
+		foreach ( var test in data.EnumerateArray() )
+		{
+			var id = test.TryGetProperty( "id", out var testId ) ? testId.GetString() : "";
+			if ( string.IsNullOrEmpty( id ) ) continue;
+			result[id] = ServerTestToLocal( test );
+		}
+		return result;
+	}
+
+	/// <summary>Convert a server test to local file format — strips server-managed fields.</summary>
+	public static Dictionary<string, object> ServerTestToLocal( JsonElement test )
+	{
+		var local = new Dictionary<string, object>();
+		foreach ( var prop in test.EnumerateObject() )
+		{
+			if ( prop.Name is "createdAt" or "updatedAt" ) continue;
+			local[prop.Name] = prop.Value.ValueKind switch
+			{
+				JsonValueKind.String => (object)prop.Value.GetString(),
+				JsonValueKind.Number => prop.Value.TryGetInt32( out var i ) ? i : prop.Value.GetDouble(),
+				JsonValueKind.True => true,
+				JsonValueKind.False => false,
+				_ => prop.Value
+			};
+		}
+		return local;
+	}
+
+	/// <summary>Convert local test definitions to server format.</summary>
+	public static JsonElement TestsToServer( List<JsonElement> localTests, JsonElement? existingServer = null )
+	{
+		var idToExisting = new Dictionary<string, JsonElement>();
+		if ( existingServer.HasValue )
+		{
+			var data = existingServer.Value;
+			if ( data.TryGetProperty( "data", out var d ) ) data = d;
+			if ( data.ValueKind == JsonValueKind.Array )
+			{
+				foreach ( var t in data.EnumerateArray() )
+					if ( t.TryGetProperty( "id", out var tId ) )
+						idToExisting[tId.GetString()] = t;
+			}
+		}
+
+		var result = new List<Dictionary<string, object>>();
+		foreach ( var test in localTests )
+		{
+			var entry = ServerTestToLocal( test );
+			var testId = test.TryGetProperty( "id", out var id ) ? id.GetString() : "";
+			if ( !string.IsNullOrEmpty( testId ) && idToExisting.TryGetValue( testId, out var existing ) )
+			{
+				if ( existing.TryGetProperty( "createdAt", out var ca ) )
+					entry["createdAt"] = ca.GetString();
+			}
+			result.Add( entry );
+		}
+		return JsonSerializer.Deserialize<JsonElement>( JsonSerializer.Serialize( result ) );
+	}
+
 	/// <summary>
 	/// Extract a JsonElement value to a plain .NET object for serialization.
 	/// </summary>

@@ -125,6 +125,21 @@ public static class SyncToolApi
 	/// <summary>Push workflows to server.</summary>
 	public static Task<JsonElement?> PushWorkflows( JsonElement data ) => Request( "PUT", "workflows", data );
 
+	/// <summary>Fetch current server tests.</summary>
+	public static Task<JsonElement?> GetTests() => Request( "GET", "tests" );
+
+	/// <summary>Push tests to server.</summary>
+	public static Task<JsonElement?> PushTests( JsonElement data ) => Request( "PUT", "tests", data );
+
+	/// <summary>Run a single test via dry-run.</summary>
+	public static Task<JsonElement?> RunTest( JsonElement data ) => Request( "POST", "test-endpoint", data );
+
+	/// <summary>Run all tests via dry-run.</summary>
+	public static Task<JsonElement?> RunAllTests( JsonElement data ) => Request( "POST", "run-tests", data );
+
+	/// <summary>Suggest tests for an endpoint.</summary>
+	public static Task<JsonElement?> SuggestTests( JsonElement data ) => Request( "POST", "suggest-tests", data );
+
 	/// <summary>
 	/// Validate credentials against the server.
 	/// Sends secret key via x-api-key header and optionally public key via x-public-key header.
