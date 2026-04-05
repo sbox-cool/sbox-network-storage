@@ -333,17 +333,67 @@ def parse_cs_records(content):
         records[name] = fields
     return records
 
+def extract_balanced_parens(text, start):
+    """Extract content between balanced parentheses starting at text[start] == '('.
+    Respects quoted strings so parentheses inside "..." are ignored.
+    Returns (inner_content, end_index) or (None, -1) on failure."""
+    if start >= len(text) or text[start] != '(':
+        return None, -1
+    depth = 0
+    in_string = False
+    escape = False
+    i = start
+    while i < len(text):
+        ch = text[i]
+        if escape:
+            escape = False
+            i += 1
+            continue
+        if ch == '\\' and in_string:
+            escape = True
+            i += 1
+            continue
+        if ch == '"':
+            in_string = not in_string
+        elif not in_string:
+            if ch == '(':
+                depth += 1
+            elif ch == ')':
+                depth -= 1
+                if depth == 0:
+                    return text[start + 1:i], i
+        i += 1
+    return None, -1
+
+
+def findall_new_exprs(block, record_name):
+    """Find all `new RecordName(...)` or `new(...)` in block, returning list of inner arg strings.
+    Uses balanced-paren extraction so parentheses inside strings are handled correctly."""
+    results = []
+    pattern = re.compile(r'new\s*(?:' + re.escape(record_name) + r')?\s*\(')
+    for m in pattern.finditer(block):
+        # m.end()-1 is the position of the '('
+        inner, _ = extract_balanced_parens(block, m.end() - 1)
+        if inner is not None:
+            results.append(inner)
+    return results
+
+
 def parse_named_instances(content, record_name, fields):
     """Find static readonly RecordType Name = new(...); declarations and return {VarName: row_dict}."""
     instances = {}
-    pattern = (
+    # Match up to the opening paren of new(...)
+    pattern = re.compile(
         r'(?:public|private|internal|protected)\s+static\s+(?:readonly\s+)?'
         + re.escape(record_name) + r'\s+(\w+)\s*=\s*new\s*(?:'
-        + re.escape(record_name) + r')?\s*\((.*?)\)\s*;'
+        + re.escape(record_name) + r')?\s*\('
     )
-    for m in re.finditer(pattern, content, re.DOTALL):
+    for m in pattern.finditer(content):
         var_name = m.group(1)
-        args = parse_cs_args(m.group(2))
+        inner, _ = extract_balanced_parens(content, m.end() - 1)
+        if inner is None:
+            continue
+        args = parse_cs_args(inner)
         if len(args) == len(fields):
             row = {}
             for i, field in enumerate(fields):
@@ -369,9 +419,9 @@ def parse_cs_arrays(content, records):
             block = m.group(2)
             rows = []
 
-            # Try parsing new(...) constructor calls first
-            for row_m in re.finditer(r'new\s*(?:' + re.escape(record_name) + r')?\s*\((.*?)\)', block, re.DOTALL):
-                args = parse_cs_args(row_m.group(1))
+            # Try parsing new(...) constructor calls first (balanced-paren aware)
+            for inner in findall_new_exprs(block, record_name):
+                args = parse_cs_args(inner)
                 if len(args) == len(fields):
                     row = {}
                     for i, field in enumerate(fields):
