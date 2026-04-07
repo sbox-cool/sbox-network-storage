@@ -36,6 +36,7 @@ public class TestResultsWindow : DockWindow
 		public string Endpoint;
 		public string Method;
 		public bool Passed;
+		public bool Deprecated;
 		public string Reason;
 		public double TimingMs;
 		public string[] Warnings;
@@ -75,10 +76,12 @@ public class TestResultsWindow : DockWindow
 		try
 		{
 			if ( token.IsCancellationRequested ) return;
+
+			// Use auto-test endpoint — no saved tests needed, generates and runs inline
 			var body = endpointFilter != null
-				? JsonSerializer.Serialize( new { endpoint = endpointFilter } )
+				? JsonSerializer.Serialize( new { slug = endpointFilter } )
 				: "{}";
-			var resp = await SyncToolApi.RunAllTests( JsonSerializer.Deserialize<JsonElement>( body ) );
+			var resp = await SyncToolApi.AutoTest( JsonSerializer.Deserialize<JsonElement>( body ) );
 			if ( token.IsCancellationRequested ) return;
 
 			if ( !resp.HasValue )
@@ -90,26 +93,16 @@ public class TestResultsWindow : DockWindow
 			}
 
 			var result = resp.Value;
-			if ( result.TryGetProperty( "results", out var results ) && results.ValueKind == JsonValueKind.Array )
+
+			// Single endpoint response has no "results" array — wrap it
+			if ( !result.TryGetProperty( "results", out var results ) )
+			{
+				ParseAutoTestEntry( result );
+			}
+			else if ( results.ValueKind == JsonValueKind.Array )
 			{
 				foreach ( var test in results.EnumerateArray() )
-				{
-					var entry = new TestEntry
-					{
-						Name = test.TryGetProperty( "name", out var n ) ? n.GetString() : "?",
-						Endpoint = test.TryGetProperty( "endpoint", out var ep ) ? ep.GetString() : "",
-						Method = test.TryGetProperty( "method", out var m ) ? m.GetString() : "POST",
-						Passed = test.TryGetProperty( "passed", out var p ) && p.GetBoolean(),
-						Reason = test.TryGetProperty( "reason", out var r ) ? r.GetString() : null,
-						TimingMs = test.TryGetProperty( "timing", out var tm ) && tm.TryGetProperty( "total", out var tt ) ? tt.GetDouble() : 0,
-						FullData = test,
-					};
-
-					if ( test.TryGetProperty( "warnings", out var ws ) && ws.ValueKind == JsonValueKind.Array )
-						entry.Warnings = ws.EnumerateArray().Select( w => w.GetString() ).ToArray();
-
-					_entries.Add( entry );
-				}
+					ParseAutoTestEntry( test );
 			}
 
 			// Generate report file
@@ -123,6 +116,34 @@ public class TestResultsWindow : DockWindow
 		_finished = true;
 		Title = $"Test Results — {PassedCount}/{TotalCount} passed";
 		Update();
+	}
+
+	private void ParseAutoTestEntry( JsonElement test )
+	{
+		var entry = new TestEntry
+		{
+			Name = test.TryGetProperty( "name", out var n ) ? n.GetString() : "?",
+			Endpoint = test.TryGetProperty( "endpoint", out var ep ) ? ep.GetString() : "",
+			Method = test.TryGetProperty( "method", out var m ) ? m.GetString() : "POST",
+			Passed = test.TryGetProperty( "passed", out var p ) && p.GetBoolean(),
+			Deprecated = test.TryGetProperty( "deprecated", out var dep ) && dep.GetBoolean(),
+			FullData = test,
+		};
+
+		// Collect errors and warnings as the reason string
+		var reasons = new List<string>();
+		if ( test.TryGetProperty( "errors", out var errs ) && errs.ValueKind == JsonValueKind.Array )
+			foreach ( var e in errs.EnumerateArray() )
+				reasons.Add( e.GetString() );
+		entry.Reason = reasons.Count > 0 ? string.Join( "; ", reasons ) : null;
+
+		if ( test.TryGetProperty( "warnings", out var ws ) && ws.ValueKind == JsonValueKind.Array )
+			entry.Warnings = ws.EnumerateArray().Select( w => w.GetString() ).ToArray();
+
+		if ( test.TryGetProperty( "result", out var res ) && res.TryGetProperty( "timing", out var tm ) && tm.TryGetProperty( "total", out var tt ) )
+			entry.TimingMs = tt.GetDouble();
+
+		_entries.Add( entry );
 	}
 
 	// ──────────────────────────────────────────────────────
@@ -297,25 +318,49 @@ public class TestResultsWindow : DockWindow
 		var rowH = 28f;
 
 		// Icon
-		var iconColor = entry.Passed ? new Color( 0.2f, 0.8f, 0.4f ) : new Color( 1f, 0.3f, 0.3f );
-		Paint.SetDefaultFont( size: 10, weight: 700 );
-		Paint.SetPen( iconColor );
-		Paint.DrawText( new Rect( pad, y, 16, rowH ), entry.Passed ? "+" : "x", TextFlag.Center );
+		if ( entry.Deprecated )
+		{
+			Paint.SetDefaultFont( size: 10, weight: 700 );
+			Paint.SetPen( Color.White.WithAlpha( 0.25f ) );
+			Paint.DrawText( new Rect( pad, y, 16, rowH ), "-", TextFlag.Center );
+		}
+		else
+		{
+			var iconColor = entry.Passed ? new Color( 0.2f, 0.8f, 0.4f ) : new Color( 1f, 0.3f, 0.3f );
+			Paint.SetDefaultFont( size: 10, weight: 700 );
+			Paint.SetPen( iconColor );
+			Paint.DrawText( new Rect( pad, y, 16, rowH ), entry.Passed ? "+" : "x", TextFlag.Center );
+		}
 
 		// Name
 		Paint.SetDefaultFont( size: 10, weight: 600 );
-		Paint.SetPen( Color.White.WithAlpha( 0.9f ) );
+		Paint.SetPen( entry.Deprecated ? Color.White.WithAlpha( 0.35f ) : Color.White.WithAlpha( 0.9f ) );
 		var nameText = entry.Name;
-		// Don't truncate — let it clip naturally at the row edge
 		Paint.DrawText( new Rect( pad + 20, y, w - 170, rowH ), nameText ?? "", TextFlag.LeftCenter );
+
+		// Deprecated badge
+		if ( entry.Deprecated )
+		{
+			var nameW = Paint.MeasureText( nameText ?? "" ).x;
+			var depX = pad + 20 + nameW + 6;
+			Paint.SetDefaultFont( size: 7 );
+			var depText = "deprecated";
+			var depTextW = Paint.MeasureText( depText ).x + 8;
+			var depRect = new Rect( depX, y + ( rowH - 14 ) / 2, depTextW, 14 );
+			Paint.SetBrush( new Color( 0.96f, 0.62f, 0.04f, 0.12f ) );
+			Paint.SetPen( new Color( 0.96f, 0.62f, 0.04f, 0.25f ) );
+			Paint.DrawRect( depRect, 3 );
+			Paint.SetPen( new Color( 0.96f, 0.62f, 0.04f, 0.6f ) );
+			Paint.DrawText( depRect, depText, TextFlag.Center );
+		}
 
 		// Endpoint badge
 		Paint.SetDefaultFont( size: 8 );
-		Paint.SetPen( Color.White.WithAlpha( 0.3f ) );
+		Paint.SetPen( Color.White.WithAlpha( entry.Deprecated ? 0.15f : 0.3f ) );
 		Paint.DrawText( new Rect( pad + w - 150, y, 90, rowH ), entry.Endpoint, TextFlag.LeftCenter );
 
 		// Timing
-		Paint.DrawText( new Rect( pad + w - 55, y, 50, rowH ), $"{entry.TimingMs}ms", TextFlag.RightCenter );
+		Paint.DrawText( new Rect( pad + w - 55, y, 50, rowH ), entry.Deprecated ? "skipped" : $"{entry.TimingMs}ms", TextFlag.RightCenter );
 
 		// Download log button (per entry)
 		if ( entry.FullData.HasValue )

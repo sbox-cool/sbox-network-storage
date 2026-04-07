@@ -140,6 +140,9 @@ public static class SyncToolApi
 	/// <summary>Suggest tests for an endpoint.</summary>
 	public static Task<JsonElement?> SuggestTests( JsonElement data ) => Request( "POST", "suggest-tests", data );
 
+	/// <summary>Auto-test one or all endpoints (no saved tests needed). Pass { slug } for one, {} for all.</summary>
+	public static Task<JsonElement?> AutoTest( JsonElement data ) => Request( "POST", "auto-test", data );
+
 	/// <summary>
 	/// Validate credentials against the server.
 	/// Sends secret key via x-api-key header and optionally public key via x-public-key header.

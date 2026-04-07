@@ -32,6 +32,7 @@ public class SyncToolWindow : DockWindow
 	private string[] _endpointFiles = Array.Empty<string>();
 	private string[] _collectionFiles = Array.Empty<string>(); // collections/{name}.json
 	private string[] _workflowFiles = Array.Empty<string>(); // workflows/{id}.json
+
 	// Remote data cache (from last check)
 	private JsonElement? _remoteEndpoints;
 	private JsonElement? _remoteCollections;
@@ -107,7 +108,6 @@ public class SyncToolWindow : DockWindow
 		_workflowFiles = Directory.Exists( wfDir )
 			? Directory.GetFiles( wfDir, "*.json" ).OrderBy( f => f ).ToArray()
 			: Array.Empty<string>();
-
 	}
 
 	// ──────────────────────────────────────────────────────
@@ -128,15 +128,15 @@ public class SyncToolWindow : DockWindow
 		Paint.SetPen( Color.White );
 		Paint.DrawText( new Rect( pad, y, w * 0.55f, 22 ), "Network Storage Sync", TextFlag.LeftCenter );
 
-		// Push All + Test All buttons (next to header)
+		// Push All + Test All buttons
 		if ( SyncToolConfig.IsValid )
 		{
 			var btnW2 = 70f;
+			var testAllW = 65f;
 			var pushAllRect = new Rect( pad + w - btnW2, y, btnW2, 22 );
+			var testAllRect = new Rect( pad + w - btnW2 - 4 - testAllW, y, testAllW, 22 );
 			DrawSmallButton( pushAllRect, "Push All", Color.Green, "push_all", () => _ = PushAll() );
-
-			var testAllRect = new Rect( pad + w - btnW2 * 2 - 6, y, btnW2, 22 );
-			DrawSmallButton( testAllRect, "Test All", Color.Yellow, "test_all", () => TestResultsWindow.OpenAndRun() );
+			DrawSmallButton( testAllRect, "Test All", Color.Cyan, "test_all", () => TestResultsWindow.OpenAndRun() );
 		}
 		y += 30;
 
@@ -179,33 +179,64 @@ public class SyncToolWindow : DockWindow
 			DrawSeparator( ref y, w, pad );
 		}
 
-		// ── Endpoints ──
-		var localEpCount = _endpointFiles.Length;
+		// ── Build item sets for all sections ──
 		var remoteEpSlugs = GetRemoteEndpointSlugs();
 		var allSlugs = new HashSet<string>();
+		foreach ( var f in _endpointFiles ) allSlugs.Add( Path.GetFileNameWithoutExtension( f ) );
+		foreach ( var s in remoteEpSlugs ) allSlugs.Add( s );
 
-		foreach ( var f in _endpointFiles )
-			allSlugs.Add( Path.GetFileNameWithoutExtension( f ) );
-		foreach ( var s in remoteEpSlugs )
-			allSlugs.Add( s );
+		var localColNames = _collectionFiles.Select( f => Path.GetFileNameWithoutExtension( f ) ).ToHashSet();
+		var remoteColNames = GetRemoteCollectionNames();
+		var allColNames = new HashSet<string>( localColNames );
+		foreach ( var n in remoteColNames ) allColNames.Add( n );
+
+		var localWfIds = _workflowFiles.Select( f => Path.GetFileNameWithoutExtension( f ) ).ToHashSet();
+		var remoteWfIds = GetRemoteWorkflowIds();
+		var allWfIds = new HashSet<string>( localWfIds );
+		foreach ( var id2 in remoteWfIds ) allWfIds.Add( id2 );
+
+		// ── CHANGES section (only after checking remote) ──
+		if ( _hasCheckedRemote )
+		{
+			var changedIds = _items
+				.Where( kv => kv.Value.Status != SyncStatus.Unknown && kv.Value.Status != SyncStatus.InSync )
+				.OrderBy( kv => kv.Key )
+				.Select( kv => kv.Key )
+				.ToList();
+
+			if ( changedIds.Count > 0 )
+			{
+				DrawSectionHeader( ref y, pad, w, $"CHANGES ({changedIds.Count})" );
+				foreach ( var changedId in changedIds )
+					DrawChangedItemRow( ref y, pad, w, changedId );
+				DrawSeparator( ref y, w, pad );
+			}
+		}
+
+		// ── Endpoints ──
+		var syncedEpSlugs = allSlugs
+			.Where( s => !_hasCheckedRemote || GetItemStatus( $"ep_{s}" ) == SyncStatus.InSync || GetItemStatus( $"ep_{s}" ) == SyncStatus.Unknown )
+			.OrderBy( s => s ).ToList();
 
 		DrawSectionHeader( ref y, pad, w, $"ENDPOINTS ({allSlugs.Count})" );
-
-		if ( allSlugs.Count > 0 )
+		if ( syncedEpSlugs.Count > 0 )
 		{
-			foreach ( var slug in allSlugs.OrderBy( s => s ) )
+			foreach ( var slug in syncedEpSlugs )
 			{
 				var id = $"ep_{slug}";
 				var localFile = _endpointFiles.FirstOrDefault( f => Path.GetFileNameWithoutExtension( f ) == slug );
 				var hasLocal = localFile != null;
+				var deprecated = hasLocal && IsEndpointDeprecated( localFile );
 				var info = hasLocal ? GetEndpointInfo( localFile ) : "remote only";
-
+				var capturedSlug = slug;
 				DrawResourceRow( ref y, pad, w, $"{slug}.json", info, id,
 					hasLocal ? () => PushItem( id ) : null,
-					() => PullItem( id ) );
+					() => PullItem( id ),
+					deprecated ? null : () => TestResultsWindow.OpenAndRun( capturedSlug ),
+					deprecated );
 			}
 		}
-		else
+		else if ( allSlugs.Count == 0 )
 		{
 			Paint.SetDefaultFont( size: 10 );
 			Paint.SetPen( Color.White.WithAlpha( 0.3f ) );
@@ -216,27 +247,23 @@ public class SyncToolWindow : DockWindow
 		DrawSeparator( ref y, w, pad );
 
 		// ── Collections ──
-		var localColNames = _collectionFiles.Select( f => Path.GetFileNameWithoutExtension( f ) ).ToHashSet();
-		var remoteColNames = GetRemoteCollectionNames();
-		var allColNames = new HashSet<string>( localColNames );
-		foreach ( var n in remoteColNames ) allColNames.Add( n );
+		var syncedColNames = allColNames
+			.Where( n => !_hasCheckedRemote || GetItemStatus( $"col_{n}" ) == SyncStatus.InSync || GetItemStatus( $"col_{n}" ) == SyncStatus.Unknown )
+			.OrderBy( n => n ).ToList();
 
 		DrawSectionHeader( ref y, pad, w, $"COLLECTIONS ({allColNames.Count})" );
-
-		if ( allColNames.Count > 0 )
+		if ( syncedColNames.Count > 0 )
 		{
-			foreach ( var colName in allColNames.OrderBy( n => n ) )
+			foreach ( var colName in syncedColNames )
 			{
 				var id = $"col_{colName}";
 				var hasLocal = localColNames.Contains( colName );
-				var info = hasLocal ? "schema" : "remote only";
-
-				DrawResourceRow( ref y, pad, w, $"{colName}.json", info, id,
+				DrawResourceRow( ref y, pad, w, $"{colName}.json", hasLocal ? "schema" : "remote only", id,
 					hasLocal ? () => PushItem( id ) : null,
 					() => PullItem( id ) );
 			}
 		}
-		else
+		else if ( allColNames.Count == 0 )
 		{
 			Paint.SetDefaultFont( size: 10 );
 			Paint.SetPen( Color.White.WithAlpha( 0.3f ) );
@@ -247,27 +274,24 @@ public class SyncToolWindow : DockWindow
 		DrawSeparator( ref y, w, pad );
 
 		// ── Workflows ──
-		var localWfIds = _workflowFiles.Select( f => Path.GetFileNameWithoutExtension( f ) ).ToHashSet();
-		var remoteWfIds = GetRemoteWorkflowIds();
-		var allWfIds = new HashSet<string>( localWfIds );
-		foreach ( var id2 in remoteWfIds ) allWfIds.Add( id2 );
+		var syncedWfIds = allWfIds
+			.Where( id2 => !_hasCheckedRemote || GetItemStatus( $"wf_{id2}" ) == SyncStatus.InSync || GetItemStatus( $"wf_{id2}" ) == SyncStatus.Unknown )
+			.OrderBy( n => n ).ToList();
 
 		DrawSectionHeader( ref y, pad, w, $"WORKFLOWS ({allWfIds.Count})" );
-
-		if ( allWfIds.Count > 0 )
+		if ( syncedWfIds.Count > 0 )
 		{
-			foreach ( var wfId in allWfIds.OrderBy( n => n ) )
+			foreach ( var wfId in syncedWfIds )
 			{
 				var itemId = $"wf_{wfId}";
 				var hasLocal = localWfIds.Contains( wfId );
 				var info = hasLocal ? GetWorkflowInfo( _workflowFiles.FirstOrDefault( f => Path.GetFileNameWithoutExtension( f ) == wfId ) ) : "remote only";
-
 				DrawResourceRow( ref y, pad, w, $"{wfId}.json", info, itemId,
 					hasLocal ? () => PushItem( itemId ) : null,
 					() => PullItem( itemId ) );
 			}
 		}
-		else
+		else if ( allWfIds.Count == 0 )
 		{
 			Paint.SetDefaultFont( size: 10 );
 			Paint.SetPen( Color.White.WithAlpha( 0.3f ) );
@@ -275,6 +299,7 @@ public class SyncToolWindow : DockWindow
 			y += 22;
 		}
 
+		y += 8;
 		DrawSeparator( ref y, w, pad );
 
 		// ── Status bar ──
@@ -417,11 +442,11 @@ public class SyncToolWindow : DockWindow
 		if ( SyncToolConfig.IsValid )
 		{
 			var btnW2 = 70f;
+			var testAllW = 65f;
 			var pushAllRect = new Rect( pad + w - btnW2, y, btnW2, 22 );
+			var testAllRect = new Rect( pad + w - btnW2 - 4 - testAllW, y, testAllW, 22 );
 			DrawSmallButton( pushAllRect, "Push All", Color.Green, "push_all", () => _ = PushAll() );
-
-			var testAllRect = new Rect( pad + w - btnW2 * 2 - 6, y, btnW2, 22 );
-			DrawSmallButton( testAllRect, "Test All", Color.Yellow, "test_all", () => TestResultsWindow.OpenAndRun() );
+			DrawSmallButton( testAllRect, "Test All", Color.Cyan, "test_all", () => TestResultsWindow.OpenAndRun() );
 		}
 		y += 30;
 
@@ -506,7 +531,7 @@ public class SyncToolWindow : DockWindow
 	}
 
 	private void DrawResourceRow( ref float y, float pad, float w, string name, string info, string id,
-		Action pushAction, Action pullAction )
+		Action pushAction, Action pullAction, Action testAction = null, bool deprecated = false )
 	{
 		var rowH = 28f;
 		var btnW = 48f;
@@ -591,12 +616,30 @@ public class SyncToolWindow : DockWindow
 		// Calculate right-side button area width
 		var rightBtnsW = 4f;
 		if ( pushAction != null ) rightBtnsW += btnW + 4;
-		if ( id.StartsWith( "ep_" ) ) rightBtnsW += 38 + 4; // test button
+		if ( testAction != null ) rightBtnsW += btnW + 4;
 
 		Paint.SetDefaultFont( size: 10 );
-		Paint.SetPen( Color.White.WithAlpha( 0.9f ) );
+		Paint.SetPen( deprecated ? Color.White.WithAlpha( 0.4f ) : Color.White.WithAlpha( 0.9f ) );
 		var nameW = w - ( contentX - pad ) - rightBtnsW - 70;
 		Paint.DrawText( new Rect( contentX, y, nameW, rowH ), name, TextFlag.LeftCenter );
+
+		// Deprecated badge
+		if ( deprecated )
+		{
+			var depBadgeX = contentX + Paint.MeasureText( name ).x + 6;
+			Paint.SetDefaultFont( size: 7 );
+
+			var depText = "deprecated";
+			var depTextW = Paint.MeasureText( depText ).x + 8;
+			var depBadgeRect = new Rect( depBadgeX, y + ( rowH - 14 ) / 2, depTextW, 14 );
+
+			Paint.SetBrush( new Color( 0.96f, 0.62f, 0.04f, 0.12f ) );
+			Paint.SetPen( new Color( 0.96f, 0.62f, 0.04f, 0.25f ) );
+			Paint.DrawRect( depBadgeRect, 3 );
+
+			Paint.SetPen( new Color( 0.96f, 0.62f, 0.04f, 0.7f ) );
+			Paint.DrawText( depBadgeRect, depText, TextFlag.Center );
+		}
 
 		// Status badge (right of name, before buttons)
 		if ( hasStatusBadge && !hasResult )
@@ -620,23 +663,20 @@ public class SyncToolWindow : DockWindow
 			}
 		}
 
-		// Push + Test buttons — RIGHT side
+		// Test button — RIGHT side, before Push
 		var rightX = pad + w - 4;
 		if ( pushAction != null )
 		{
 			rightX -= btnW;
 			var pushRect = new Rect( rightX, btnY, btnW, btnH );
 			DrawSmallButton( pushRect, "Push", Color.White, $"push_{id}", pushAction );
+			rightX -= 4;
 		}
-
-		// Test button (endpoints only)
-		if ( id.StartsWith( "ep_" ) )
+		if ( testAction != null )
 		{
-			var testW = 38f;
-			rightX -= testW + 4;
-			var testRect = new Rect( rightX, btnY, testW, btnH );
-			var slug = id[3..];
-			DrawSmallButton( testRect, "Test", Color.Yellow, $"test_{id}", () => TestResultsWindow.OpenAndRun( slug ) );
+			rightX -= btnW;
+			var testRect = new Rect( rightX, btnY, btnW, btnH );
+			DrawSmallButton( testRect, "Test", Color.Cyan, $"test_{id}", _busy ? null : testAction );
 		}
 
 		y += rowH + 1;
@@ -910,6 +950,62 @@ public class SyncToolWindow : DockWindow
 		return _items.Any( kv => kv.Key.StartsWith( idPrefix ) && kv.Value.RemoteDiffers );
 	}
 
+	private SyncStatus GetItemStatus( string id )
+	{
+		return _items.TryGetValue( id, out var s ) ? s.Status : SyncStatus.Unknown;
+	}
+
+	/// <summary>
+	/// Draws a row in the CHANGES section — reconstructs push/pull actions from the item id prefix.
+	/// </summary>
+	private void DrawChangedItemRow( ref float y, float pad, float w, string id )
+	{
+		string name, info;
+		Action pushAction, pullAction;
+		Action testAction = null;
+
+		bool deprecated = false;
+
+		if ( id.StartsWith( "ep_" ) )
+		{
+			var slug = id.Substring( 3 );
+			var localFile = _endpointFiles.FirstOrDefault( f => Path.GetFileNameWithoutExtension( f ) == slug );
+			var hasLocal = localFile != null;
+			deprecated = hasLocal && IsEndpointDeprecated( localFile );
+			name = $"{slug}.json";
+			info = hasLocal ? GetEndpointInfo( localFile ) : "remote only";
+			var capturedId = id;
+			var capturedSlug = slug;
+			pushAction = hasLocal ? () => PushItem( capturedId ) : null;
+			pullAction = () => PullItem( capturedId );
+			testAction = deprecated ? null : () => TestResultsWindow.OpenAndRun( capturedSlug );
+		}
+		else if ( id.StartsWith( "col_" ) )
+		{
+			var colName = id.Substring( 4 );
+			var hasLocal = _collectionFiles.Any( f => Path.GetFileNameWithoutExtension( f ) == colName );
+			name = $"{colName}.json";
+			info = hasLocal ? "schema" : "remote only";
+			var capturedId = id;
+			pushAction = hasLocal ? () => PushItem( capturedId ) : null;
+			pullAction = () => PullItem( capturedId );
+		}
+		else if ( id.StartsWith( "wf_" ) )
+		{
+			var wfId = id.Substring( 3 );
+			var localFile = _workflowFiles.FirstOrDefault( f => Path.GetFileNameWithoutExtension( f ) == wfId );
+			var hasLocal = localFile != null;
+			name = $"{wfId}.json";
+			info = hasLocal ? GetWorkflowInfo( localFile ) : "remote only";
+			var capturedId = id;
+			pushAction = hasLocal ? () => PushItem( capturedId ) : null;
+			pullAction = () => PullItem( capturedId );
+		}
+		else return;
+
+		DrawResourceRow( ref y, pad, w, name, info, id, pushAction, pullAction, testAction, deprecated );
+	}
+
 	private List<string> GetRemoteEndpointSlugs()
 	{
 		if ( !_remoteEndpoints.HasValue ) return new List<string>();
@@ -969,6 +1065,17 @@ public class SyncToolWindow : DockWindow
 			return ep.TryGetProperty( "method", out var m ) ? m.GetString() : "POST";
 		}
 		catch { return ""; }
+	}
+
+	private bool IsEndpointDeprecated( string filePath )
+	{
+		try
+		{
+			var text = File.ReadAllText( filePath );
+			var ep = JsonSerializer.Deserialize<JsonElement>( text );
+			return ep.TryGetProperty( "_deprecated", out var d ) && d.GetBoolean();
+		}
+		catch { return false; }
 	}
 
 	private void SetItemState( string id, string result = null, bool? remoteDiffers = null,
@@ -1055,7 +1162,7 @@ public class SyncToolWindow : DockWindow
 			if ( !string.IsNullOrEmpty( wfId ) ) localWfById[wfId] = wf;
 		}
 
-		// ── Fetch all 3 resource types in parallel ──
+		// ── Fetch endpoints, collections, workflows in parallel ──
 		var remoteEpsTask = SyncToolApi.GetEndpoints();
 		var remoteColsTask = SyncToolApi.GetCollections();
 		var remoteWfsTask = SyncToolApi.GetWorkflows();
@@ -1287,7 +1394,7 @@ public class SyncToolWindow : DockWindow
 			}
 		}
 
-		_hasCheckedRemote = true;
+			_hasCheckedRemote = true;
 		var parts = new List<string>();
 		if ( diffs > 0 ) parts.Add( $"{diffs} remote diff(s)" );
 		if ( localOnlyCount > 0 ) parts.Add( $"{localOnlyCount} local only" );
@@ -1674,6 +1781,7 @@ public class SyncToolWindow : DockWindow
 		var label = id.StartsWith( "ep_" ) ? $"endpoint '{id[3..]}'"
 			: id.StartsWith( "col_" ) ? $"collection '{id[4..]}'"
 			: id.StartsWith( "wf_" ) ? $"workflow '{id[3..]}'"
+			: id.StartsWith( "test_" ) ? $"test '{id[5..]}'"
 			: "resource";
 
 		if ( state.RemoteDiffers )
@@ -1785,6 +1893,7 @@ public class SyncToolWindow : DockWindow
 		var label = id.StartsWith( "ep_" ) ? $"endpoint '{id[3..]}'"
 			: id.StartsWith( "col_" ) ? $"collection '{id[4..]}'"
 			: id.StartsWith( "wf_" ) ? $"workflow '{id[3..]}'"
+			: id.StartsWith( "test_" ) ? $"test '{id[5..]}'"
 			: "resource";
 		_items.TryGetValue( id, out var pullState );
 
@@ -2332,6 +2441,14 @@ public class SyncToolWindow : DockWindow
 				if ( !Directory.Exists( dir ) ) Directory.CreateDirectory( dir );
 				File.WriteAllText( Path.Combine( dir, $"{wfId}.json" ), json );
 			}
+			else if ( id.StartsWith( "test_" ) )
+			{
+				var testId = id[5..];
+				var dir = SyncToolConfig.Abs( SyncToolConfig.TestsPath );
+				if ( !Directory.Exists( dir ) ) Directory.CreateDirectory( dir );
+				File.WriteAllText( Path.Combine( dir, $"{testId}.json" ), json );
+			}
+
 			SetItemState( id, result: "OK", remoteDiffers: false, status: SyncStatus.InSync, diffSummary: "" );
 			_status = $"Merged server defaults for {id}";
 			RefreshFileList();
