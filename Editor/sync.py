@@ -1,15 +1,15 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 """
 sync.py — Push local Network Storage data (collections, endpoints, workflows)
 to the sbox.cool management API, and generate collection JSON from C# data files.
 
 This script lives inside the network-storage library and is invoked by the
-editor Sync Tool. It requires --project-root to locate the game project.
+editor Sync Tool. It requires —project-root to locate the game project.
 
 Usage (from the editor, project root is passed automatically):
-    python <lib>/Editor/sync.py --project-root <dir>                  # push everything
-    python <lib>/Editor/sync.py --project-root <dir> --generate       # generate from C#
-    python <lib>/Editor/sync.py --project-root <dir> --validate       # check credentials
+    python <lib>/Editor/sync.py —project-root <dir>                  # push everything
+    python <lib>/Editor/sync.py —project-root <dir> —generate       # generate from C#
+    python <lib>/Editor/sync.py —project-root <dir> —validate       # check credentials
 """
 
 import sys as _sys
@@ -24,11 +24,12 @@ import json
 import os
 import re
 import sys
+import traceback
 from pathlib import Path
 from urllib.request import Request, urlopen
 from urllib.error import HTTPError
 
-# ── Paths (set in main() from --project-root) ────────────────────
+# ── Paths (set in main() from —project-root) ────────────────────
 
 PROJECT_ROOT = None
 NS_DIR = None
@@ -61,6 +62,15 @@ def detect_data_folder(project_root):
         except Exception:
             pass
     return "Network Storage"
+
+def print_error(message):
+    """Emit an error to stderr so the editor can surface it."""
+    print(f"ERROR: {message}", file=sys.stderr)
+
+def print_exception(context, exc):
+    """Emit a compact error plus traceback to stderr."""
+    print_error(f"{context}: {exc}")
+    traceback.print_exc(file=sys.stderr)
 
 # ── Config ──────────────────────────────────────────────────────────
 
@@ -268,7 +278,9 @@ def parse_cs_args(args_str):
     current = ''
     in_string = False
     escape = False
-    depth = 0
+    paren_depth = 0
+    brace_depth = 0
+    bracket_depth = 0
     for ch in args_str:
         if escape:
             current += ch
@@ -284,12 +296,24 @@ def parse_cs_args(args_str):
             continue
         if not in_string:
             if ch == '(':
-                depth += 1
+                paren_depth += 1
                 current += ch
             elif ch == ')':
-                depth -= 1
+                paren_depth -= 1
                 current += ch
-            elif ch == ',' and depth == 0:
+            elif ch == '{':
+                brace_depth += 1
+                current += ch
+            elif ch == '}':
+                brace_depth -= 1
+                current += ch
+            elif ch == '[':
+                bracket_depth += 1
+                current += ch
+            elif ch == ']':
+                bracket_depth -= 1
+                current += ch
+            elif ch == ',' and paren_depth == 0 and brace_depth == 0 and bracket_depth == 0:
                 args.append(current.strip())
                 current = ''
             else:
@@ -303,6 +327,10 @@ def parse_cs_args(args_str):
 def convert_cs_value(raw, field_type=None):
     """Convert a raw C# literal to a Python value."""
     raw = raw.strip()
+    if raw.startswith('new ') and '{' in raw and raw.endswith('}'):
+        inner = raw[raw.find('{') + 1:-1].strip()
+        values = [convert_cs_value(part) for part in parse_cs_args(inner)] if inner else []
+        return ','.join(str(value) for value in values)
     if raw.startswith('"') and raw.endswith('"'):
         return raw[1:-1]
     if '.' in raw and not raw.startswith('-'):
@@ -327,11 +355,34 @@ def parse_cs_records(content):
         for param in re.split(r',(?![^<]*>)', m.group(2)):
             param = param.strip()
             if not param: continue
+            default_raw = None
+            if '=' in param:
+                param, default_raw = [part.strip() for part in param.split('=', 1)]
             parts = param.rsplit(None, 1)
             if len(parts) == 2:
-                fields.append({'name': parts[1], 'type': parts[0]})
+                field = {'name': parts[1], 'type': parts[0]}
+                if default_raw is not None:
+                    field['default'] = default_raw
+                fields.append(field)
         records[name] = fields
     return records
+
+def build_row_from_args(fields, args):
+    """Build a row from constructor args, applying trailing record defaults when omitted."""
+    required_fields = [field for field in fields if 'default' not in field]
+    if len(args) < len(required_fields) or len(args) > len(fields):
+        return None
+
+    row = {}
+    for i, field in enumerate(fields):
+        key = pascal_to_camel(field['name'])
+        if i < len(args):
+            row[key] = convert_cs_value(args[i], field['type'])
+        elif 'default' in field:
+            row[key] = convert_cs_value(field['default'], field['type'])
+        else:
+            return None
+    return row
 
 def parse_named_instances(content, record_name, fields):
     """Find static readonly RecordType Name = new(...); declarations and return {VarName: row_dict}."""
@@ -344,11 +395,8 @@ def parse_named_instances(content, record_name, fields):
     for m in re.finditer(pattern, content, re.DOTALL):
         var_name = m.group(1)
         args = parse_cs_args(m.group(2))
-        if len(args) == len(fields):
-            row = {}
-            for i, field in enumerate(fields):
-                key = pascal_to_camel(field['name'])
-                row[key] = convert_cs_value(args[i], field['type'])
+        row = build_row_from_args(fields, args)
+        if row is not None:
             instances[var_name] = row
     return instances
 
@@ -372,11 +420,8 @@ def parse_cs_arrays(content, records):
             # Try parsing new(...) constructor calls first
             for row_m in re.finditer(r'new\s*(?:' + re.escape(record_name) + r')?\s*\(((?:"(?:[^"\\]|\\.)*"|[^)])*)\)', block, re.DOTALL):
                 args = parse_cs_args(row_m.group(1))
-                if len(args) == len(fields):
-                    row = {}
-                    for i, field in enumerate(fields):
-                        key = pascal_to_camel(field['name'])
-                        row[key] = convert_cs_value(args[i], field['type'])
+                row = build_row_from_args(fields, args)
+                if row is not None:
                     rows.append(row)
 
             # If no constructor calls found, try resolving variable references
@@ -408,7 +453,12 @@ def parse_cs_arrays(content, records):
                 columns.append({'key': 'id', 'type': 'string'})
             for field in fields:
                 key = pascal_to_camel(field['name'])
-                col_type = 'number' if field['type'] in ('int', 'long', 'float', 'double', 'decimal') else 'string'
+                if field['type'] in ('bool', 'boolean'):
+                    col_type = 'boolean'
+                elif field['type'] in ('int', 'long', 'float', 'double', 'decimal'):
+                    col_type = 'number'
+                else:
+                    col_type = 'string'
                 columns.append({'key': key, 'type': col_type})
 
             # Add id values if missing
@@ -467,74 +517,82 @@ def generate_collection(mapping):
     cs_path = PROJECT_ROOT / mapping['csFile'].replace('\\', '/')
     collection_name = mapping['collection']
 
-    cs_files = sorted(cs_path.glob('*.cs')) if cs_path.is_dir() else [cs_path] if cs_path.is_file() else []
-    if not cs_files:
-        print(f"  WARNING: No .cs files found at {cs_path}")
+    try:
+        cs_files = sorted(cs_path.glob('*.cs')) if cs_path.is_dir() else [cs_path] if cs_path.is_file() else []
+        if not cs_files:
+            print_error(f"Generate failed for '{collection_name}': no .cs files found at {cs_path}")
+            return False
+
+        all_tables = []
+        for cs_file in cs_files:
+            print(f"    Parsing {cs_file.name}...")
+            try:
+                content = cs_file.read_text(encoding='utf-8')
+                records = parse_cs_records(content)
+                all_tables.extend(parse_cs_arrays(content, records))
+                all_tables.extend(parse_cs_tuple_arrays(content))
+            except Exception as exc:
+                print_exception(f"Failed to parse {cs_file}", exc)
+                return False
+
+        if not all_tables:
+            print_error(f"Generate failed for '{collection_name}': no data tables found in {mapping['csFile']}")
+            return False
+
+        # Load existing collection JSON to preserve metadata
+        collection_path = COLLECTIONS_DIR / f"{collection_name}.json"
+        existing = {}
+        if collection_path.exists():
+            with open(collection_path, encoding='utf-8') as f:
+                existing = json.load(f)
+
+        output = {
+            "name": existing.get("name", collection_name),
+            "description": existing.get("description", mapping.get("description", f"Generated from {mapping['csFile']}")),
+        }
+        for key in ["collectionType", "accessMode", "maxRecords", "allowRecordDelete",
+                    "requireSaveVersion", "webhookOnRateLimit", "rateLimitAction", "rateLimits", "schema"]:
+            if key in existing:
+                output[key] = existing[key]
+        if "constants" in existing:
+            output["constants"] = existing["constants"]
+        output["tables"] = all_tables
+
+        COLLECTIONS_DIR.mkdir(parents=True, exist_ok=True)
+        with open(collection_path, 'w', encoding='utf-8') as f:
+            json.dump(output, f, indent=2, ensure_ascii=False)
+
+        print(f"  Generated {collection_name}.json — {len(all_tables)} table(s):")
+        for t in all_tables:
+            print(f"    - {t['id']}: {len(t['rows'])} rows, {len(t['columns'])} columns")
+        return True
+    except Exception as exc:
+        print_exception(f"Failed to generate collection '{collection_name}'", exc)
         return False
-
-    all_tables = []
-    for cs_file in cs_files:
-        print(f"    Parsing {cs_file.name}...")
-        content = cs_file.read_text(encoding='utf-8')
-        records = parse_cs_records(content)
-        all_tables.extend(parse_cs_arrays(content, records))
-        all_tables.extend(parse_cs_tuple_arrays(content))
-
-    if not all_tables:
-        print(f"  WARNING: No data tables found in {mapping['csFile']}")
-        return False
-
-    # Load existing collection JSON to preserve metadata
-    collection_path = COLLECTIONS_DIR / f"{collection_name}.json"
-    existing = {}
-    if collection_path.exists():
-        with open(collection_path, encoding='utf-8') as f:
-            existing = json.load(f)
-
-    output = {
-        "name": existing.get("name", collection_name),
-        "description": existing.get("description", mapping.get("description", f"Generated from {mapping['csFile']}")),
-    }
-    for key in ["collectionType", "accessMode", "maxRecords", "allowRecordDelete",
-                "requireSaveVersion", "webhookOnRateLimit", "rateLimitAction", "rateLimits", "schema"]:
-        if key in existing:
-            output[key] = existing[key]
-    if "constants" in existing:
-        output["constants"] = existing["constants"]
-    output["tables"] = all_tables
-
-    COLLECTIONS_DIR.mkdir(parents=True, exist_ok=True)
-    with open(collection_path, 'w', encoding='utf-8') as f:
-        json.dump(output, f, indent=2, ensure_ascii=False)
-
-    print(f"  Generated {collection_name}.json — {len(all_tables)} table(s):")
-    for t in all_tables:
-        print(f"    - {t['id']}: {len(t['rows'])} rows, {len(t['columns'])} columns")
-    return True
 
 
 def generate_collections(collection_filter=None):
     """Generate collection JSON from C# sources using configured sync mappings."""
     public_cfg_path = CONFIG_DIR / "public" / "projectConfig.json"
     if not public_cfg_path.exists():
-        print("ERROR: projectConfig.json not found")
-        sys.exit(1)
+        print_error(f"projectConfig.json not found at {public_cfg_path}")
+        return False
 
     with open(public_cfg_path, encoding='utf-8') as f:
         public_cfg = json.load(f)
 
     mappings = public_cfg.get("syncMappings", [])
     if not mappings:
-        print("No sync mappings configured in projectConfig.json")
-        print('Add "syncMappings" to config, e.g.:')
-        print('  "syncMappings": [{"csFile": "Code/Fishing", "collection": "game_values"}]')
-        return
+        print_error("No sync mappings configured in projectConfig.json")
+        print('Add "syncMappings" to config, e.g.:', file=sys.stderr)
+        print('  "syncMappings": [{"csFile": "Code/Fishing", "collection": "game_values"}]', file=sys.stderr)
+        return False
 
     if collection_filter:
         mappings = [m for m in mappings if m.get("collection") == collection_filter]
         if not mappings:
-            print(f"No mapping found for collection '{collection_filter}'")
-            return
+            print_error(f"No sync mapping found for collection '{collection_filter}'")
+            return False
 
     ok = 0
     for mapping in mappings:
@@ -543,21 +601,25 @@ def generate_collections(collection_filter=None):
             ok += 1
 
     print(f"\nGenerated {ok}/{len(mappings)} collection(s)")
+    if ok != len(mappings):
+        print_error(f"Generation finished with failures ({ok}/{len(mappings)} succeeded)")
+        return False
+    return True
 
 
 # ── Main ─────────────────────────────────────────────────────────
 
 def main():
     parser = argparse.ArgumentParser(description="Sync Network Storage data to sbox.cool")
-    parser.add_argument("--project-root", type=str, required=True,
+    parser.add_argument("—project-root", type=str, required=True,
                         help="Absolute path to the game project root directory")
-    parser.add_argument("--collections", action="store_true", help="Push collections only")
-    parser.add_argument("--endpoints", action="store_true", help="Push endpoints only")
-    parser.add_argument("--workflows", action="store_true", help="Push workflows only")
-    parser.add_argument("--validate", action="store_true", help="Validate credentials only")
-    parser.add_argument("--dry-run", action="store_true", help="Show what would be pushed without pushing")
-    parser.add_argument("--generate", action="store_true", help="Generate collection JSON from C# data files")
-    parser.add_argument("--collection", type=str, help="Filter to a specific collection name (with --generate)")
+    parser.add_argument("—collections", action="store_true", help="Push collections only")
+    parser.add_argument("—endpoints", action="store_true", help="Push endpoints only")
+    parser.add_argument("—workflows", action="store_true", help="Push workflows only")
+    parser.add_argument("—validate", action="store_true", help="Validate credentials only")
+    parser.add_argument("—dry-run", action="store_true", help="Show what would be pushed without pushing")
+    parser.add_argument("—generate", action="store_true", help="Generate collection JSON from C# data files")
+    parser.add_argument("—collection", type=str, help="Filter to a specific collection name (with —generate)")
     args = parser.parse_args()
 
     # Initialize paths from project root
@@ -571,8 +633,7 @@ def main():
 
     if args.generate:
         print("── Generate Collection Data ──")
-        generate_collections(args.collection)
-        return
+        sys.exit(0 if generate_collections(args.collection) else 1)
 
     config = load_config()
     print(f"Project ID:   {config['projectId']}")
@@ -607,4 +668,8 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as exc:
+        print_exception("Unhandled sync.py failure", exc)
+        sys.exit(1)

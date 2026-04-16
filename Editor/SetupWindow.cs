@@ -519,7 +519,7 @@ public class SetupWindow : DockWindow
 			_status = "Secret key uses an old format. Generate a new key at sbox.cool.";
 			_statusColor = "red";
 			_testProjectId = "Not checked";
-			_testSecretKey = "Old format -- regenerate on dashboard";
+			_testSecretKey = "Old format — regenerate on dashboard";
 			_testPublicKey = "Not checked";
 			Update();
 			return;

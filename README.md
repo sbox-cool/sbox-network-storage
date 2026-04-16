@@ -120,7 +120,7 @@ See the [Examples/](Examples/) folder for complete working patterns.
 ### NetworkStorage (static)
 
 | Method | Description |
-|--------|-------------|
+|————|——————-|
 | `Configure(projectId, apiKey)` | Set credentials. Call once at startup. |
 | `CallEndpoint(slug, input?)` | Call a server endpoint by slug. Returns `JsonElement?`. |
 | `GetGameValues()` | Fetch all game values (constants + tables). Returns `JsonElement?`. |
@@ -219,7 +219,7 @@ The Sync Tool lets you manage your sboxcool.com project data as local JSON files
 ### Status Indicators
 
 | Icon | Meaning |
-|------|---------|
+|———|————-|
 | ✓ | In sync — local matches remote |
 | ▲ | Local only — exists locally but not on server |
 | ▼ | Remote only — exists on server but not locally |
@@ -252,7 +252,7 @@ Editor/
 Configure in **Editor > Network Storage > Setup** under "Data Source":
 
 | Mode | Behavior |
-|------|----------|
+|———|—————|
 | **API + Fallback** (default) | Try API first, fall back to local JSON files if unavailable |
 | **API Only** | Always fetch from API, no fallback |
 | **JSON Only** | Read from local JSON files only, no API calls |
@@ -285,7 +285,7 @@ If your MCP client doesn't auto-discover `.mcp.json`, add this to your MCP confi
   "mcpServers": {
     "sbox-network-storage": {
       "command": "bash",
-      "args": ["-c", "cd mcp && bun install --silent && cd .. && bun run mcp/index.ts"]
+      "args": ["-c", "cd mcp && bun install —silent && cd .. && bun run mcp/index.ts"]
     }
   }
 }
@@ -296,7 +296,7 @@ Set the working directory to this repository root.
 ### Available Tools
 
 | Tool | Description |
-|------|-------------|
+|———|——————-|
 | `get_documentation` | Retrieve docs by topic (collections, endpoints, workflows, setup, errors, etc.) |
 | `validate_collection` | Validate a collection JSON for correct schema and naming |
 | `validate_endpoint` | Validate an endpoint JSON — steps, operators, templates, constraints |

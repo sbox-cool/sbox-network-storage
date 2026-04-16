@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -18,6 +18,7 @@ using Editor;
 public class SyncToolWindow : DockWindow
 {
 	private string _status = "Ready";
+	private bool _statusIsError;
 	private bool _busy;
 	private string _busyItem;
 	private Dictionary<string, ItemState> _items = new();
@@ -90,6 +91,61 @@ public class SyncToolWindow : DockWindow
 	{
 		var window = new SyncToolWindow();
 		window.Show();
+	}
+
+	private void SetStatus( string message, bool isError = false )
+	{
+		_status = message;
+		_statusIsError = isError;
+	}
+
+	private void ShowGenerateFailure( string message, string detail = null )
+	{
+		SetStatus( message, isError: true );
+		MessageDialog.Show( "Generate Failed", message, detail );
+	}
+
+	private static string ExtractGenerateFailureSummary( string stdout, string stderr, int exitCode )
+	{
+		foreach ( var source in new[] { stderr, stdout } )
+		{
+			if ( string.IsNullOrWhiteSpace( source ) )
+				continue;
+
+			var lines = source
+				.Replace( "\r", "" )
+				.Split( '\n' )
+				.Select( x => x.Trim() )
+				.Where( x => !string.IsNullOrWhiteSpace( x ) )
+				.ToArray();
+
+			var explicitError = lines.FirstOrDefault( x => x.StartsWith( "ERROR:", StringComparison.OrdinalIgnoreCase ) );
+			if ( !string.IsNullOrWhiteSpace( explicitError ) )
+				return explicitError["ERROR:".Length..].Trim();
+
+			var usefulLine = lines.FirstOrDefault( x =>
+				!x.StartsWith( "===", StringComparison.Ordinal ) &&
+				!x.StartsWith( "Project root:", StringComparison.OrdinalIgnoreCase ) &&
+				!x.StartsWith( "Data dir:", StringComparison.OrdinalIgnoreCase ) );
+
+			if ( !string.IsNullOrWhiteSpace( usefulLine ) )
+				return usefulLine;
+		}
+
+		return $"Generation failed (exit {exitCode})";
+	}
+
+	private static string BuildGenerateFailureDetail( string stdout, string stderr )
+	{
+		var detail = !string.IsNullOrWhiteSpace( stderr ) ? stderr.Trim() : stdout.Trim();
+		if ( string.IsNullOrWhiteSpace( detail ) )
+			return null;
+
+		const int maxLength = 4000;
+		if ( detail.Length > maxLength )
+			detail = detail[..maxLength] + "\n...";
+
+		return detail;
 	}
 
 	private void RefreshFileList()
@@ -304,7 +360,7 @@ public class SyncToolWindow : DockWindow
 
 		// ── Status bar ──
 		Paint.SetDefaultFont( size: 9 );
-		Paint.SetPen( _busy ? Color.Yellow : Color.White.WithAlpha( 0.4f ) );
+		Paint.SetPen( _busy ? Color.Yellow : _statusIsError ? Color.Red.WithAlpha( 0.9f ) : Color.White.WithAlpha( 0.4f ) );
 		Paint.DrawText( new Rect( pad, y, w, 16 ), _status, TextFlag.LeftCenter );
 		y += 22;
 
@@ -820,7 +876,7 @@ public class SyncToolWindow : DockWindow
 		if ( _generateBusy ) return;
 		_generateBusy = true;
 		_busyItem = collectionFilter != null ? $"gen_{collectionFilter}" : "generate_all";
-		_status = "Generating collection data from C# sources...";
+		SetStatus( "Generating collection data from C# sources..." );
 		Update();
 
 		try
@@ -828,14 +884,14 @@ public class SyncToolWindow : DockWindow
 			var syncPy = SyncToolConfig.Abs( SyncToolConfig.SyncPyPath );
 			if ( !File.Exists( syncPy ) )
 			{
-				_status = $"sync.py not found at {SyncToolConfig.SyncPyPath}";
+				ShowGenerateFailure( $"sync.py not found at {SyncToolConfig.SyncPyPath}" );
 				return;
 			}
 
 			var projectRoot = SyncToolConfig.ProjectRoot;
-			var args = $"\"{syncPy}\" --project-root \"{projectRoot}\" --generate";
+			var args = $"\"{syncPy}\" —project-root \"{projectRoot}\" —generate";
 			if ( collectionFilter != null )
-				args += $" --collection \"{collectionFilter}\"";
+				args += $" —collection \"{collectionFilter}\"";
 
 			var psi = new ProcessStartInfo
 			{
@@ -851,7 +907,7 @@ public class SyncToolWindow : DockWindow
 			var process = Process.Start( psi );
 			if ( process == null )
 			{
-				_status = "Failed to start Python — is it installed?";
+				ShowGenerateFailure( "Failed to start Python. Check that Python is installed and on PATH." );
 				return;
 			}
 
@@ -865,13 +921,22 @@ public class SyncToolWindow : DockWindow
 			if ( !string.IsNullOrWhiteSpace( stderr ) )
 				Log.Warning( $"[SyncTool] sync.py errors:\n{stderr}" );
 
-			_status = process.ExitCode == 0 ? "Generation complete" : $"Generation failed (exit {process.ExitCode})";
-			RefreshFileList();
+			if ( process.ExitCode == 0 )
+			{
+				SetStatus( "Generation complete" );
+				RefreshFileList();
+			}
+			else
+			{
+				var summary = ExtractGenerateFailureSummary( stdout, stderr, process.ExitCode );
+				var detail = BuildGenerateFailureDetail( stdout, stderr );
+				ShowGenerateFailure( summary, detail );
+			}
 		}
 		catch ( Exception ex )
 		{
-			_status = $"Generate failed: {ex.Message}";
 			Log.Warning( $"[SyncTool] Generate error: {ex.Message}" );
+			ShowGenerateFailure( $"Generate failed: {ex.Message}" );
 		}
 		finally
 		{
@@ -1984,7 +2049,7 @@ public class SyncToolWindow : DockWindow
 	private static string GetPushFailDetail( string resource )
 	{
 		if ( SyncToolApi.LastErrorCode == "KEY_UPGRADE_REQUIRED" )
-			return "Key uses old format -- regenerate at sbox.cool";
+			return "Key uses old format — regenerate at sbox.cool";
 		if ( SyncToolApi.LastErrorCode == "FORBIDDEN" )
 			return $"No write permission for {resource}";
 		if ( !string.IsNullOrEmpty( SyncToolApi.LastErrorMessage ) )

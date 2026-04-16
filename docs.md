@@ -14,7 +14,7 @@ All documentation for this project is hosted externally. Use the **superdocs MCP
 The superdocs MCP server provides these tools relevant to Network Storage v3:
 
 | Tool | Description |
-|------|-------------|
+|———|——————-|
 | `get_network_storage_guide` | Complete NS v3 guide: setup, CallEndpoint/GetDocument/GetGameValues usage, endpoint JSON pipeline (read/condition/transform/write/lookup/filter steps), collections, game values, workflows, error codes, and production C# patterns. |
 | `get_endpoint_standards` | Best practices for designing endpoints. Covers anti-patterns (never trust client-supplied costs/rewards), correct patterns (lookup from Game Values), complete examples (shop, crafting, XP), and a quick reference. |
 | `get_networking_patterns` | Networking patterns and multiplayer architecture for s&box. |

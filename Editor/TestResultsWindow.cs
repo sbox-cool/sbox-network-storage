@@ -522,12 +522,12 @@ public class TestResultsWindow : DockWindow
 
 		foreach ( var entry in failed )
 		{
-			sb.AppendLine( "---" );
+			sb.AppendLine( "—-" );
 			sb.AppendLine();
 			sb.AppendLine( $"## FAIL — {entry.Name}" );
 			sb.AppendLine();
 			sb.AppendLine( $"| Field | Value |" );
-			sb.AppendLine( $"|-------|-------|" );
+			sb.AppendLine( $"|———-|———-|" );
 			sb.AppendLine( $"| **Endpoint** | `{entry.Method} {entry.Endpoint}` |" );
 			sb.AppendLine( $"| **Timing** | {entry.TimingMs}ms |" );
 			sb.AppendLine( $"| **Reason** | {entry.Reason ?? "—"} |" );
@@ -595,7 +595,7 @@ public class TestResultsWindow : DockWindow
 					sb.AppendLine();
 					sb.AppendLine( "### Step Trace" );
 					sb.AppendLine( "| Step | Type | Status | Result |" );
-					sb.AppendLine( "|------|------|--------|--------|" );
+					sb.AppendLine( "|———|———|————|————|" );
 					foreach ( var step in steps.EnumerateArray() )
 					{
 						var sid = step.TryGetProperty( "id", out var si ) ? si.GetString() : "?";

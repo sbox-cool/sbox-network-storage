@@ -35,7 +35,7 @@ public static class SyncToolApi
 
 		if ( !SyncToolConfig.IsValid )
 		{
-			Log.Warning( "[SyncTool] Config not valid -- load .env first" );
+			Log.Warning( "[SyncTool] Config not valid — load .env first" );
 			return null;
 		}
 

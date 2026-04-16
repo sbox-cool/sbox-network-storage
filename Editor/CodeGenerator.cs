@@ -126,7 +126,7 @@ public static class CodeGenerator
 		sb.AppendLine( "  They are regenerated every time you push from the Sync Tool." );
 		sb.AppendLine();
 		sb.AppendLine( "  HOW TO MAKE CHANGES" );
-		sb.AppendLine( "  -------------------" );
+		sb.AppendLine( "  —————————-" );
 		sb.AppendLine();
 		sb.AppendLine( "  1. Edit the source JSON files in your project's Editor/Network Storage/ folder:" );
 		sb.AppendLine();
@@ -144,7 +144,7 @@ public static class CodeGenerator
 		sb.AppendLine( "       Editor → Network Storage → Generate Code" );
 		sb.AppendLine();
 		sb.AppendLine( "  ARCHITECTURE" );
-		sb.AppendLine( "  ------------" );
+		sb.AppendLine( "  ——————" );
 		sb.AppendLine();
 		sb.AppendLine( "  Editor/Network Storage/       — Full backend configuration. Stored in your" );
 		sb.AppendLine( "                                  project repository for syncing with the" );
@@ -160,7 +160,7 @@ public static class CodeGenerator
 		sb.AppendLine( "                                  Read-only — regenerated on every sync." );
 		sb.AppendLine();
 		sb.AppendLine( "  USAGE EXAMPLES" );
-		sb.AppendLine( "  --------------" );
+		sb.AppendLine( "  ———————" );
 		sb.AppendLine();
 		sb.AppendLine( "  // Configure the client at startup (auto-generated credentials)" );
 		sb.AppendLine( "  NSConfig.EnsureConfigured();" );

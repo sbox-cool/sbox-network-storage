@@ -129,7 +129,7 @@ Collections define where and how your data is stored. Each collection is a JSON 
 ## Fields
 
 | Field | Type | Required | Description |
-|-------|------|----------|-------------|
+|———-|———|—————|——————-|
 | \`name\` | string | Yes | Collection identifier (lowercase alphanumeric + underscores, e.g. \`players\`, \`game_config\`) |
 | \`description\` | string | No | Human-readable description |
 | \`collectionType\` | string | No | \`per-steamid\` (one record per player) or \`global\` (shared data). Default: \`per-steamid\` |
@@ -194,7 +194,7 @@ Endpoints are server-side pipelines that your game calls via the API. Each endpo
 ## Fields
 
 | Field | Type | Required | Description |
-|-------|------|----------|-------------|
+|———-|———|—————|——————-|
 | \`slug\` | string | Yes | URL slug (lowercase alphanumeric + hyphens, e.g. \`mine-ore\`, \`sell-items\`) |
 | \`name\` | string | No | Human-readable name |
 | \`method\` | string | No | \`GET\` or \`POST\`. Default: \`POST\` |
@@ -245,7 +245,7 @@ Workflows are reusable validation/logic blocks that endpoints can reference. Eac
 ## Fields
 
 | Field | Type | Required | Description |
-|-------|------|----------|-------------|
+|———-|———|—————|——————-|
 | \`id\` | string | Yes | Workflow identifier (lowercase alphanumeric + hyphens) |
 | \`name\` | string | No | Human-readable name |
 | \`description\` | string | No | Description of what this workflow validates |
@@ -258,7 +258,7 @@ Workflows are reusable validation/logic blocks that endpoints can reference. Eac
 \`onFail\` can be a simple string (\`"error"\`) or a detailed object:
 
 | Field | Type | Default | Description |
-|-------|------|---------|-------------|
+|———-|———|————-|——————-|
 | \`reject\` | boolean | true | Short-circuit and return error to client |
 | \`errorCode\` | string | \`"CONDITION_FAILED"\` | Error code in response |
 | \`errorMessage\` | string | \`"Condition check failed."\` | Human-readable message (supports \`{{templates}}\`) |
@@ -304,7 +304,7 @@ Loads a record from a collection by key.
 \`\`\`
 
 | Field | Required | Description |
-|-------|----------|-------------|
+|———-|—————|——————-|
 | \`id\` | Yes | Variable name for the result (used as \`{{player.currency}}\`, etc.) |
 | \`collection\` | Yes | Collection name to read from |
 | \`key\` | Yes | Record key (supports \`{{templates}}\`) |
@@ -322,7 +322,7 @@ Persists changes using atomic operations. All writes are **deferred** until all 
 \`\`\`
 
 | Field | Required | Description |
-|-------|----------|-------------|
+|———-|—————|——————-|
 | \`id\` | Yes | Step identifier |
 | \`collection\` | Yes | Collection name to write to |
 | \`key\` | Yes | Record key (supports \`{{templates}}\`) |
@@ -340,7 +340,7 @@ Evaluates a math expression. Reference result as \`{{id}}\` (NOT \`{{id.result}}
 \`\`\`
 
 | Field | Required | Description |
-|-------|----------|-------------|
+|———-|—————|——————-|
 | \`id\` | Yes | Variable name for the result |
 | \`expression\` | Yes | Math expression with \`{{templates}}\`. Functions: floor, ceil, round, min, max, abs |
 
@@ -357,7 +357,7 @@ Checks a condition and rejects the request if it fails.
 \`\`\`
 
 | Field | Required | Description |
-|-------|----------|-------------|
+|———-|—————|——————-|
 | \`id\` | Yes | Step identifier |
 | \`check\` | Yes | Object with \`field\` (left-hand value), \`op\` (operator), \`value\` (right-hand value) |
 | \`onFail\` | Yes | Object with \`status\` (HTTP code), \`error\` (error code string), \`message\` (human-readable) |
@@ -376,7 +376,7 @@ Looks up a single row from a game values table.
 \`\`\`
 
 | Field | Required | Description |
-|-------|----------|-------------|
+|———-|—————|——————-|
 | \`id\` | Yes | Variable name for the matched row |
 | \`source\` | Yes | Data source (typically \`"values"\`) |
 | \`table\` | Yes | Table name |
@@ -392,7 +392,7 @@ Queries multiple rows from a game values table.
 \`\`\`
 
 | Field | Required | Description |
-|-------|----------|-------------|
+|———-|—————|——————-|
 | \`id\` | Yes | Variable name for results (\`{{id.rows}}\` for array, \`{{id.count}}\` for count) |
 | \`source\` | Yes | Data source |
 | \`table\` | Yes | Table name |
@@ -408,7 +408,7 @@ Executes a workflow by ID with optional variable bindings.
 \`\`\`
 
 | Field | Required | Description |
-|-------|----------|-------------|
+|———-|—————|——————-|
 | \`id\` | Yes | Step identifier |
 | \`workflow\` | Yes | The workflow ID to execute |
 | \`bindings\` | No | Map of workflow variable names to step IDs from current pipeline |`,
@@ -424,7 +424,7 @@ Templates let you reference dynamic values in endpoint steps. They are resolved 
 ## Sources
 
 | Source | Description | Example |
-|--------|------------|---------|
+|————|——————|————-|
 | \`input\` | Request input fields | \`{{input.oreType}}\`, \`{{input.amount}}\` |
 | \`steamId\` | The player's Steam ID | \`{{steamId}}\` |
 | \`{stepId}\` | Data from a \`read\` or \`lookup\` step | \`{{player.currency}}\`, \`{{ore.tier}}\` |
@@ -517,7 +517,7 @@ SBOXCOOL_DATA_SOURCE=api_then_json
 ## Required Keys
 
 | Key | Prefix | Description |
-|-----|--------|-------------|
+|——-|————|——————-|
 | \`SBOXCOOL_PROJECT_ID\` | — | Your project ID from the sbox.cool dashboard |
 | \`SBOXCOOL_PUBLIC_KEY\` | \`sbox_ns_\` | Public key for game client (safe to ship) |
 | \`SBOXCOOL_SECRET_KEY\` | \`sbox_sk_\` | Secret key for editor only (NEVER ship) |
@@ -525,7 +525,7 @@ SBOXCOOL_DATA_SOURCE=api_then_json
 ## Optional Keys
 
 | Key | Default | Description |
-|-----|---------|-------------|
+|——-|————-|——————-|
 | \`SBOXCOOL_BASE_URL\` | \`https://api.sboxcool.com\` | API base URL |
 | \`SBOXCOOL_API_VERSION\` | \`v3\` | API version |
 | \`SBOXCOOL_DATA_FOLDER\` | \`Network Storage\` | Editor subfolder name |
@@ -635,7 +635,7 @@ var doc = await NetworkStorage.GetDocument("players", "76561198012345678");
 ## Properties
 
 | Property | Type | Description |
-|----------|------|-------------|
+|—————|———|——————-|
 | \`IsConfigured\` | bool | True after config loads |
 | \`ProjectId\` | string | Active project ID |
 | \`ApiKey\` | string | Active public API key |
@@ -688,7 +688,7 @@ Client calls endpoint → Server runs steps → Condition fails
 ## Common Error Codes
 
 | Code | Meaning |
-|------|---------|
+|———|————-|
 | \`UNAUTHORIZED\` | Invalid/missing API key |
 | \`PROJECT_DISABLED\` | Project disabled on sbox.cool |
 | \`QUOTA_EXCEEDED\` | Monthly usage limit hit |
@@ -725,7 +725,7 @@ Compares local JSON files with sbox.cool server state, lets you push/pull change
 ## Status Indicators
 
 | Icon | Meaning |
-|------|---------|
+|———|————-|
 | ✓ | Synced — local matches remote |
 | ▲ | Local only — needs push |
 | ▼ | Remote only — needs pull |
@@ -782,7 +782,7 @@ Compares local JSON files with sbox.cool server state, lets you push/pull change
 ## Key Types
 
 | Key | Prefix | Ships with game? | Purpose |
-|-----|--------|------------------|---------|
+|——-|————|—————————|————-|
 | Public Key | \`sbox_ns_\` | Yes | Runtime API calls (read data, call endpoints) |
 | Secret Key | \`sbox_sk_\` | **NEVER** | Editor sync tool (manage collections/endpoints/workflows) |
 
@@ -1871,7 +1871,7 @@ server.tool(
     if (topic === "all") {
       const allDocs = Object.entries(DOCUMENTATION)
         .map(([, content]) => content)
-        .join("\n\n---\n\n");
+        .join("\n\n—-\n\n");
       return { content: [{ type: "text" as const, text: allDocs }] };
     }
     const doc = DOCUMENTATION[topic];
