@@ -146,6 +146,12 @@ public static class SyncToolConfig
 
 	// ── JSON options ──
 	private static readonly JsonSerializerOptions _jsonOptions = new() { WriteIndented = true };
+	private static readonly JsonSerializerOptions _readOptions = new()
+	{
+		AllowTrailingCommas = true,
+		PropertyNameCaseInsensitive = true,
+		ReadCommentHandling = JsonCommentHandling.Skip
+	};
 
 	// ── Filesystem helpers (System.IO with absolute paths) ──
 
@@ -214,7 +220,7 @@ public static class SyncToolConfig
 
 	private static void LoadPublicConfig( string path )
 	{
-		var json = JsonSerializer.Deserialize<JsonElement>( File.ReadAllText( Abs( path ) ) );
+		var json = JsonSerializer.Deserialize<JsonElement>( File.ReadAllText( Abs( path ) ), _readOptions );
 		ProjectId = json.TryGetProperty( "projectId", out var pid ) ? pid.GetString() ?? "" : "";
 		PublicApiKey = json.TryGetProperty( "publicKey", out var pk ) ? pk.GetString() ?? "" : "";
 		BaseUrl = json.TryGetProperty( "baseUrl", out var bu ) ? bu.GetString()?.TrimEnd( '/' ) ?? "https://api.sboxcool.com" : "https://api.sboxcool.com";
@@ -253,7 +259,7 @@ public static class SyncToolConfig
 
 	private static void LoadSecretConfig( string path )
 	{
-		var json = JsonSerializer.Deserialize<JsonElement>( File.ReadAllText( Abs( path ) ) );
+		var json = JsonSerializer.Deserialize<JsonElement>( File.ReadAllText( Abs( path ) ), _readOptions );
 		SecretKey = json.TryGetProperty( "secretKey", out var sk ) ? sk.GetString() ?? "" : "";
 	}
 
@@ -360,7 +366,7 @@ public static class SyncToolConfig
 			{
 				try
 				{
-					var existing = JsonSerializer.Deserialize<JsonElement>( File.ReadAllText( credsPath ) );
+					var existing = JsonSerializer.Deserialize<JsonElement>( File.ReadAllText( credsPath ), _readOptions );
 					foreach ( var prop in existing.EnumerateObject() )
 					{
 						merged[prop.Name] = prop.Value.ValueKind switch
@@ -464,8 +470,7 @@ public static class SyncToolConfig
 			{
 				var fullPath = Abs( $"{CollectionsPath}/{file}" );
 				var text = File.ReadAllText( fullPath );
-				var dict = JsonSerializer.Deserialize<Dictionary<string, object>>( text,
-					new JsonSerializerOptions { PropertyNameCaseInsensitive = true } );
+				var dict = JsonSerializer.Deserialize<Dictionary<string, object>>( text, _readOptions );
 				var name = dict?.GetValueOrDefault( "name" )?.ToString()
 					?? Path.GetFileNameWithoutExtension( file );
 				list.Add( (name, dict) );
@@ -474,7 +479,7 @@ public static class SyncToolConfig
 		else if ( File.Exists( Abs( LegacyCollectionSchemaPath ) ) )
 		{
 			var text = File.ReadAllText( Abs( LegacyCollectionSchemaPath ) );
-			var schema = JsonSerializer.Deserialize<JsonElement>( text );
+			var schema = JsonSerializer.Deserialize<JsonElement>( text, _readOptions );
 			var dict = new Dictionary<string, object>
 			{
 				["name"] = "player_data",
@@ -496,12 +501,12 @@ public static class SyncToolConfig
 		{
 			var fullPath = Abs( $"{EndpointsPath}/{file}" );
 			var text = File.ReadAllText( fullPath );
-			var ep = JsonSerializer.Deserialize<JsonElement>( text );
+			var ep = JsonSerializer.Deserialize<JsonElement>( text, _readOptions );
 
 			if ( !ep.TryGetProperty( "slug", out _ ) )
 			{
 				var slug = Path.GetFileNameWithoutExtension( file );
-				var dict = JsonSerializer.Deserialize<Dictionary<string, object>>( text );
+				var dict = JsonSerializer.Deserialize<Dictionary<string, object>>( text, _readOptions );
 				dict["slug"] = slug;
 				ep = JsonSerializer.Deserialize<JsonElement>( JsonSerializer.Serialize( dict ) );
 			}
@@ -522,12 +527,12 @@ public static class SyncToolConfig
 		{
 			var fullPath = Abs( $"{WorkflowsPath}/{file}" );
 			var text = File.ReadAllText( fullPath );
-			var wf = JsonSerializer.Deserialize<JsonElement>( text );
+			var wf = JsonSerializer.Deserialize<JsonElement>( text, _readOptions );
 
 			if ( !wf.TryGetProperty( "id", out _ ) )
 			{
 				var id = Path.GetFileNameWithoutExtension( file );
-				var dict = JsonSerializer.Deserialize<Dictionary<string, object>>( text );
+				var dict = JsonSerializer.Deserialize<Dictionary<string, object>>( text, _readOptions );
 				dict["id"] = id;
 				wf = JsonSerializer.Deserialize<JsonElement>( JsonSerializer.Serialize( dict ) );
 			}
@@ -605,12 +610,12 @@ public static class SyncToolConfig
 		{
 			var fullPath = Abs( $"{TestsPath}/{file}" );
 			var text = File.ReadAllText( fullPath );
-			var test = JsonSerializer.Deserialize<JsonElement>( text );
+			var test = JsonSerializer.Deserialize<JsonElement>( text, _readOptions );
 
 			if ( !test.TryGetProperty( "id", out _ ) )
 			{
 				var id = Path.GetFileNameWithoutExtension( file );
-				var dict = JsonSerializer.Deserialize<Dictionary<string, object>>( text );
+				var dict = JsonSerializer.Deserialize<Dictionary<string, object>>( text, _readOptions );
 				dict["id"] = id;
 				test = JsonSerializer.Deserialize<JsonElement>( JsonSerializer.Serialize( dict ) );
 			}

@@ -67,6 +67,8 @@ public static class NetworkStorage
 	public static bool IsHost => !Networking.IsActive || Networking.IsHost;
 
 	private static bool _autoConfigAttempted;
+	private static string _cachedAuthToken;
+	private static DateTimeOffset _cachedAuthTokenAt;
 
 	/// <summary>
 	/// Configure the client manually. Call once at game startup.
@@ -355,7 +357,7 @@ public static class NetworkStorage
 		string clientToken = null;
 		try
 		{
-			clientToken = await Services.Auth.GetToken( "sbox-network-storage" );
+			clientToken = await GetAuthTokenWithRetry( $"{slug} proxy consent ({steamId})" );
 		}
 		catch ( Exception ex )
 		{
@@ -401,7 +403,7 @@ public static class NetworkStorage
 		string clientToken = null;
 		try
 		{
-			clientToken = await Services.Auth.GetToken( "sbox-network-storage" );
+			clientToken = await GetAuthTokenWithRetry( $"storage proxy consent ({collectionId}/{docId})" );
 		}
 		catch ( Exception ex )
 		{
@@ -706,6 +708,52 @@ public static class NetworkStorage
 		=> root.Contains( "storage.sbox.cool" ) || root.Contains( "storage.sboxcool.com" );
 
 	/// <summary>
+	/// Auth tokens can lag briefly behind startup, especially in editor flows.
+	/// Retry a few times before treating the request as unauthenticated.
+	/// </summary>
+	private static async Task<string> GetAuthTokenWithRetry( string context, int attempts = 6, int delayMs = 500 )
+	{
+		string lastError = null;
+
+		for ( int attempt = 1; attempt <= attempts; attempt++ )
+		{
+			try
+			{
+				var token = await Services.Auth.GetToken( "sbox-network-storage" );
+				if ( !string.IsNullOrWhiteSpace( token ) )
+				{
+					_cachedAuthToken = token;
+					_cachedAuthTokenAt = DateTimeOffset.UtcNow;
+					if ( attempt > 1 )
+						Log.Info( $"[NetworkStorage] Auth token acquired for {context} after retry {attempt}/{attempts}" );
+					return token;
+				}
+			}
+			catch ( Exception ex )
+			{
+				lastError = ex.Message;
+			}
+
+			if ( attempt < attempts )
+				await Task.Delay( delayMs );
+		}
+
+		if ( !string.IsNullOrEmpty( lastError ) )
+			Log.Warning( $"[NetworkStorage] Failed to get auth token for {context} after {attempts} attempts: {lastError}" );
+		else
+			Log.Warning( $"[NetworkStorage] Auth token remained empty for {context} after {attempts} attempts" );
+
+		if ( !string.IsNullOrWhiteSpace( _cachedAuthToken ) &&
+			DateTimeOffset.UtcNow - _cachedAuthTokenAt < TimeSpan.FromMinutes( 30 ) )
+		{
+			Log.Warning( $"[NetworkStorage] Reusing cached auth token for {context} after fresh token lookup failed" );
+			return _cachedAuthToken;
+		}
+
+		return null;
+	}
+
+	/// <summary>
 	/// Build the request URL with API key query param (no auth tokens in URL).
 	/// </summary>
 	private static string BuildUrl( string path )
@@ -727,15 +775,7 @@ public static class NetworkStorage
 	private static async Task<Dictionary<string, string>> BuildAuthHeaders()
 	{
 		var steamId = Game.SteamId.ToString();
-		string token = null;
-		try
-		{
-			token = await Services.Auth.GetToken( "sbox-network-storage" );
-		}
-		catch ( Exception ex )
-		{
-			Log.Warning( $"[NetworkStorage] Failed to get auth token: {ex.Message}" );
-		}
+		var token = await GetAuthTokenWithRetry( $"steamId={steamId}" );
 
 		if ( string.IsNullOrEmpty( token ) )
 		{

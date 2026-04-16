@@ -18,6 +18,13 @@ using Editor;
 [Dock( "Editor", "Network Storage Sync", "cloud" )]
 public class SyncToolWindow : DockWindow
 {
+	private static readonly JsonSerializerOptions _readOptions = new()
+	{
+		AllowTrailingCommas = true,
+		PropertyNameCaseInsensitive = true,
+		ReadCommentHandling = JsonCommentHandling.Skip
+	};
+
 	private string _status = "Ready";
 	private bool _statusIsError;
 	private bool _busy;
@@ -915,17 +922,28 @@ public class SyncToolWindow : DockWindow
 			var stdout = await Task.Run( () => process.StandardOutput.ReadToEnd() );
 			var stderr = await Task.Run( () => process.StandardError.ReadToEnd() );
 			process.WaitForExit( 30000 );
+			var trimmedStdout = stdout?.Trim();
+			var trimmedStderr = stderr?.Trim();
 
 			// Log output to console, not inline
-			if ( !string.IsNullOrWhiteSpace( stdout ) )
-				Log.Info( $"[SyncTool] sync.py output:\n{stdout}" );
-			if ( !string.IsNullOrWhiteSpace( stderr ) )
-				Log.Warning( $"[SyncTool] sync.py errors:\n{stderr}" );
+			if ( !string.IsNullOrWhiteSpace( trimmedStdout ) )
+				Log.Info( $"[SyncTool] sync.py output:\n{trimmedStdout}" );
+			if ( !string.IsNullOrWhiteSpace( trimmedStderr ) )
+				Log.Warning( $"[SyncTool] sync.py errors:\n{trimmedStderr}" );
 
 			if ( process.ExitCode == 0 )
 			{
-				SetStatus( "Generation complete" );
-				RefreshFileList();
+				if ( string.IsNullOrWhiteSpace( trimmedStdout ) && string.IsNullOrWhiteSpace( trimmedStderr ) )
+				{
+					ShowGenerateFailure(
+						"sync.py exited with code 0 but produced no output",
+						$"Command: python {args}\nWorking directory: {SyncToolConfig.ProjectRoot}" );
+				}
+				else
+				{
+					SetStatus( "Generation complete" );
+					RefreshFileList();
+				}
 			}
 			else
 			{
@@ -1116,7 +1134,7 @@ public class SyncToolWindow : DockWindow
 		try
 		{
 			var text = File.ReadAllText( filePath );
-			var wf = JsonSerializer.Deserialize<JsonElement>( text );
+			var wf = JsonSerializer.Deserialize<JsonElement>( text, _readOptions );
 			return wf.TryGetProperty( "name", out var n ) ? n.GetString() : "workflow";
 		}
 		catch { return ""; }
@@ -1127,7 +1145,7 @@ public class SyncToolWindow : DockWindow
 		try
 		{
 			var text = File.ReadAllText( filePath );
-			var ep = JsonSerializer.Deserialize<JsonElement>( text );
+			var ep = JsonSerializer.Deserialize<JsonElement>( text, _readOptions );
 			return ep.TryGetProperty( "method", out var m ) ? m.GetString() : "POST";
 		}
 		catch { return ""; }
@@ -1138,7 +1156,7 @@ public class SyncToolWindow : DockWindow
 		try
 		{
 			var text = File.ReadAllText( filePath );
-			var ep = JsonSerializer.Deserialize<JsonElement>( text );
+			var ep = JsonSerializer.Deserialize<JsonElement>( text, _readOptions );
 			return ep.TryGetProperty( "_deprecated", out var d ) && d.GetBoolean();
 		}
 		catch { return false; }
@@ -2083,7 +2101,7 @@ public class SyncToolWindow : DockWindow
 		if ( localFile == null ) return false;
 
 		var localText = File.ReadAllText( localFile );
-		var localEp = JsonSerializer.Deserialize<JsonElement>( localText );
+		var localEp = JsonSerializer.Deserialize<JsonElement>( localText, _readOptions );
 
 		// GET current remote endpoints
 		var remoteResp = await SyncToolApi.GetEndpoints();

@@ -13,6 +13,12 @@ using Sandbox;
 public static class SyncToolApi
 {
 	private static readonly HttpClient _http = new() { Timeout = TimeSpan.FromSeconds( 30 ) };
+	private static readonly JsonSerializerOptions _readOptions = new()
+	{
+		AllowTrailingCommas = true,
+		PropertyNameCaseInsensitive = true,
+		ReadCommentHandling = JsonCommentHandling.Skip
+	};
 
 	/// <summary>
 	/// Last error code from the server (e.g., "KEY_UPGRADE_REQUIRED", "FORBIDDEN").
@@ -68,7 +74,7 @@ public static class SyncToolApi
 				Log.Warning( $"[SyncTool] {method} {path}: HTTP {(int)response.StatusCode}" );
 				try
 				{
-					var errJson = JsonSerializer.Deserialize<JsonElement>( text );
+					var errJson = JsonSerializer.Deserialize<JsonElement>( text, _readOptions );
 					if ( errJson.TryGetProperty( "error", out var errCode ) )
 						LastErrorCode = errCode.GetString();
 					if ( errJson.TryGetProperty( "message", out var errMsg ) )
@@ -98,7 +104,7 @@ public static class SyncToolApi
 				return null;
 			}
 
-			return JsonSerializer.Deserialize<JsonElement>( text );
+			return JsonSerializer.Deserialize<JsonElement>( text, _readOptions );
 		}
 		catch ( Exception ex )
 		{
@@ -190,7 +196,7 @@ public static class SyncToolApi
 				return null;
 			}
 
-			var result = JsonSerializer.Deserialize<JsonElement>( text );
+			var result = JsonSerializer.Deserialize<JsonElement>( text, _readOptions );
 
 			// Check for error codes in the response
 			if ( result.TryGetProperty( "error", out var errCode ) )
