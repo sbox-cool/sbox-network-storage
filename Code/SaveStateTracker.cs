@@ -41,7 +41,7 @@ public class SaveStateTracker
 
 		var result = await NetworkStorage.CallEndpoint( slug, input );
 
-		PendingCalls—;
+		PendingCalls--;
 		if ( result.HasValue )
 		{
 			if ( PendingCalls <= 0 )

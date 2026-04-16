@@ -1,4 +1,5 @@
-﻿using System;
+﻿#nullable disable
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -889,9 +890,9 @@ public class SyncToolWindow : DockWindow
 			}
 
 			var projectRoot = SyncToolConfig.ProjectRoot;
-			var args = $"\"{syncPy}\" —project-root \"{projectRoot}\" —generate";
+			var args = $"\"{syncPy}\" --project-root \"{projectRoot}\" --generate";
 			if ( collectionFilter != null )
-				args += $" —collection \"{collectionFilter}\"";
+				args += $" --collection \"{collectionFilter}\"";
 
 			var psi = new ProcessStartInfo
 			{

@@ -4,12 +4,12 @@ sync.py — Push local Network Storage data (collections, endpoints, workflows)
 to the sbox.cool management API, and generate collection JSON from C# data files.
 
 This script lives inside the network-storage library and is invoked by the
-editor Sync Tool. It requires —project-root to locate the game project.
+editor Sync Tool. It requires --project-root to locate the game project.
 
 Usage (from the editor, project root is passed automatically):
-    python <lib>/Editor/sync.py —project-root <dir>                  # push everything
-    python <lib>/Editor/sync.py —project-root <dir> —generate       # generate from C#
-    python <lib>/Editor/sync.py —project-root <dir> —validate       # check credentials
+    python <lib>/Editor/sync.py --project-root <dir>                  # push everything
+    python <lib>/Editor/sync.py --project-root <dir> --generate       # generate from C#
+    python <lib>/Editor/sync.py --project-root <dir> --validate       # check credentials
 """
 
 import sys as _sys
@@ -29,7 +29,7 @@ from pathlib import Path
 from urllib.request import Request, urlopen
 from urllib.error import HTTPError
 
-# ── Paths (set in main() from —project-root) ────────────────────
+# ── Paths (set in main() from --project-root) ────────────────────
 
 PROJECT_ROOT = None
 NS_DIR = None
@@ -611,15 +611,15 @@ def generate_collections(collection_filter=None):
 
 def main():
     parser = argparse.ArgumentParser(description="Sync Network Storage data to sbox.cool")
-    parser.add_argument("—project-root", type=str, required=True,
+    parser.add_argument("--project-root", type=str, required=True,
                         help="Absolute path to the game project root directory")
-    parser.add_argument("—collections", action="store_true", help="Push collections only")
-    parser.add_argument("—endpoints", action="store_true", help="Push endpoints only")
-    parser.add_argument("—workflows", action="store_true", help="Push workflows only")
-    parser.add_argument("—validate", action="store_true", help="Validate credentials only")
-    parser.add_argument("—dry-run", action="store_true", help="Show what would be pushed without pushing")
-    parser.add_argument("—generate", action="store_true", help="Generate collection JSON from C# data files")
-    parser.add_argument("—collection", type=str, help="Filter to a specific collection name (with —generate)")
+    parser.add_argument("--collections", action="store_true", help="Push collections only")
+    parser.add_argument("--endpoints", action="store_true", help="Push endpoints only")
+    parser.add_argument("--workflows", action="store_true", help="Push workflows only")
+    parser.add_argument("--validate", action="store_true", help="Validate credentials only")
+    parser.add_argument("--dry-run", action="store_true", help="Show what would be pushed without pushing")
+    parser.add_argument("--generate", action="store_true", help="Generate collection JSON from C# data files")
+    parser.add_argument("--collection", type=str, help="Filter to a specific collection name (with --generate)")
     args = parser.parse_args()
 
     # Initialize paths from project root
