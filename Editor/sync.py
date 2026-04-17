@@ -1,6 +1,6 @@
 ﻿#!/usr/bin/env python3
 """
-sync.py — Push local Network Storage data (collections, endpoints, workflows)
+sync.py -- Push local Network Storage data (collections, endpoints, workflows)
 to the sbox.cool management API, and generate collection JSON from C# data files.
 
 This script lives inside the network-storage library and is invoked by the
@@ -562,7 +562,7 @@ def generate_collection(mapping):
         with open(collection_path, 'w', encoding='utf-8') as f:
             json.dump(output, f, indent=2, ensure_ascii=False)
 
-        print(f"  Generated {collection_name}.json — {len(all_tables)} table(s):")
+        print(f"  Generated {collection_name}.json -- {len(all_tables)} table(s):")
         for t in all_tables:
             print(f"    - {t['id']}: {len(t['rows'])} rows, {len(t['columns'])} columns")
         return True
@@ -611,15 +611,15 @@ def generate_collections(collection_filter=None):
 
 def main():
     parser = argparse.ArgumentParser(description="Sync Network Storage data to sbox.cool")
-    parser.add_argument("--project-root", type=str, required=True,
+    parser.add_argument("—project-root", type=str, required=True,
                         help="Absolute path to the game project root directory")
-    parser.add_argument("--collections", action="store_true", help="Push collections only")
-    parser.add_argument("--endpoints", action="store_true", help="Push endpoints only")
-    parser.add_argument("--workflows", action="store_true", help="Push workflows only")
-    parser.add_argument("--validate", action="store_true", help="Validate credentials only")
-    parser.add_argument("--dry-run", action="store_true", help="Show what would be pushed without pushing")
-    parser.add_argument("--generate", action="store_true", help="Generate collection JSON from C# data files")
-    parser.add_argument("--collection", type=str, help="Filter to a specific collection name (with --generate)")
+    parser.add_argument("—collections", action="store_true", help="Push collections only")
+    parser.add_argument("—endpoints", action="store_true", help="Push endpoints only")
+    parser.add_argument("—workflows", action="store_true", help="Push workflows only")
+    parser.add_argument("—validate", action="store_true", help="Validate credentials only")
+    parser.add_argument("—dry-run", action="store_true", help="Show what would be pushed without pushing")
+    parser.add_argument("—generate", action="store_true", help="Generate collection JSON from C# data files")
+    parser.add_argument("—collection", type=str, help="Filter to a specific collection name (with --generate)")
     args = parser.parse_args()
 
     # Initialize paths from project root
@@ -647,7 +647,7 @@ def main():
     push_all = not (args.collections or args.endpoints or args.workflows)
 
     if args.dry_run:
-        print("[DRY RUN — no changes will be pushed]\n")
+        print("[DRY RUN -- no changes will be pushed]\n")
 
     if push_all or args.collections:
         print("── Collections ──")

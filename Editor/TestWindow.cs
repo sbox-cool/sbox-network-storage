@@ -60,7 +60,7 @@ public class TestWindow : DockWindow
 		LoadData();
 	}
 
-	// TODO: WIP — re-enable menu entry when Endpoint Tester UI is ready
+	// TODO: WIP -- re-enable menu entry when Endpoint Tester UI is ready
 	// [Menu( "Editor", "Network Storage/Endpoint Tests" )]
 	public static void OpenWindow()
 	{
@@ -450,7 +450,7 @@ public class TestWindow : DockWindow
 			DrawFilterButton( ref y, pad + filterBtnW + 4, filterBtnW, "Failed", "failed", failedCount );
 			DrawFilterButton( ref y, pad + (filterBtnW + 4) * 2, filterBtnW, "Passed", "passed", passedCount );
 
-			// Report button — shows state
+			// Report button -- shows state
 			var reportRect = new Rect( pad + w - 110, y, 106, 18 );
 			if ( _reportReady )
 			{
@@ -709,7 +709,7 @@ public class TestWindow : DockWindow
 			text = JsonSerializer.Serialize( _lastResult.Value, new JsonSerializerOptions { WriteIndented = true } );
 		}
 
-		// Write to temp file and open it — s&box doesn't expose a clipboard API
+		// Write to temp file and open it -- s&box doesn't expose a clipboard API
 		var tmpPath = Path.Combine( Path.GetTempPath(), "ns_test_output.json" );
 		File.WriteAllText( tmpPath, text );
 		EditorUtility.OpenFile( tmpPath );
@@ -932,7 +932,7 @@ public class TestWindow : DockWindow
 
 						var entry = new Dictionary<string, object>
 						{
-							["name"] = $"{epName} — Quick Test",
+							["name"] = $"{epName} -- Quick Test",
 							["endpoint"] = slug,
 							["method"] = epMethod,
 							["passed"] = ok,

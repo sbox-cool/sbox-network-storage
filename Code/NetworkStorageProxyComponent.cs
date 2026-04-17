@@ -28,7 +28,7 @@ public sealed class NetworkStorageProxyComponent : Component
 	{
 		if ( IsProxy ) return;
 
-		// Always register delegates on the local player — ProxyEnabled is checked
+		// Always register delegates on the local player -- ProxyEnabled is checked
 		// at call time in CallEndpoint/GetDocument, after AutoConfigure has run.
 		// Registering here unconditionally avoids a race where OnEnabled fires
 		// before credentials are loaded and ProxyEnabled is still its default false.
@@ -36,7 +36,7 @@ public sealed class NetworkStorageProxyComponent : Component
 		NetworkStorage.DocumentProxy = ProxyDocumentRequest;
 
 		if ( Networking.IsHost )
-			Log.Info( "[NSProxy] Running as host — will handle proxy requests from clients" );
+			Log.Info( "[NSProxy] Running as host -- will handle proxy requests from clients" );
 		else
 			Log.Info( "[NSProxy] Proxy delegates registered (non-host client)" );
 	}
@@ -111,7 +111,7 @@ public sealed class NetworkStorageProxyComponent : Component
 		}
 		catch ( Exception ex )
 		{
-			Log.Warning( $"[NSProxy] Host endpoint error: {slug} for {steamId} — {ex.Message}" );
+			Log.Warning( $"[NSProxy] Host endpoint error: {slug} for {steamId} -- {ex.Message}" );
 			RpcRespondToClient( requestId, "" );
 		}
 	}
@@ -129,7 +129,7 @@ public sealed class NetworkStorageProxyComponent : Component
 		}
 		catch ( Exception ex )
 		{
-			Log.Warning( $"[NSProxy] Host document error: {collectionId}/{documentId} for {steamId} — {ex.Message}" );
+			Log.Warning( $"[NSProxy] Host document error: {collectionId}/{documentId} for {steamId} -- {ex.Message}" );
 			RpcRespondToClient( requestId, "" );
 		}
 	}

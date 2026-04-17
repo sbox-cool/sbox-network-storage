@@ -76,8 +76,8 @@ public class SetupWindow : DockWindow
 	private void CreateInputWidgets()
 	{
 		_projectIdInput = CreateLineEdit( SyncToolConfig.ProjectId, "From sbox.cool dashboard" );
-		_publicKeyInput = CreateLineEdit( SyncToolConfig.PublicApiKey, "Public key — used by game client" );
-		_secretKeyInput = CreateLineEdit( SyncToolConfig.SecretKey, "Secret key — editor only, NEVER ships" );
+		_publicKeyInput = CreateLineEdit( SyncToolConfig.PublicApiKey, "Public key -- used by game client" );
+		_secretKeyInput = CreateLineEdit( SyncToolConfig.SecretKey, "Secret key -- editor only, NEVER ships" );
 		_baseUrlInput = CreateLineEdit( SyncToolConfig.BaseUrl, "Default: https://api.sboxcool.com" );
 		_cdnUrlInput = CreateLineEdit( SyncToolConfig.CdnUrl, "Optional: storage.sboxcool.com" );
 		_dataFolderInput = CreateLineEdit( SyncToolConfig.DataFolder, "Subfolder under Editor/ (default: Network Storage)" );
@@ -149,7 +149,7 @@ public class SetupWindow : DockWindow
 		}
 		y += 4;
 
-		// Secret Key — with show/hide toggle
+		// Secret Key -- with show/hide toggle
 		var toggleW = 48f;
 		var toggleGap = 6f;
 		var fieldInputW = w - toggleW - toggleGap;
@@ -175,7 +175,7 @@ public class SetupWindow : DockWindow
 			{
 				Paint.SetPen( Color.White.WithAlpha( 0.25f ) );
 				Paint.SetDefaultFont( size: 10 );
-				Paint.DrawText( new Rect( pad + 8, y, fieldInputW - 16, fieldH ), "Secret key — editor only, NEVER ships", TextFlag.LeftCenter );
+				Paint.DrawText( new Rect( pad + 8, y, fieldInputW - 16, fieldH ), "Secret key -- editor only, NEVER ships", TextFlag.LeftCenter );
 			}
 			else
 			{
@@ -386,7 +386,7 @@ public class SetupWindow : DockWindow
 		Paint.SetPen( Color.White.WithAlpha( 0.7f ) );
 		Paint.DrawText( new Rect( pad + 18, y, 80, 15 ), label, TextFlag.LeftCenter );
 
-		var display = !string.IsNullOrEmpty( extra ) ? $"{result} — {extra}" : result;
+		var display = !string.IsNullOrEmpty( extra ) ? $"{result} -- {extra}" : result;
 		Paint.SetPen( color.WithAlpha( 0.7f ) );
 		Paint.DrawText( new Rect( pad + 100, y, w - 100, 15 ), display, TextFlag.LeftCenter );
 
@@ -505,7 +505,7 @@ public class SetupWindow : DockWindow
 			_testProjectId = SyncToolApi.LastErrorCode ?? "Connection failed";
 			_testSecretKey = SyncToolApi.LastErrorCode ?? "Connection failed";
 			_testPublicKey = SyncToolApi.LastErrorCode ?? "Connection failed";
-			Log.Warning( $"[SyncTool] Validate returned null — LastError: {SyncToolApi.LastErrorCode} — {SyncToolApi.LastErrorMessage}" );
+			Log.Warning( $"[SyncTool] Validate returned null -- LastError: {SyncToolApi.LastErrorCode} -- {SyncToolApi.LastErrorMessage}" );
 			Update();
 			return;
 		}
@@ -519,7 +519,7 @@ public class SetupWindow : DockWindow
 			_status = "Secret key uses an old format. Generate a new key at sbox.cool.";
 			_statusColor = "red";
 			_testProjectId = "Not checked";
-			_testSecretKey = "Old format — regenerate on dashboard";
+			_testSecretKey = "Old format -- regenerate on dashboard";
 			_testPublicKey = "Not checked";
 			Update();
 			return;
@@ -577,7 +577,7 @@ public class SetupWindow : DockWindow
 
 			_status = failedChecks.Count > 0
 				? $"Failed: {string.Join( " | ", failedChecks )}"
-				: "Validation failed — check console for details";
+				: "Validation failed -- check console for details";
 			_statusColor = "red";
 		}
 		Update();

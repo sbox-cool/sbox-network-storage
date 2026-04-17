@@ -245,7 +245,7 @@ public static class SyncToolTransforms
 
 	/// <summary>
 	/// Convert local workflow definitions to server format, preserving IDs.
-	/// Passes through all fields — the backend validates what it needs.
+	/// Passes through all fields -- the backend validates what it needs.
 	/// </summary>
 	public static JsonElement WorkflowsToServer( List<JsonElement> localWorkflows, JsonElement? existingServer = null )
 	{
@@ -303,7 +303,7 @@ public static class SyncToolTransforms
 		return result;
 	}
 
-	/// <summary>Convert a server test to local file format — strips server-managed fields.</summary>
+	/// <summary>Convert a server test to local file format -- strips server-managed fields.</summary>
 	public static Dictionary<string, object> ServerTestToLocal( JsonElement test )
 	{
 		var local = new Dictionary<string, object>();

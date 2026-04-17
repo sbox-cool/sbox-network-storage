@@ -1,5 +1,5 @@
 // ============================================================
-// GameValuesExample.cs — Fetch and parse game configuration
+// GameValuesExample.cs -- Fetch and parse game configuration
 // Copy this into your game project's Code/ directory.
 // ============================================================
 
@@ -36,7 +36,7 @@ public static class GameConfig
 		var response = await NetworkStorage.GetGameValues();
 		if ( !response.HasValue )
 		{
-			Log.Warning( "Failed to load game values — using defaults" );
+			Log.Warning( "Failed to load game values -- using defaults" );
 			return;
 		}
 

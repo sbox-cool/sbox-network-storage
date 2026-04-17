@@ -1,5 +1,5 @@
 // ============================================================
-// SaveStateTrackerExample.cs — Automatic save state management
+// SaveStateTrackerExample.cs -- Automatic save state management
 // Copy this into your game project's Code/ directory.
 // ============================================================
 
@@ -32,7 +32,7 @@ public class SaveStateExample : Component
 	public Dictionary<string, float> Inventory { get; set; } = new();
 
 	/// <summary>
-	/// Simple tracked call — just tracks Saving/Saved/Error state.
+	/// Simple tracked call -- just tracks Saving/Saved/Error state.
 	/// </summary>
 	public async Task MineOre( string oreId, float kg )
 	{
@@ -42,7 +42,7 @@ public class SaveStateExample : Component
 		{
 			// Apply server response
 			Currency = JsonHelpers.GetInt( result.Value, "currency", Currency );
-			Log.Info( $"Mined {kg}kg {oreId} — Currency: {Currency}" );
+			Log.Info( $"Mined {kg}kg {oreId} -- Currency: {Currency}" );
 		}
 		// If null, _tracker.State is already SaveState.Error
 		// and _tracker.LastError has the message
@@ -76,7 +76,7 @@ public class SaveStateExample : Component
 			applyServer: ( JsonElement data ) =>
 			{
 				Currency = JsonHelpers.GetInt( data, "currency", Currency );
-				// Server response is authoritative — override estimate
+				// Server response is authoritative -- override estimate
 			},
 
 			// 3. Revert (runs on failure)
@@ -84,12 +84,12 @@ public class SaveStateExample : Component
 			{
 				Currency = prevCurrency;
 				Inventory[oreId] = prevHeld;
-				Log.Warning( $"Sell failed — reverted" );
+				Log.Warning( $"Sell failed -- reverted" );
 			}
 		);
 
 		if ( success )
-			Log.Info( $"Sold {actual}kg {oreId} — Currency: {Currency}" );
+			Log.Info( $"Sold {actual}kg {oreId} -- Currency: {Currency}" );
 	}
 
 	/// <summary>

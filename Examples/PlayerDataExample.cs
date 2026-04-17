@@ -1,5 +1,5 @@
 // ============================================================
-// PlayerDataExample.cs — Manage player data with Network Storage
+// PlayerDataExample.cs -- Manage player data with Network Storage
 // Copy this into your game project's Code/ directory.
 // ============================================================
 
@@ -52,7 +52,7 @@ public class MyPlayerData : Component
 			return;
 		}
 
-		// New player — call init endpoint
+		// New player -- call init endpoint
 		var init = await NetworkStorage.CallEndpoint( "init-player", new
 		{
 			playerName = Connection.Local?.DisplayName ?? "Player"
@@ -65,7 +65,7 @@ public class MyPlayerData : Component
 	}
 
 	/// <summary>
-	/// Mine ore — optimistic local update, confirmed by server.
+	/// Mine ore -- optimistic local update, confirmed by server.
 	/// </summary>
 	public async Task MineOre( string oreId, float kg )
 	{
@@ -89,7 +89,7 @@ public class MyPlayerData : Component
 			// Revert on failure
 			Inventory[oreId] = Inventory.GetValueOrDefault( oreId, 0f ) - kg;
 			if ( Inventory[oreId] <= 0f ) Inventory.Remove( oreId );
-			Log.Warning( $"Mine failed — reverted {kg}kg {oreId}" );
+			Log.Warning( $"Mine failed -- reverted {kg}kg {oreId}" );
 		}
 	}
 

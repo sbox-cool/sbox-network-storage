@@ -10,9 +10,9 @@ using Editor;
 /// Manages the sync tool configuration for the Network Storage library.
 ///
 /// Config is split into two files for security:
-///   config/public/projectConfig.json  — project ID, public key, base URL, API version, preferences
+///   config/public/projectConfig.json  -- project ID, public key, base URL, API version, preferences
 ///                                       (safe to commit, ships with published game)
-///   config/secret/secret_key.json     — secret key ONLY (gitignored, editor-only, NEVER published)
+///   config/secret/secret_key.json     -- secret key ONLY (gitignored, editor-only, NEVER published)
 ///
 /// The public config is also written to the project root as network-storage.credentials.json
 /// so the runtime client can auto-configure via s&box's sandboxed FileSystem.
@@ -109,10 +109,10 @@ public static class SyncToolConfig
 	/// <summary>Path to config/ directory.</summary>
 	public static string ConfigPath => $"{SyncToolsPath}/config";
 
-	/// <summary>Path to config/public/ — safe to commit, ships with game.</summary>
+	/// <summary>Path to config/public/ -- safe to commit, ships with game.</summary>
 	public static string PublicConfigPath => $"{ConfigPath}/public";
 
-	/// <summary>Path to config/secret/ — gitignored, editor-only, NEVER published.</summary>
+	/// <summary>Path to config/secret/ -- gitignored, editor-only, NEVER published.</summary>
 	public static string SecretConfigPath => $"{ConfigPath}/secret";
 
 	/// <summary>Path to the public project config file.</summary>
@@ -209,12 +209,12 @@ public static class SyncToolConfig
 
 		if ( legacyEnv != null )
 		{
-			Log.Info( $"[SyncTool] Found legacy .env — migrating to split config on next save" );
+			Log.Info( $"[SyncTool] Found legacy .env -- migrating to split config on next save" );
 			LoadLegacyEnv( legacyEnv );
 			return;
 		}
 
-		// ── First install — scaffold ──
+		// ── First install -- scaffold ──
 		ScaffoldProject();
 	}
 
@@ -355,7 +355,7 @@ public static class SyncToolConfig
 		Log.Info( "[SyncTool] Secret key saved to config/secret/secret_key.json" );
 
 		// ── Write runtime credentials (ships with game, NO secret key) ──
-		// Merges into existing file — preserves any fields set by other tools.
+		// Merges into existing file -- preserves any fields set by other tools.
 		if ( !string.IsNullOrEmpty( ProjectId ) )
 		{
 			var credsPath = Abs( RuntimeCredentialsFile );
@@ -378,7 +378,7 @@ public static class SyncToolConfig
 						};
 					}
 				}
-				catch { /* Corrupt file — start fresh */ }
+				catch { /* Corrupt file -- start fresh */ }
 			}
 
 			// Overwrite only the fields this save owns
@@ -400,7 +400,7 @@ public static class SyncToolConfig
 	}
 
 	/// <summary>
-	/// For display in the Setup window — show the path to the secret key file.
+	/// For display in the Setup window -- show the path to the secret key file.
 	/// </summary>
 	public static string EnvFilePath => SecretKeyFile;
 
@@ -691,7 +691,7 @@ public static class SyncToolConfig
 	/// </summary>
 	private static void ScaffoldProject()
 	{
-		Log.Info( "[NetworkStorage] First install detected — scaffolding Editor/Network Storage/ ..." );
+		Log.Info( "[NetworkStorage] First install detected -- scaffolding Editor/Network Storage/ ..." );
 
 		EnsureSyncToolsDir();
 
@@ -716,7 +716,7 @@ public static class SyncToolConfig
 		};
 		File.WriteAllText( Abs( SecretKeyFile ), JsonSerializer.Serialize( secretConfig, _jsonOptions ) );
 
-		// ── .gitignore in secret/ — ignore everything ──
+		// ── .gitignore in secret/ -- ignore everything ──
 		File.WriteAllText( Abs( $"{SecretConfigPath}/.gitignore" ), "*\n!.gitignore\n" );
 
 		// ── Sample collection ──

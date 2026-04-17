@@ -61,7 +61,7 @@ public class SyncToolWindow : DockWindow
 		public string Name;
 		public string Type;   // "Endpoint", "Collection", "Workflow"
 		public bool Ok;
-		public string Detail; // "Pushed", "Created (new)", "Failed", "Verified ✓", "Mismatch — see diff", etc.
+		public string Detail; // "Pushed", "Created (new)", "Failed", "Verified ✓", "Mismatch -- see diff", etc.
 	}
 
 	private float MaxScroll => !IsValid ? 0 : Math.Max( 0, _contentHeight - ( Height - _scrollAreaTop ) + 60 );
@@ -209,14 +209,14 @@ public class SyncToolWindow : DockWindow
 		{
 			Paint.SetDefaultFont( size: 10 );
 			Paint.SetPen( Color.Red );
-			Paint.DrawText( new Rect( pad, y, w, 16 ), "Not configured — click Setup to enter your keys", TextFlag.LeftCenter );
+			Paint.DrawText( new Rect( pad, y, w, 16 ), "Not configured -- click Setup to enter your keys", TextFlag.LeftCenter );
 			y += 24;
 		}
 		else
 		{
 			Paint.SetDefaultFont( size: 9 );
 			Paint.SetPen( Color.Green.WithAlpha( 0.8f ) );
-			Paint.DrawText( new Rect( pad, y, w, 14 ), $"Connected — {SyncToolConfig.ProjectId}", TextFlag.LeftCenter );
+			Paint.DrawText( new Rect( pad, y, w, 14 ), $"Connected -- {SyncToolConfig.ProjectId}", TextFlag.LeftCenter );
 			y += 20;
 		}
 
@@ -519,14 +519,14 @@ public class SyncToolWindow : DockWindow
 		{
 			Paint.SetDefaultFont( size: 10 );
 			Paint.SetPen( Color.Red );
-			Paint.DrawText( new Rect( pad, y, w, 16 ), "Not configured — click Setup to enter your keys", TextFlag.LeftCenter );
+			Paint.DrawText( new Rect( pad, y, w, 16 ), "Not configured -- click Setup to enter your keys", TextFlag.LeftCenter );
 			y += 24;
 		}
 		else
 		{
 			Paint.SetDefaultFont( size: 9 );
 			Paint.SetPen( Color.Green.WithAlpha( 0.8f ) );
-			Paint.DrawText( new Rect( pad, y, w, 14 ), $"Connected — {SyncToolConfig.ProjectId}", TextFlag.LeftCenter );
+			Paint.DrawText( new Rect( pad, y, w, 14 ), $"Connected -- {SyncToolConfig.ProjectId}", TextFlag.LeftCenter );
 			y += 20;
 		}
 
@@ -658,7 +658,7 @@ public class SyncToolWindow : DockWindow
 		var contentX = pad + ( hasIndicator ? 22 : 8 );
 		var btnY = y + ( rowH - btnH ) / 2;
 
-		// Pull/Merge button — LEFT side (only if remote has changes to pull or merge)
+		// Pull/Merge button -- LEFT side (only if remote has changes to pull or merge)
 		if ( state.Status == SyncStatus.MergeAvailable )
 		{
 			var mergeW = 52f;
@@ -727,7 +727,7 @@ public class SyncToolWindow : DockWindow
 			}
 		}
 
-		// Test button — RIGHT side, before Push
+		// Test button -- RIGHT side, before Push
 		var rightX = pad + w - 4;
 		if ( pushAction != null )
 		{
@@ -1040,7 +1040,7 @@ public class SyncToolWindow : DockWindow
 	}
 
 	/// <summary>
-	/// Draws a row in the CHANGES section — reconstructs push/pull actions from the item id prefix.
+	/// Draws a row in the CHANGES section -- reconstructs push/pull actions from the item id prefix.
 	/// </summary>
 	private void DrawChangedItemRow( ref float y, float pad, float w, string id )
 	{
@@ -1259,14 +1259,14 @@ public class SyncToolWindow : DockWindow
 
 		if ( !_remoteEndpoints.HasValue )
 		{
-			_status = "Failed to fetch endpoints from server — check Base URL and credentials";
+			_status = "Failed to fetch endpoints from server -- check Base URL and credentials";
 			_hasCheckedRemote = true;
 			return;
 		}
 
 		if ( !_remoteCollections.HasValue )
 		{
-			_status = "Failed to fetch collections from server — check Base URL and credentials";
+			_status = "Failed to fetch collections from server -- check Base URL and credentials";
 			_hasCheckedRemote = true;
 			return;
 		}
@@ -1291,7 +1291,7 @@ public class SyncToolWindow : DockWindow
 					if ( !localEpBySlug.TryGetValue( slug, out var localEp ) )
 					{
 						SetItemState( id, remoteDiffers: true, status: SyncStatus.RemoteOnly,
-							diffSummary: "Remote only — not in local files",
+							diffSummary: "Remote only -- not in local files",
 							localJson: "", remoteJson: PrettyJson( remoteJson ) );
 						diffs++;
 					}
@@ -1309,7 +1309,7 @@ public class SyncToolWindow : DockWindow
 							if ( isDefaultsOnly && changedFields.Count == 0 )
 							{
 								SetItemState( id, remoteDiffers: true, status: SyncStatus.MergeAvailable,
-									diffSummary: $"Server added {addedFields.Count} default field(s) — click Merge to accept",
+									diffSummary: $"Server added {addedFields.Count} default field(s) -- click Merge to accept",
 									localJson: PrettyJson( localJson ), remoteJson: PrettyJson( remoteJson ) );
 							}
 							else
@@ -1337,7 +1337,7 @@ public class SyncToolWindow : DockWindow
 				var id = $"ep_{slug}";
 				var localJson = JsonSerializer.Serialize( localEpBySlug[slug], new JsonSerializerOptions { WriteIndented = true } );
 				SetItemState( id, remoteDiffers: false, status: SyncStatus.LocalOnly,
-					diffSummary: "Local only — not pushed to server",
+					diffSummary: "Local only -- not pushed to server",
 					localJson: PrettyJson( localJson ), remoteJson: "" );
 				localOnlyCount++;
 			}
@@ -1356,7 +1356,7 @@ public class SyncToolWindow : DockWindow
 				if ( !localColByName.TryGetValue( colName, out var localJson ) )
 				{
 					SetItemState( id, remoteDiffers: true, status: SyncStatus.RemoteOnly,
-						diffSummary: "Remote only — no local file",
+						diffSummary: "Remote only -- no local file",
 						localJson: "", remoteJson: PrettyJson( remoteJson ) );
 					diffs++;
 				}
@@ -1373,7 +1373,7 @@ public class SyncToolWindow : DockWindow
 						if ( isDefaultsOnly && changedFields.Count == 0 )
 						{
 							SetItemState( id, remoteDiffers: true, status: SyncStatus.MergeAvailable,
-								diffSummary: $"Server added {addedFields.Count} default field(s) — click Merge to accept",
+								diffSummary: $"Server added {addedFields.Count} default field(s) -- click Merge to accept",
 								localJson: PrettyJson( localJson ), remoteJson: PrettyJson( remoteJson ) );
 						}
 						else
@@ -1399,7 +1399,7 @@ public class SyncToolWindow : DockWindow
 			{
 				var id = $"col_{colName}";
 				SetItemState( id, remoteDiffers: false, status: SyncStatus.LocalOnly,
-					diffSummary: "Local only — not pushed to server",
+					diffSummary: "Local only -- not pushed to server",
 					localJson: PrettyJson( localColByName[colName] ), remoteJson: "" );
 				localOnlyCount++;
 			}
@@ -1419,7 +1419,7 @@ public class SyncToolWindow : DockWindow
 				if ( !localWfById.TryGetValue( wfId, out var localWf ) )
 				{
 					SetItemState( id, remoteDiffers: true, status: SyncStatus.RemoteOnly,
-						diffSummary: "Remote only — no local file",
+						diffSummary: "Remote only -- no local file",
 						localJson: "", remoteJson: PrettyJson( remoteJson ) );
 					diffs++;
 				}
@@ -1446,7 +1446,7 @@ public class SyncToolWindow : DockWindow
 						if ( isDefaultsOnly && changedFields.Count == 0 )
 						{
 							SetItemState( id, remoteDiffers: true, status: SyncStatus.MergeAvailable,
-								diffSummary: $"Server added {addedFields.Count} default field(s) — click Merge to accept",
+								diffSummary: $"Server added {addedFields.Count} default field(s) -- click Merge to accept",
 								localJson: PrettyJson( localJson ), remoteJson: PrettyJson( remoteJson ) );
 						}
 						else
@@ -1472,7 +1472,7 @@ public class SyncToolWindow : DockWindow
 				var id = $"wf_{wfId}";
 				var localJson = JsonSerializer.Serialize( localWfById[wfId], new JsonSerializerOptions { WriteIndented = true } );
 				SetItemState( id, remoteDiffers: false, status: SyncStatus.LocalOnly,
-					diffSummary: "Local only — not pushed to server",
+					diffSummary: "Local only -- not pushed to server",
 					localJson: PrettyJson( localJson ), remoteJson: "" );
 				localOnlyCount++;
 			}
@@ -1488,7 +1488,7 @@ public class SyncToolWindow : DockWindow
 	}
 
 	/// <summary>
-	/// Normalize JSON for comparison — sorts all object keys recursively so key order doesn't cause false diffs.
+	/// Normalize JSON for comparison -- sorts all object keys recursively so key order doesn't cause false diffs.
 	/// </summary>
 	private static string NormalizeJson( string json )
 	{
@@ -1643,7 +1643,7 @@ public class SyncToolWindow : DockWindow
 			_syncLog.Add( new SyncLogEntry { Name = "Code Generation", Type = "CodeGen", Ok = false, Detail = ex.Message } );
 		}
 
-		// Invalidate cached remote data — next check will fetch fresh
+		// Invalidate cached remote data -- next check will fetch fresh
 		ClearAllRemoteDiffs();
 		_remoteEndpoints = null;
 		_remoteCollections = null;
@@ -1657,9 +1657,9 @@ public class SyncToolWindow : DockWindow
 		var mergeCount = _syncLog.Count( e => e.Detail != null && e.Detail.Contains( "merge available" ) );
 
 		if ( mergeCount > 0 && mismatchCount == 0 && failCount == 0 )
-			_status = $"Pushed OK — {mergeCount} item(s) have server defaults to merge";
+			_status = $"Pushed OK -- {mergeCount} item(s) have server defaults to merge";
 		else if ( mismatchCount > 0 )
-			_status = $"Done: {okCount} pushed, {mismatchCount} mismatch(es) — check diffs";
+			_status = $"Done: {okCount} pushed, {mismatchCount} mismatch(es) -- check diffs";
 		else if ( failCount > 0 )
 			_status = $"Done: {okCount - failCount} OK, {failCount} failed";
 		else
@@ -1672,7 +1672,7 @@ public class SyncToolWindow : DockWindow
 
 	/// <summary>
 	/// After pushing, re-fetch remote data and compare each resource to local.
-	/// Updates sync log entries with "Verified ✓" or "Mismatch — see diff".
+	/// Updates sync log entries with "Verified ✓" or "Mismatch -- see diff".
 	/// </summary>
 	private async Task VerifyPushResults( Dictionary<string, string> localEpBySlug )
 	{
@@ -1738,18 +1738,18 @@ public class SyncToolWindow : DockWindow
 
 							if ( isDefaultsOnly && changedFields.Count == 0 )
 							{
-								entry.Detail = $"Server added {addedFields.Count} default(s) — merge available";
+								entry.Detail = $"Server added {addedFields.Count} default(s) -- merge available";
 								entry.Ok = true;
 								SetItemState( eid, remoteDiffers: true, status: SyncStatus.MergeAvailable,
-									diffSummary: $"Server added {addedFields.Count} default field(s) — click Merge to accept",
+									diffSummary: $"Server added {addedFields.Count} default field(s) -- click Merge to accept",
 									localJson: localPretty, remoteJson: remotePretty );
 							}
 							else
 							{
-								entry.Detail = "Mismatch — pushed but remote differs. See diff";
+								entry.Detail = "Mismatch -- pushed but remote differs. See diff";
 								entry.Ok = false;
 								SetItemState( eid, remoteDiffers: true, status: SyncStatus.Differs,
-									diffSummary: "Post-push verification failed — remote doesn't match local",
+									diffSummary: "Post-push verification failed -- remote doesn't match local",
 									localJson: localPretty, remoteJson: remotePretty );
 							}
 						}
@@ -1784,18 +1784,18 @@ public class SyncToolWindow : DockWindow
 
 						if ( isDefaultsOnly && changedFields.Count == 0 )
 						{
-							entry.Detail = $"Server added {addedFields.Count} default(s) — merge available";
+							entry.Detail = $"Server added {addedFields.Count} default(s) -- merge available";
 							entry.Ok = true;
 							SetItemState( cid, remoteDiffers: true, status: SyncStatus.MergeAvailable,
-								diffSummary: $"Server added {addedFields.Count} default field(s) — click Merge to accept",
+								diffSummary: $"Server added {addedFields.Count} default field(s) -- click Merge to accept",
 								localJson: localPretty, remoteJson: remotePretty );
 						}
 						else
 						{
-							entry.Detail = "Mismatch — pushed but remote differs. See diff";
+							entry.Detail = "Mismatch -- pushed but remote differs. See diff";
 							entry.Ok = false;
 							SetItemState( cid, remoteDiffers: true, status: SyncStatus.Differs,
-								diffSummary: "Post-push verification failed — remote doesn't match local",
+								diffSummary: "Post-push verification failed -- remote doesn't match local",
 								localJson: localPretty, remoteJson: remotePretty );
 						}
 					}
@@ -1829,18 +1829,18 @@ public class SyncToolWindow : DockWindow
 
 						if ( isDefaultsOnly && changedFields.Count == 0 )
 						{
-							entry.Detail = $"Server added {addedFields.Count} default(s) — merge available";
+							entry.Detail = $"Server added {addedFields.Count} default(s) -- merge available";
 							entry.Ok = true;
 							SetItemState( wid, remoteDiffers: true, status: SyncStatus.MergeAvailable,
-								diffSummary: $"Server added {addedFields.Count} default field(s) — click Merge to accept",
+								diffSummary: $"Server added {addedFields.Count} default field(s) -- click Merge to accept",
 								localJson: localPretty, remoteJson: remotePretty );
 						}
 						else
 						{
-							entry.Detail = "Mismatch — pushed but remote differs. See diff";
+							entry.Detail = "Mismatch -- pushed but remote differs. See diff";
 							entry.Ok = false;
 							SetItemState( wid, remoteDiffers: true, status: SyncStatus.Differs,
-								diffSummary: "Post-push verification failed — remote doesn't match local",
+								diffSummary: "Post-push verification failed -- remote doesn't match local",
 								localJson: localPretty, remoteJson: remotePretty );
 						}
 					}
@@ -2068,7 +2068,7 @@ public class SyncToolWindow : DockWindow
 	private static string GetPushFailDetail( string resource )
 	{
 		if ( SyncToolApi.LastErrorCode == "KEY_UPGRADE_REQUIRED" )
-			return "Key uses old format — regenerate at sbox.cool";
+			return "Key uses old format -- regenerate at sbox.cool";
 		if ( SyncToolApi.LastErrorCode == "FORBIDDEN" )
 			return $"No write permission for {resource}";
 		if ( !string.IsNullOrEmpty( SyncToolApi.LastErrorMessage ) )
@@ -2349,7 +2349,7 @@ public class SyncToolWindow : DockWindow
 		try
 		{
 			if ( string.IsNullOrEmpty( localJson ) )
-				return "New — no local file exists";
+				return "New -- no local file exists";
 
 			var local = JsonSerializer.Deserialize<JsonElement>( localJson );
 			var remote = JsonSerializer.Deserialize<JsonElement>( remoteJson );
@@ -2456,7 +2456,7 @@ public class SyncToolWindow : DockWindow
 						}
 					}
 
-					// Save — preserves local schema, constants, tables
+					// Save -- preserves local schema, constants, tables
 					var json = JsonSerializer.Serialize( local, new JsonSerializerOptions { WriteIndented = true } );
 					File.WriteAllText( localFile, json );
 
@@ -2582,7 +2582,7 @@ public class SyncToolWindow : DockWindow
 		_remoteEndpoints = null;
 		_remoteCollections = null;
 		_remoteWorkflows = null;
-		_status = SyncToolConfig.IsValid ? "Refreshed" : "Config invalid — check .env";
+		_status = SyncToolConfig.IsValid ? "Refreshed" : "Config invalid -- check .env";
 		Update();
 	}
 }
