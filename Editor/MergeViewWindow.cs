@@ -77,7 +77,7 @@ public class MergeViewWindow : DockWindow
 		_addedFields = addedFields;
 		_changedFields = changedFields;
 		_onMerge = onMerge;
-		Title = $"Remote Merge -- {resourceName}";
+		Title = $"Remote Merge — {resourceName}";
 
 		var fieldCount = addedFields.Count + changedFields.Count;
 		Size = new Vector2( 540, Math.Min( 640, 260 + fieldCount * FieldBlockH ) );
@@ -173,7 +173,7 @@ public class MergeViewWindow : DockWindow
 		// ── Title ──
 		Paint.SetDefaultFont( size: 13, weight: 700 );
 		Paint.SetPen( Color.White );
-		Paint.DrawText( new Rect( pad, y, w, 22 ), $"Remote Merge -- {_resourceName}", TextFlag.LeftCenter );
+		Paint.DrawText( new Rect( pad, y, w, 22 ), $"Remote Merge — {_resourceName}", TextFlag.LeftCenter );
 		y += 30;
 
 		// ── Explanation ──

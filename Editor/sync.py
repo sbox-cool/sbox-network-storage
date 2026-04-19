@@ -1,6 +1,6 @@
 ﻿#!/usr/bin/env python3
 """
-sync.py -- Push local Network Storage data (collections, endpoints, workflows)
+sync.py — Push local Network Storage data (collections, endpoints, workflows)
 to the sbox.cool management API, and generate collection JSON from C# data files.
 
 This script lives inside the network-storage library and is invoked by the
@@ -132,14 +132,33 @@ def api_request(config, method, path, body=None):
 
 # ── Load local files ─────────────────────────────────────────────
 
-def load_json_dir(directory):
+def is_truthy_flag(value):
+    if value is True:
+        return True
+    if isinstance(value, (int, float)):
+        return value != 0
+    if isinstance(value, str):
+        return value.lower() in ("true", "on", "yes", "1")
+    return False
+
+
+def is_deprecated_endpoint(item):
+    if not isinstance(item, dict):
+        return False
+    return any(is_truthy_flag(item.get(key)) for key in ("_deprecated", "deprecated", "depreciated", "depricated"))
+
+
+def load_json_dir(directory, skip_deprecated_endpoints=False):
     """Load all .json files from a directory, returning a list of parsed objects."""
     if not directory.exists():
         return []
     items = []
     for f in sorted(directory.glob("*.json")):
         with open(f, encoding='utf-8') as fh:
-            items.append(json.load(fh))
+            item = json.load(fh)
+        if skip_deprecated_endpoints and is_deprecated_endpoint(item):
+            continue
+        items.append(item)
     return items
 
 
@@ -147,8 +166,8 @@ def load_collections():
     return load_json_dir(COLLECTIONS_DIR)
 
 
-def load_endpoints():
-    return load_json_dir(ENDPOINTS_DIR)
+def load_endpoints(include_deprecated=False):
+    return load_json_dir(ENDPOINTS_DIR, skip_deprecated_endpoints=not include_deprecated)
 
 
 def load_workflows():
@@ -192,13 +211,19 @@ def push_collections(config, dry_run=False):
 
 def push_endpoints(config, dry_run=False):
     endpoints = load_endpoints()
+    all_endpoints = load_endpoints(include_deprecated=True)
+    skipped_deprecated = len(all_endpoints) - len(endpoints)
     if not endpoints:
+        if skipped_deprecated:
+            print(f"  Skipping {skipped_deprecated} deprecated endpoint(s)")
         print("  No endpoints found, skipping")
         return
 
     print(f"  Found {len(endpoints)} endpoint(s):")
     for e in endpoints:
         print(f"    - {e.get('slug', '?')}")
+    if skipped_deprecated:
+        print(f"  Skipping {skipped_deprecated} deprecated endpoint(s)")
 
     if dry_run:
         return
@@ -562,7 +587,7 @@ def generate_collection(mapping):
         with open(collection_path, 'w', encoding='utf-8') as f:
             json.dump(output, f, indent=2, ensure_ascii=False)
 
-        print(f"  Generated {collection_name}.json -- {len(all_tables)} table(s):")
+        print(f"  Generated {collection_name}.json — {len(all_tables)} table(s):")
         for t in all_tables:
             print(f"    - {t['id']}: {len(t['rows'])} rows, {len(t['columns'])} columns")
         return True
@@ -611,15 +636,15 @@ def generate_collections(collection_filter=None):
 
 def main():
     parser = argparse.ArgumentParser(description="Sync Network Storage data to sbox.cool")
-    parser.add_argument("—project-root", type=str, required=True,
+    parser.add_argument("--project-root", type=str, required=True,
                         help="Absolute path to the game project root directory")
-    parser.add_argument("—collections", action="store_true", help="Push collections only")
-    parser.add_argument("—endpoints", action="store_true", help="Push endpoints only")
-    parser.add_argument("—workflows", action="store_true", help="Push workflows only")
-    parser.add_argument("—validate", action="store_true", help="Validate credentials only")
-    parser.add_argument("—dry-run", action="store_true", help="Show what would be pushed without pushing")
-    parser.add_argument("—generate", action="store_true", help="Generate collection JSON from C# data files")
-    parser.add_argument("—collection", type=str, help="Filter to a specific collection name (with --generate)")
+    parser.add_argument("--collections", action="store_true", help="Push collections only")
+    parser.add_argument("--endpoints", action="store_true", help="Push endpoints only")
+    parser.add_argument("--workflows", action="store_true", help="Push workflows only")
+    parser.add_argument("--validate", action="store_true", help="Validate credentials only")
+    parser.add_argument("--dry-run", action="store_true", help="Show what would be pushed without pushing")
+    parser.add_argument("--generate", action="store_true", help="Generate collection JSON from C# data files")
+    parser.add_argument("--collection", type=str, help="Filter to a specific collection name (with --generate)")
     args = parser.parse_args()
 
     # Initialize paths from project root
@@ -647,7 +672,7 @@ def main():
     push_all = not (args.collections or args.endpoints or args.workflows)
 
     if args.dry_run:
-        print("[DRY RUN -- no changes will be pushed]\n")
+        print("[DRY RUN — no changes will be pushed]\n")
 
     if push_all or args.collections:
         print("── Collections ──")

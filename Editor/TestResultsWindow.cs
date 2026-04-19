@@ -77,7 +77,7 @@ public class TestResultsWindow : DockWindow
 		{
 			if ( token.IsCancellationRequested ) return;
 
-			// Use auto-test endpoint -- no saved tests needed, generates and runs inline
+			// Use auto-test endpoint — no saved tests needed, generates and runs inline
 			var body = endpointFilter != null
 				? JsonSerializer.Serialize( new { slug = endpointFilter } )
 				: "{}";
@@ -94,7 +94,7 @@ public class TestResultsWindow : DockWindow
 
 			var result = resp.Value;
 
-			// Single endpoint response has no "results" array -- wrap it
+			// Single endpoint response has no "results" array — wrap it
 			if ( !result.TryGetProperty( "results", out var results ) )
 			{
 				ParseAutoTestEntry( result );
@@ -114,7 +114,7 @@ public class TestResultsWindow : DockWindow
 		}
 
 		_finished = true;
-		Title = $"Test Results -- {PassedCount}/{TotalCount} passed";
+		Title = $"Test Results — {PassedCount}/{TotalCount} passed";
 		Update();
 	}
 
@@ -450,7 +450,7 @@ public class TestResultsWindow : DockWindow
 
 	private void AppendEntryMd( System.Text.StringBuilder sb, TestEntry entry )
 	{
-		sb.AppendLine( $"### {( entry.Passed ? "PASS" : "FAIL" )} -- {entry.Name}" );
+		sb.AppendLine( $"### {( entry.Passed ? "PASS" : "FAIL" )} — {entry.Name}" );
 		sb.AppendLine( $"- **Endpoint:** `{entry.Method} {entry.Endpoint}`" );
 		sb.AppendLine( $"- **Timing:** {entry.TimingMs}ms" );
 		if ( !string.IsNullOrEmpty( entry.Reason ) )
@@ -515,7 +515,7 @@ public class TestResultsWindow : DockWindow
 		if ( failed.Count == 0 ) return;
 
 		var sb = new System.Text.StringBuilder();
-		sb.AppendLine( "# Failed Test Results -- Full Context" );
+		sb.AppendLine( "# Failed Test Results — Full Context" );
 		sb.AppendLine( $"Generated: {DateTime.Now:yyyy-MM-dd HH:mm:ss}" );
 		sb.AppendLine( $"Failed: {failed.Count} / {_entries.Count} total" );
 		sb.AppendLine();
@@ -524,7 +524,7 @@ public class TestResultsWindow : DockWindow
 		{
 			sb.AppendLine( "—-" );
 			sb.AppendLine();
-			sb.AppendLine( $"## FAIL -- {entry.Name}" );
+			sb.AppendLine( $"## FAIL — {entry.Name}" );
 			sb.AppendLine();
 			sb.AppendLine( $"| Field | Value |" );
 			sb.AppendLine( $"|———-|———-|" );

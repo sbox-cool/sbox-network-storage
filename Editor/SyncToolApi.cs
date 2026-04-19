@@ -41,7 +41,7 @@ public static class SyncToolApi
 
 		if ( !SyncToolConfig.IsValid )
 		{
-			Log.Warning( "[SyncTool] Config not valid -- load .env first" );
+			Log.Warning( "[SyncTool] Config not valid — load .env first" );
 			return null;
 		}
 
@@ -185,7 +185,7 @@ public static class SyncToolApi
 			var response = await _http.SendAsync( request );
 			var text = await response.Content.ReadAsStringAsync();
 
-			Log.Info( $"[SyncTool] Validate: HTTP {(int)response.StatusCode} -- {text[..Math.Min( text.Length, 500 )]}" );
+			Log.Info( $"[SyncTool] Validate: HTTP {(int)response.StatusCode} — {text[..Math.Min( text.Length, 500 )]}" );
 
 			if ( !response.IsSuccessStatusCode )
 			{
@@ -204,7 +204,7 @@ public static class SyncToolApi
 				LastErrorCode = errCode.GetString();
 				if ( result.TryGetProperty( "message", out var errMsg ) )
 					LastErrorMessage = errMsg.GetString();
-				Log.Warning( $"[SyncTool] Validate error: {LastErrorCode} -- {LastErrorMessage}" );
+				Log.Warning( $"[SyncTool] Validate error: {LastErrorCode} — {LastErrorMessage}" );
 			}
 
 			return result;

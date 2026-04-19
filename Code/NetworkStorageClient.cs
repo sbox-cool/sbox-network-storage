@@ -45,7 +45,7 @@ public static class NetworkStorage
 
 	/// <summary>
 	/// Whether proxy mode is enabled (host makes API calls on behalf of non-host clients).
-	/// Defaults to true -- safe for editor testing where only the host has a valid Steam session.
+	/// Defaults to true — safe for editor testing where only the host has a valid Steam session.
 	/// Set to false in production when every player has their own Steam account.
 	/// </summary>
 	public static bool ProxyEnabled { get; set; } = true;
@@ -82,7 +82,7 @@ public static class NetworkStorage
 		if ( !string.IsNullOrEmpty( apiVersion ) ) ApiVersion = apiVersion.Trim( '/' );
 		CdnUrl = string.IsNullOrEmpty( cdnUrl ) ? null : cdnUrl.TrimEnd( '/' );
 		_autoConfigAttempted = true;
-		NetLog.Info( "config", $"NetworkStorage ready -- {ApiRoot}" );
+		NetLog.Info( "config", $"NetworkStorage ready — {ApiRoot}" );
 	}
 
 	/// <summary>
@@ -127,13 +127,13 @@ public static class NetworkStorage
 
 		if ( string.IsNullOrEmpty( contents ) )
 		{
-			// Credentials file not found -- try NSConfig constants as fallback.
+			// Credentials file not found — try NSConfig constants as fallback.
 			// The Sync Tool generates a class with hardcoded ProjectId/PublicKey,
 			// which works on all clients (no filesystem dependency).
 			if ( TryConfigureFromNSConfig() )
 				return;
 
-			Log.Warning( "[NetworkStorage] No network-storage.credentials.json found -- run Editor → Network Storage → Setup" );
+			Log.Warning( "[NetworkStorage] No network-storage.credentials.json found — run Editor → Network Storage → Setup" );
 			return;
 		}
 
@@ -147,7 +147,7 @@ public static class NetworkStorage
 			var apiVersion = json.TryGetProperty( "apiVersion", out var av ) ? av.GetString() : null;
 			var cdnUrl = json.TryGetProperty( "cdnUrl", out var cu ) ? cu.GetString() : null;
 
-			// Read proxy setting from credentials -- only override when explicitly present.
+			// Read proxy setting from credentials — only override when explicitly present.
 			// ProxyEnabled defaults to true; credentials file can explicitly set false for production.
 			if ( json.TryGetProperty( "proxyEnabled", out var pe ) )
 				ProxyEnabled = pe.GetBoolean();
@@ -187,7 +187,7 @@ public static class NetworkStorage
 
 			if ( !string.IsNullOrEmpty( projectId ) && !string.IsNullOrEmpty( publicKey ) )
 			{
-				// Read ProxyEnabled from the generated class -- this is the authoritative
+				// Read ProxyEnabled from the generated class — this is the authoritative
 				// runtime source since JSON files are editor-only and not mounted in game.
 				var proxyVal = nsConfigType.GetStaticValue( "ProxyEnabled" );
 				if ( proxyVal is bool proxyBool )
@@ -200,7 +200,7 @@ public static class NetworkStorage
 		}
 		catch
 		{
-			// NSConfig may not exist -- that's fine, it's optional
+			// NSConfig may not exist — that's fine, it's optional
 		}
 
 		return false;
@@ -256,18 +256,18 @@ public static class NetworkStorage
 		catch ( System.Net.Http.HttpRequestException httpEx )
 		{
 			var status = httpEx.StatusCode.HasValue ? $"{(int)httpEx.StatusCode.Value} {httpEx.StatusCode.Value}" : "unknown";
-			Log.Warning( $"[NetworkStorage] {slug} FAILED -- HTTP {status}" );
+			Log.Warning( $"[NetworkStorage] {slug} FAILED — HTTP {status}" );
 			Log.Warning( $"[NetworkStorage]   URL: {ApiRoot}/endpoints/{ProjectId}/{slug}" );
 			Log.Warning( $"[NetworkStorage]   Method: {( input is not null ? "POST" : "GET" )}" );
 			if ( bodyJson != null )
 				Log.Warning( $"[NetworkStorage]   Body: {bodyJson}" );
-			Log.Warning( $"[NetworkStorage]   Note: s&box Http API does not expose error response bodies -- check server logs for details" );
+			Log.Warning( $"[NetworkStorage]   Note: s&box Http API does not expose error response bodies — check server logs for details" );
 			NetLog.Error( slug, $"HTTP {status}" );
 			return null;
 		}
 		catch ( Exception ex )
 		{
-			Log.Warning( $"[NetworkStorage] {slug} FAILED -- {ex.Message}" );
+			Log.Warning( $"[NetworkStorage] {slug} FAILED — {ex.Message}" );
 			Log.Warning( $"[NetworkStorage]   URL: {ApiRoot}/endpoints/{ProjectId}/{slug}" );
 			Log.Warning( $"[NetworkStorage]   Method: {( input is not null ? "POST" : "GET" )}" );
 			if ( bodyJson != null )
@@ -361,7 +361,7 @@ public static class NetworkStorage
 		}
 		catch ( Exception ex )
 		{
-			Log.Warning( $"[NetworkStorage] {slug} PROXY: failed to get client token -- {ex.Message}" );
+			Log.Warning( $"[NetworkStorage] {slug} PROXY: failed to get client token — {ex.Message}" );
 		}
 
 		NetLog.Request( slug, $"PROXY → host (steamId={steamId})" );
@@ -372,7 +372,7 @@ public static class NetworkStorage
 			var result = await RequestProxy( steamId, clientToken ?? "", slug, inputJson );
 			if ( result == null )
 			{
-				Log.Warning( $"[NetworkStorage] {slug} PROXY returned null -- host may have rejected the request" );
+				Log.Warning( $"[NetworkStorage] {slug} PROXY returned null — host may have rejected the request" );
 				NetLog.Error( slug, "Proxy returned null" );
 				return null;
 			}
@@ -380,12 +380,12 @@ public static class NetworkStorage
 			Log.Info( $"[NetworkStorage] {slug} PROXY → {TruncateJson( result, 200 )}" );
 			var parsed = ParseResponse( slug, result );
 			if ( parsed.HasValue )
-				NetLog.Response( slug, $"PROXY OK -- {TruncateJson( parsed.Value )}" );
+				NetLog.Response( slug, $"PROXY OK — {TruncateJson( parsed.Value )}" );
 			return parsed;
 		}
 		catch ( Exception ex )
 		{
-			Log.Warning( $"[NetworkStorage] {slug} PROXY FAILED -- {ex.Message}" );
+			Log.Warning( $"[NetworkStorage] {slug} PROXY FAILED — {ex.Message}" );
 			NetLog.Error( slug, $"Proxy error: {ex.Message}" );
 			return null;
 		}
@@ -407,7 +407,7 @@ public static class NetworkStorage
 		}
 		catch ( Exception ex )
 		{
-			Log.Warning( $"[NetworkStorage] storage PROXY: failed to get client token -- {ex.Message}" );
+			Log.Warning( $"[NetworkStorage] storage PROXY: failed to get client token — {ex.Message}" );
 		}
 
 		NetLog.Request( "storage", $"PROXY → host GET {collectionId}/{docId}" );
@@ -431,7 +431,7 @@ public static class NetworkStorage
 		}
 		catch ( Exception ex )
 		{
-			Log.Warning( $"[NetworkStorage] storage PROXY FAILED -- {ex.Message}" );
+			Log.Warning( $"[NetworkStorage] storage PROXY FAILED — {ex.Message}" );
 			NetLog.Error( "storage", $"Proxy error: {ex.Message}" );
 			return null;
 		}
@@ -451,7 +451,7 @@ public static class NetworkStorage
 
 		// Same-machine shortcut: if the target is the host's own Steam ID (e.g. two
 		// editor instances on one machine share a Steam account), just call directly
-		// using the host's auth -- no proxy headers needed.
+		// using the host's auth — no proxy headers needed.
 		if ( targetSteamId == Game.SteamId.ToString() )
 		{
 			Log.Info( $"[NetworkStorage] {slug} same-account shortcut (targetSteamId == hostSteamId), calling directly" );
@@ -495,18 +495,18 @@ public static class NetworkStorage
 		catch ( System.Net.Http.HttpRequestException httpEx )
 		{
 			var status = httpEx.StatusCode.HasValue ? $"{(int)httpEx.StatusCode.Value} {httpEx.StatusCode.Value}" : "unknown";
-			Log.Warning( $"[NetworkStorage] {slug} (as {targetSteamId}) FAILED -- HTTP {status}" );
+			Log.Warning( $"[NetworkStorage] {slug} (as {targetSteamId}) FAILED — HTTP {status}" );
 			Log.Warning( $"[NetworkStorage]   URL: {ApiRoot}/endpoints/{ProjectId}/{slug}" );
 			Log.Warning( $"[NetworkStorage]   Method: {( input is not null ? "POST" : "GET" )}" );
 			if ( bodyJson != null )
 				Log.Warning( $"[NetworkStorage]   Body: {bodyJson}" );
-			Log.Warning( $"[NetworkStorage]   Note: s&box Http API does not expose error response bodies -- check server logs for details" );
+			Log.Warning( $"[NetworkStorage]   Note: s&box Http API does not expose error response bodies — check server logs for details" );
 			NetLog.Error( slug, $"HTTP {status}" );
 			return null;
 		}
 		catch ( Exception ex )
 		{
-			Log.Warning( $"[NetworkStorage] {slug} (as {targetSteamId}) FAILED -- {ex.Message}" );
+			Log.Warning( $"[NetworkStorage] {slug} (as {targetSteamId}) FAILED — {ex.Message}" );
 			Log.Warning( $"[NetworkStorage]   URL: {ApiRoot}/endpoints/{ProjectId}/{slug}" );
 			Log.Warning( $"[NetworkStorage]   Method: {( input is not null ? "POST" : "GET" )}" );
 			if ( bodyJson != null )
@@ -779,7 +779,7 @@ public static class NetworkStorage
 
 		if ( string.IsNullOrEmpty( token ) )
 		{
-			Log.Warning( $"[NetworkStorage] Auth token is empty for steamId={steamId} -- requests may fail" );
+			Log.Warning( $"[NetworkStorage] Auth token is empty for steamId={steamId} — requests may fail" );
 		}
 		else
 		{
@@ -837,7 +837,7 @@ public static class NetworkStorage
 		// 2) Error object without ok field (legacy / edge cases)
 		if ( json.TryGetProperty( "error", out var errProp ) )
 		{
-			// { error: { code, message } } -- structured error
+			// { error: { code, message } } — structured error
 			if ( errProp.ValueKind == JsonValueKind.Object )
 			{
 				// Only treat as error if there's no ok:true (some responses include error metadata alongside success)
@@ -847,7 +847,7 @@ public static class NetworkStorage
 					return null;
 				}
 			}
-			// { error: "string message" } -- simple error
+			// { error: "string message" } — simple error
 			else if ( errProp.ValueKind == JsonValueKind.String )
 			{
 				Log.Warning( $"[NetworkStorage] {slug}: {errProp.GetString()}" );
@@ -867,9 +867,9 @@ public static class NetworkStorage
 			}
 		}
 
-		// ── Success -- extract response body ──
+		// ── Success — extract response body ──
 
-		// Server wraps endpoint responses in { ok, body, timing } -- unwrap body if present
+		// Server wraps endpoint responses in { ok, body, timing } — unwrap body if present
 		if ( json.TryGetProperty( "body", out var body ) && body.ValueKind == JsonValueKind.Object )
 			return body;
 
@@ -902,7 +902,7 @@ public static class NetworkStorage
 		if ( string.IsNullOrEmpty( message ) && json.TryGetProperty( "message", out var topMsg ) )
 			message = topMsg.GetString() ?? "";
 
-		Log.Warning( $"[NetworkStorage] {slug}: {code} -- {message}" );
+		Log.Warning( $"[NetworkStorage] {slug}: {code} — {message}" );
 		NetLog.Error( slug, $"{code}: {message}" );
 	}
 

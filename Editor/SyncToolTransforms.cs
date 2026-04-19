@@ -46,6 +46,9 @@ public static class SyncToolTransforms
 				["response"] = ep.TryGetProperty( "response", out var resp ) ? (object)resp : new Dictionary<string, object> { ["status"] = 200, ["body"] = new Dictionary<string, object> { ["ok"] = true } }
 			};
 
+			if ( SyncToolConfig.IsEndpointDeprecated( ep ) )
+				entry["deprecated"] = true;
+
 			result.Add( entry );
 		}
 
@@ -66,7 +69,7 @@ public static class SyncToolTransforms
 	{
 		var slugStr = ep.TryGetProperty( "slug", out var slug ) ? slug.GetString() : "";
 
-		return new Dictionary<string, object>
+		var local = new Dictionary<string, object>
 		{
 			["slug"] = slugStr,
 			["name"] = ep.TryGetProperty( "name", out var name ) ? name.GetString() : slugStr.Replace( "-", " " ),
@@ -79,7 +82,12 @@ public static class SyncToolTransforms
 				? (object)response
 				: new Dictionary<string, object> { ["status"] = 200, ["body"] = new Dictionary<string, object> { ["ok"] = true } }
 		};
+
+		if ( SyncToolConfig.IsEndpointDeprecated( ep ) )
+			local["deprecated"] = true;
+
 		// Intentionally omit: id, createdAt (server-managed)
+		return local;
 	}
 
 	/// <summary>
@@ -245,7 +253,7 @@ public static class SyncToolTransforms
 
 	/// <summary>
 	/// Convert local workflow definitions to server format, preserving IDs.
-	/// Passes through all fields -- the backend validates what it needs.
+	/// Passes through all fields — the backend validates what it needs.
 	/// </summary>
 	public static JsonElement WorkflowsToServer( List<JsonElement> localWorkflows, JsonElement? existingServer = null )
 	{
@@ -303,7 +311,7 @@ public static class SyncToolTransforms
 		return result;
 	}
 
-	/// <summary>Convert a server test to local file format -- strips server-managed fields.</summary>
+	/// <summary>Convert a server test to local file format — strips server-managed fields.</summary>
 	public static Dictionary<string, object> ServerTestToLocal( JsonElement test )
 	{
 		var local = new Dictionary<string, object>();

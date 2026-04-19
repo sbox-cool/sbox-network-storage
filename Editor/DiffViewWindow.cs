@@ -38,7 +38,7 @@ public class DiffViewWindow : DockWindow
 	public DiffViewWindow( string name, string localJson, string remoteJson )
 	{
 		_name = name;
-		Title = $"Diff -- {name}";
+		Title = $"Diff — {name}";
 		Size = new Vector2( 820, 600 );
 		MinimumSize = new Vector2( 600, 300 );
 
@@ -101,7 +101,7 @@ public class DiffViewWindow : DockWindow
 		// Header
 		Paint.SetDefaultFont( size: 12, weight: 700 );
 		Paint.SetPen( Color.White );
-		Paint.DrawText( new Rect( pad, y, w, 20 ), $"Diff -- {_name}", TextFlag.LeftCenter );
+		Paint.DrawText( new Rect( pad, y, w, 20 ), $"Diff — {_name}", TextFlag.LeftCenter );
 		y += 28;
 
 		// Column headers
@@ -281,7 +281,7 @@ public class DiffViewWindow : DockWindow
 		Update();
 	}
 
-	// No OnMouseRelease on DockWindow -- stop drag on next click or key
+	// No OnMouseRelease on DockWindow — stop drag on next click or key
 	private void StopDrag() => _dragging = false;
 
 	[Button( "Page Up", Icon = "arrow_upward" )]

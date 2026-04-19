@@ -50,7 +50,7 @@ public class SaveStateTracker
 		}
 		else
 		{
-			var error = $"{slug} failed -- server returned null";
+			var error = $"{slug} failed — server returned null";
 			SetState( SaveState.Error, error );
 			NetLog.Error( slug, error );
 		}

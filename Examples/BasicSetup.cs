@@ -1,5 +1,5 @@
 // ============================================================
-// BasicSetup.cs -- Configure Network Storage and call an endpoint
+// BasicSetup.cs — Configure Network Storage and call an endpoint
 // Copy this into your game project's Code/ directory.
 // ============================================================
 

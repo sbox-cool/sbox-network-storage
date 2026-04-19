@@ -49,14 +49,14 @@ const STEP_REQUIRED_FIELDS: Record<string, string[]> = {
 // ─── Documentation Content ────────────────────────────────────────────────────
 
 const DOCUMENTATION: Record<string, string> = {
-  overview: `# Network Storage -- Overview
+  overview: `# Network Storage — Overview
 
-Network Storage is an s&box editor library providing a complete backend-as-a-service for s&box games. It connects your game to the sbox.cool cloud platform for persistent player data, game configuration, and server-side logic -- all managed through JSON files.
+Network Storage is an s&box editor library providing a complete backend-as-a-service for s&box games. It connects your game to the sbox.cool cloud platform for persistent player data, game configuration, and server-side logic — all managed through JSON files.
 
 ## Two Halves
 
-1. **Runtime Client** (\`Code/\`) -- ships with your game, makes API calls to read/write data and call endpoints
-2. **Editor Sync Tool** (\`Editor/\`) -- developer-only, manages collections/endpoints/workflows via GUI that syncs with sbox.cool
+1. **Runtime Client** (\`Code/\`) — ships with your game, makes API calls to read/write data and call endpoints
+2. **Editor Sync Tool** (\`Editor/\`) — developer-only, manages collections/endpoints/workflows via GUI that syncs with sbox.cool
 
 ## Data Flow
 
@@ -67,10 +67,10 @@ Network Storage is an s&box editor library providing a complete backend-as-a-ser
 
 ## Key Principles
 
-- **Editor/ never ships** -- secrets and management tools stay on dev machines
-- **JSON as source of truth** -- version-controllable, human-readable, PR-reviewable
-- **Backend-first design** -- all validation/logic runs server-side via endpoints
-- **HTTP 200 for rejections** -- s&box's Http API throws on 4xx/5xx, so errors return 200 with \`ok: false\``,
+- **Editor/ never ships** — secrets and management tools stay on dev machines
+- **JSON as source of truth** — version-controllable, human-readable, PR-reviewable
+- **Backend-first design** — all validation/logic runs server-side via endpoints
+- **HTTP 200 for rejections** — s&box's Http API throws on 4xx/5xx, so errors return 200 with \`ok: false\``,
 
   collections: `# Collections
 
@@ -148,13 +148,13 @@ Collections define where and how your data is stored. Each collection is a JSON 
 
 Each field in \`schema\` must have a \`type\`: \`string\`, \`number\`, \`boolean\`, \`object\`, or \`array\`.
 
-- \`default\` -- the initial value when a new record is created
+- \`default\` — the initial value when a new record is created
 - For \`object\` types, use \`properties\` to define nested fields
 - For \`array\` types, use \`default: []\`
 
 ## Naming Rules
 
-Collection names must match \`/^[a-z0-9_]+$/\` -- lowercase letters, digits, and underscores only. Max 50 collections per project.`,
+Collection names must match \`/^[a-z0-9_]+$/\` — lowercase letters, digits, and underscores only. Max 50 collections per project.`,
 
   endpoints: `# Endpoints
 
@@ -206,7 +206,7 @@ Endpoints are server-side pipelines that your game calls via the API. Each endpo
 
 ## Slug Rules
 
-Endpoint slugs must match \`/^[a-z0-9-]+$/\` -- lowercase letters, digits, and hyphens only. Max 20 endpoints per project.
+Endpoint slugs must match \`/^[a-z0-9-]+$/\` — lowercase letters, digits, and hyphens only. Max 20 endpoints per project.
 
 ## Calling Endpoints from Game Code
 
@@ -262,7 +262,7 @@ Workflows are reusable validation/logic blocks that endpoints can reference. Eac
 | \`reject\` | boolean | true | Short-circuit and return error to client |
 | \`errorCode\` | string | \`"CONDITION_FAILED"\` | Error code in response |
 | \`errorMessage\` | string | \`"Condition check failed."\` | Human-readable message (supports \`{{templates}}\`) |
-| \`severity\` | string | null | \`"warning"\` or \`"critical"\` -- logged for monitoring |
+| \`severity\` | string | null | \`"warning"\` or \`"critical"\` — logged for monitoring |
 | \`status\` | number | 200 | HTTP status code (keep at 200 so s&box client can read response body) |
 | \`flag\` | boolean | false | Log a player flag for anti-cheat review |
 | \`webhook\` | boolean | false | Send Discord webhook on failure |
@@ -291,11 +291,11 @@ Use \`all\` (AND) or \`any\` (OR) for compound checks:
 }
 \`\`\``,
 
-  steps: `# Endpoint Step Types -- Complete Reference
+  steps: `# Endpoint Step Types — Complete Reference
 
 Endpoints execute a pipeline of steps in order. Each step has an \`id\`, a \`type\`, and type-specific properties. The \`id\` is used to reference the step's result in later steps via \`{{id.field}}\` templates.
 
-## read -- Load a Collection Record
+## read — Load a Collection Record
 
 Loads a record from a collection by key.
 
@@ -309,7 +309,7 @@ Loads a record from a collection by key.
 | \`collection\` | Yes | Collection name to read from |
 | \`key\` | Yes | Record key (supports \`{{templates}}\`) |
 
-## write -- Save a Collection Record
+## write — Save a Collection Record
 
 Persists changes using atomic operations. All writes are **deferred** until all conditions pass.
 
@@ -330,7 +330,7 @@ Persists changes using atomic operations. All writes are **deferred** until all 
 
 Each op has: \`op\`, \`path\` (dot-path, supports templates), \`value\`. Ledger fields also need \`source\` and \`reason\`.
 
-## transform -- Compute a Value
+## transform — Compute a Value
 
 Evaluates a math expression. Reference result as \`{{id}}\` (NOT \`{{id.result}}\`).
 
@@ -344,7 +344,7 @@ Evaluates a math expression. Reference result as \`{{id}}\` (NOT \`{{id.result}}
 | \`id\` | Yes | Variable name for the result |
 | \`expression\` | Yes | Math expression with \`{{templates}}\`. Functions: floor, ceil, round, min, max, abs |
 
-## condition -- Validate a Check
+## condition — Validate a Check
 
 Checks a condition and rejects the request if it fails.
 
@@ -366,7 +366,7 @@ Checks a condition and rejects the request if it fails.
 
 **Compound conditions** use \`all\` (AND) or \`any\` (OR) arrays inside \`check\`.
 
-## lookup -- Find a Single Table Row
+## lookup — Find a Single Table Row
 
 Looks up a single row from a game values table.
 
@@ -382,7 +382,7 @@ Looks up a single row from a game values table.
 | \`table\` | Yes | Table name |
 | \`where\` | Yes | Match criteria: \`field\` (column), \`op\` (operator), \`value\` (match value) |
 
-## filter -- Find Multiple Table Rows
+## filter — Find Multiple Table Rows
 
 Queries multiple rows from a game values table.
 
@@ -398,7 +398,7 @@ Queries multiple rows from a game values table.
 | \`table\` | Yes | Table name |
 | \`where\` | Yes | Filter criteria: \`field\`, \`op\`, \`value\` (same as lookup) |
 
-## workflow -- Run a Reusable Workflow
+## workflow — Run a Reusable Workflow
 
 Executes a workflow by ID with optional variable bindings.
 
@@ -413,13 +413,13 @@ Executes a workflow by ID with optional variable bindings.
 | \`workflow\` | Yes | The workflow ID to execute |
 | \`bindings\` | No | Map of workflow variable names to step IDs from current pipeline |`,
 
-  templates: `# Template Syntax -- \`{{template}}\` Reference
+  templates: `# Template Syntax — \`{{template}}\` Reference
 
 Templates let you reference dynamic values in endpoint steps. They are resolved at execution time by the server.
 
 ## Syntax
 
-\`{{source.path}}\` -- reference a value from the execution context.
+\`{{source.path}}\` — reference a value from the execution context.
 
 ## Sources
 
@@ -434,34 +434,34 @@ Templates let you reference dynamic values in endpoint steps. They are resolved 
 ## Path Traversal
 
 Use dots to access nested fields:
-- \`{{player.inventory.items}}\` -- nested object access
-- \`{{player.ores.iron}}\` -- dynamic key access
+- \`{{player.inventory.items}}\` — nested object access
+- \`{{player.ores.iron}}\` — dynamic key access
 
 ## Dynamic Keys
 
 Templates can be used inside field paths:
-- \`{{player.ores.{{input.oreType}}}}\` -- resolves the ore type from input first
+- \`{{player.ores.{{input.oreType}}}}\` — resolves the ore type from input first
 
 ## Negation
 
 Prefix with \`-\` for numeric negation:
-- \`{{-input.amount}}\` -- negates the value
+- \`{{-input.amount}}\` — negates the value
 
 ## Where Templates Work
 
 Templates are resolved in these step fields:
-- \`read.key\` -- the record key
-- \`write.key\` -- the record key
-- \`write.ops[].path\` -- dot-path to field (e.g. \`ores.{{input.ore_id}}\`)
-- \`write.ops[].value\` -- the value to apply
-- \`write.ops[].reason\` -- audit trail reason
-- \`transform.expression\` -- the math expression
-- \`condition.check.field\` -- left-hand value to check
-- \`condition.check.value\` -- right-hand value to compare
-- \`condition.onFail.message\` -- error message
-- \`lookup.where.value\` -- the lookup match value
-- \`filter.where.value\` -- the filter comparison value
-- \`response.body\` -- values in the response body
+- \`read.key\` — the record key
+- \`write.key\` — the record key
+- \`write.ops[].path\` — dot-path to field (e.g. \`ores.{{input.ore_id}}\`)
+- \`write.ops[].value\` — the value to apply
+- \`write.ops[].reason\` — audit trail reason
+- \`transform.expression\` — the math expression
+- \`condition.check.field\` — left-hand value to check
+- \`condition.check.value\` — right-hand value to compare
+- \`condition.onFail.message\` — error message
+- \`lookup.where.value\` — the lookup match value
+- \`filter.where.value\` — the filter comparison value
+- \`response.body\` — values in the response body
 
 ## Common Patterns
 
@@ -495,10 +495,10 @@ The \`.env\` file stores API credentials for the editor Sync Tool. Located at \`
 # Project identifier from sboxcool.com dashboard
 SBOXCOOL_PROJECT_ID=your-project-id
 
-# Public API key (sbox_ns_ prefix) -- used by game client at runtime
+# Public API key (sbox_ns_ prefix) — used by game client at runtime
 SBOXCOOL_PUBLIC_KEY=sbox_ns_your_public_key
 
-# Secret key (sbox_sk_ prefix) -- editor sync tool only, NEVER ships
+# Secret key (sbox_sk_ prefix) — editor sync tool only, NEVER ships
 SBOXCOOL_SECRET_KEY=sbox_sk_your_secret_key
 
 # Base URL (default: https://api.sboxcool.com)
@@ -518,7 +518,7 @@ SBOXCOOL_DATA_SOURCE=api_then_json
 
 | Key | Prefix | Description |
 |——-|————|——————-|
-| \`SBOXCOOL_PROJECT_ID\` | -- | Your project ID from the sbox.cool dashboard |
+| \`SBOXCOOL_PROJECT_ID\` | — | Your project ID from the sbox.cool dashboard |
 | \`SBOXCOOL_PUBLIC_KEY\` | \`sbox_ns_\` | Public key for game client (safe to ship) |
 | \`SBOXCOOL_SECRET_KEY\` | \`sbox_sk_\` | Secret key for editor only (NEVER ship) |
 
@@ -533,7 +533,7 @@ SBOXCOOL_DATA_SOURCE=api_then_json
 
 ## Security
 
-- The \`.env\` file is gitignored -- never commit it
+- The \`.env\` file is gitignored — never commit it
 - The secret key (\`sbox_sk_\`) must NEVER ship with your game
 - The public key (\`sbox_ns_\`) is safe to include in published builds
 - \`Editor/\` directory is never published by s&box`,
@@ -569,8 +569,8 @@ Editor/Network Storage/
 3. Click **Save Configuration**
 
 This writes two files:
-- \`Editor/Network Storage/config/.env\` -- all keys (editor only, gitignored)
-- \`Assets/network-storage.credentials.json\` -- Project ID + Public Key (ships with game)
+- \`Editor/Network Storage/config/.env\` — all keys (editor only, gitignored)
+- \`Assets/network-storage.credentials.json\` — Project ID + Public Key (ships with game)
 
 ## Test Connection
 
@@ -599,7 +599,7 @@ The runtime client (\`NetworkStorageClient\`) is what your game code uses at run
 The client **automatically reads** from \`Assets/network-storage.credentials.json\` on first API use:
 
 \`\`\`csharp
-// No Configure() needed -- auto-configures
+// No Configure() needed — auto-configures
 var player = await NetworkStorage.CallEndpoint("load-player");
 var values = await NetworkStorage.GetGameValues();
 \`\`\`
@@ -645,13 +645,13 @@ var doc = await NetworkStorage.GetDocument("players", "76561198012345678");
 
 ## Error Handling
 
-All methods return \`JsonElement?\` -- \`null\` on failure. Errors are logged to console with \`[NetworkStorage]\` prefix.
+All methods return \`JsonElement?\` — \`null\` on failure. Errors are logged to console with \`[NetworkStorage]\` prefix.
 
 \`\`\`csharp
 var result = await NetworkStorage.CallEndpoint("buy-upgrade", input);
 if (result == null)
 {
-    // Server rejected or network failed -- check console for details
+    // Server rejected or network failed — check console for details
     return;
 }
 \`\`\``,
@@ -696,7 +696,7 @@ Client calls endpoint → Server runs steps → Condition fails
 | \`ENDPOINT_NOT_FOUND\` | Endpoint slug doesn't exist on server |
 | \`ENDPOINT_DISABLED\` | Endpoint exists but \`enabled: false\` |
 | \`CONDITION_FAILED\` | Generic condition failure |
-| \`INTERNAL_ERROR\` | Server crash -- check logs |
+| \`INTERNAL_ERROR\` | Server crash — check logs |
 | \`RATE_LIMIT_DAILY\` | Rate limit exceeded |
 | \`INVALID_JSON\` | Request body not valid JSON |
 | \`INVALID_BODY\` | Request body shape wrong |
@@ -726,22 +726,22 @@ Compares local JSON files with sbox.cool server state, lets you push/pull change
 
 | Icon | Meaning |
 |———|————-|
-| ✓ | Synced -- local matches remote |
-| ▲ | Local only -- needs push |
-| ▼ | Remote only -- needs pull |
-| ● | Changed -- local and remote differ |
+| ✓ | Synced — local matches remote |
+| ▲ | Local only — needs push |
+| ▼ | Remote only — needs pull |
+| ● | Changed — local and remote differ |
 
 ## Operations
 
-- **Check Remote** -- compare local vs remote
-- **Push** (per item) -- upload one resource
-- **Push All** -- upload all local resources
-- **Pull** (per item) -- download server version
-- **Diff** -- side-by-side comparison
+- **Check Remote** — compare local vs remote
+- **Push** (per item) — upload one resource
+- **Push All** — upload all local resources
+- **Pull** (per item) — download server version
+- **Diff** — side-by-side comparison
 
 ## Important
 
-- Always push **collections before endpoints** -- endpoints reference collections
+- Always push **collections before endpoints** — endpoints reference collections
 - New resources get auto-generated IDs on first push
 - Changes are live immediately after push`,
 
@@ -788,13 +788,13 @@ Compares local JSON files with sbox.cool server state, lets you push/pull change
 
 ## What Ships
 
-- \`Assets/network-storage.credentials.json\` -- Project ID + Public Key only
-- \`Code/\` directory -- runtime client code
+- \`Assets/network-storage.credentials.json\` — Project ID + Public Key only
+- \`Code/\` directory — runtime client code
 
 ## What Stays Local
 
-- \`Editor/\` directory -- never published by s&box
-- \`Editor/Network Storage/config/.env\` -- all keys (gitignored)
+- \`Editor/\` directory — never published by s&box
+- \`Editor/Network Storage/config/.env\` — all keys (gitignored)
 - Secret key is only used by the editor Sync Tool
 
 ## Rules
@@ -803,7 +803,7 @@ Compares local JSON files with sbox.cool server state, lets you push/pull change
 2. Never log or display secret keys
 3. Never include secret keys in game code
 4. All data validation must happen server-side via endpoints
-5. Client-only checks can be bypassed -- always validate on server`,
+5. Client-only checks can be bypassed — always validate on server`,
 };
 
 // ─── Example Content ──────────────────────────────────────────────────────────
@@ -1219,7 +1219,7 @@ const ERROR_PATTERNS: ErrorPattern[] = [
     explanation: "A condition step in the endpoint pipeline failed. This is expected game logic (e.g., player tried an action they can't do).",
     possibleCauses: ["Player doesn't meet requirements", "Input values don't pass validation"],
     fixes: [
-      "This is normal game behavior -- handle it in client code",
+      "This is normal game behavior — handle it in client code",
       "Add custom errorCode to your condition for better identification",
       "Check the errorMessage for details",
     ],
@@ -1251,7 +1251,7 @@ const ERROR_PATTERNS: ErrorPattern[] = [
     ],
     fixes: [
       "Remove the \"status\" field from onFail or set it to 200",
-      "s&box needs HTTP 200 to read the response body -- use ok: false for errors instead",
+      "s&box needs HTTP 200 to read the response body — use ok: false for errors instead",
     ],
   },
   {
@@ -1349,18 +1349,18 @@ function validateTemplates(value: any, path: string, warnings: string[]): void {
       if (!inner) {
         warnings.push(`${path}: empty template \`{{}}\``);
       } else if (inner.startsWith("-")) {
-        // Negation -- check the rest
+        // Negation — check the rest
         const rest = inner.slice(1);
         if (!rest.includes(".") && rest !== "") {
-          warnings.push(`${path}: negation template \`{{${inner}}}\` -- did you mean \`{{-source.field}}\`?`);
+          warnings.push(`${path}: negation template \`{{${inner}}}\` — did you mean \`{{-source.field}}\`?`);
         }
       } else if (!inner.includes(".")) {
-        warnings.push(`${path}: template \`{{${inner}}}\` has no dot-path -- expected format like \`{{input.fieldName}}\` or \`{{alias.field}}\``);
+        warnings.push(`${path}: template \`{{${inner}}}\` has no dot-path — expected format like \`{{input.fieldName}}\` or \`{{alias.field}}\``);
       }
     }
     // Check for single-brace mistakes
     if (/(?<!\{)\{(?!\{)[^}]+\}(?!\})/.test(value)) {
-      warnings.push(`${path}: possible single-brace template detected -- use double braces \`{{...}}\``);
+      warnings.push(`${path}: possible single-brace template detected — use double braces \`{{...}}\``);
     }
   } else if (typeof value === "object" && value !== null) {
     for (const [k, v] of Object.entries(value)) {
@@ -1379,7 +1379,7 @@ function validateCollectionJson(data: any): { valid: boolean; errors: string[]; 
   } else if (typeof data.name !== "string") {
     errors.push("`name` must be a string");
   } else if (!COLLECTION_NAME_PATTERN.test(data.name)) {
-    errors.push(`\`name\` must match /^[a-z0-9_]+$/ -- got "${data.name}". Use lowercase letters, digits, and underscores only.`);
+    errors.push(`\`name\` must match /^[a-z0-9_]+$/ — got "${data.name}". Use lowercase letters, digits, and underscores only.`);
   }
 
   // Required: schema
@@ -1389,7 +1389,7 @@ function validateCollectionJson(data: any): { valid: boolean; errors: string[]; 
     errors.push("`schema` must be an object");
   } else {
     if (Object.keys(data.schema).length === 0) {
-      warnings.push("`schema` is empty -- consider adding field definitions");
+      warnings.push("`schema` is empty — consider adding field definitions");
     }
     for (const [fieldName, fieldDef] of Object.entries(data.schema)) {
       if (typeof fieldDef !== "object" || fieldDef === null) {
@@ -1400,17 +1400,17 @@ function validateCollectionJson(data: any): { valid: boolean; errors: string[]; 
       if (!fd.type) {
         errors.push(`schema.${fieldName}: missing \`type\` property`);
       } else if (!VALID_FIELD_TYPES.includes(fd.type)) {
-        errors.push(`schema.${fieldName}.type: must be one of: ${VALID_FIELD_TYPES.join(", ")} -- got "${fd.type}"`);
+        errors.push(`schema.${fieldName}.type: must be one of: ${VALID_FIELD_TYPES.join(", ")} — got "${fd.type}"`);
       }
     }
   }
 
   // Optional enums
   if (data.collectionType && !VALID_COLLECTION_TYPES.includes(data.collectionType)) {
-    errors.push(`\`collectionType\` must be one of: ${VALID_COLLECTION_TYPES.join(", ")} -- got "${data.collectionType}"`);
+    errors.push(`\`collectionType\` must be one of: ${VALID_COLLECTION_TYPES.join(", ")} — got "${data.collectionType}"`);
   }
   if (data.accessMode && !VALID_ACCESS_MODES.includes(data.accessMode)) {
-    errors.push(`\`accessMode\` must be one of: ${VALID_ACCESS_MODES.join(", ")} -- got "${data.accessMode}"`);
+    errors.push(`\`accessMode\` must be one of: ${VALID_ACCESS_MODES.join(", ")} — got "${data.accessMode}"`);
   }
 
   // Type checks
@@ -1472,7 +1472,7 @@ function validateCollectionJson(data: any): { valid: boolean; errors: string[]; 
 
   // Warnings
   if (data.collectionType === "per-steamid" && data.maxRecords && data.maxRecords > 10) {
-    warnings.push(`maxRecords is ${data.maxRecords} for a per-steamid collection -- this is unusually high`);
+    warnings.push(`maxRecords is ${data.maxRecords} for a per-steamid collection — this is unusually high`);
   }
 
   // Unknown fields
@@ -1481,7 +1481,7 @@ function validateCollectionJson(data: any): { valid: boolean; errors: string[]; 
     "webhookOnRateLimit", "schema", "constants", "tables", "id", "createdAt", "version"];
   for (const key of Object.keys(data)) {
     if (!knownFields.includes(key)) {
-      warnings.push(`Unknown field: \`${key}\` -- this will be ignored by the server`);
+      warnings.push(`Unknown field: \`${key}\` — this will be ignored by the server`);
     }
   }
 
@@ -1498,12 +1498,12 @@ function validateEndpointJson(data: any, knownCollections?: string[], knownWorkf
   } else if (typeof data.slug !== "string") {
     errors.push("`slug` must be a string");
   } else if (!ENDPOINT_SLUG_PATTERN.test(data.slug)) {
-    errors.push(`\`slug\` must match /^[a-z0-9-]+$/ -- got "${data.slug}". Use lowercase letters, digits, and hyphens only.`);
+    errors.push(`\`slug\` must match /^[a-z0-9-]+$/ — got "${data.slug}". Use lowercase letters, digits, and hyphens only.`);
   }
 
   // Method
   if (data.method && !VALID_METHODS.includes(data.method)) {
-    errors.push(`\`method\` must be one of: ${VALID_METHODS.join(", ")} -- got "${data.method}"`);
+    errors.push(`\`method\` must be one of: ${VALID_METHODS.join(", ")} — got "${data.method}"`);
   }
 
   // Enabled
@@ -1517,7 +1517,7 @@ function validateEndpointJson(data: any, knownCollections?: string[], knownWorkf
       if (typeof fieldDef === "object" && fieldDef !== null) {
         const fd = fieldDef as any;
         if (fd.type && !VALID_FIELD_TYPES.includes(fd.type)) {
-          errors.push(`input.${fieldName}.type: must be one of: ${VALID_FIELD_TYPES.join(", ")} -- got "${fd.type}"`);
+          errors.push(`input.${fieldName}.type: must be one of: ${VALID_FIELD_TYPES.join(", ")} — got "${fd.type}"`);
         }
       }
     }
@@ -1530,7 +1530,7 @@ function validateEndpointJson(data: any, knownCollections?: string[], knownWorkf
     errors.push("`steps` must be an array");
   } else {
     if (data.steps.length === 0) {
-      errors.push("`steps` array is empty -- endpoints need at least one step");
+      errors.push("`steps` array is empty — endpoints need at least one step");
     }
     if (data.steps.length > MAX_STEPS_PER_ENDPOINT) {
       errors.push(`Too many steps: ${data.steps.length} (max ${MAX_STEPS_PER_ENDPOINT})`);
@@ -1555,7 +1555,7 @@ function validateEndpointJson(data: any, knownCollections?: string[], knownWorkf
       }
 
       if (!VALID_STEP_TYPES.includes(step.type)) {
-        errors.push(`${prefix}.type: must be one of: ${VALID_STEP_TYPES.join(", ")} -- got "${step.type}"`);
+        errors.push(`${prefix}.type: must be one of: ${VALID_STEP_TYPES.join(", ")} — got "${step.type}"`);
         return;
       }
 
@@ -1579,34 +1579,34 @@ function validateEndpointJson(data: any, knownCollections?: string[], knownWorkf
       if (step.type === "read") {
         if (step.collection) readCollections.add(step.collection);
         if (step.collection && knownCollections && !knownCollections.includes(step.collection)) {
-          warnings.push(`${prefix}: collection "${step.collection}" not in known collections -- make sure it's pushed to the server`);
+          warnings.push(`${prefix}: collection "${step.collection}" not in known collections — make sure it's pushed to the server`);
         }
       }
 
       if (step.type === "write") {
         if (step.collection && !readCollections.has(step.collection)) {
-          warnings.push(`${prefix}: writing to "${step.collection}" which was never read in a prior step -- the write may fail`);
+          warnings.push(`${prefix}: writing to "${step.collection}" which was never read in a prior step — the write may fail`);
         }
       }
 
       if (step.type === "transform") {
         if (step.operation && !VALID_OPERATIONS.includes(step.operation)) {
-          errors.push(`${prefix}.operation: must be one of: ${VALID_OPERATIONS.join(", ")} -- got "${step.operation}"`);
+          errors.push(`${prefix}.operation: must be one of: ${VALID_OPERATIONS.join(", ")} — got "${step.operation}"`);
         }
       }
 
       if (step.type === "condition") {
         if (step.operator && !VALID_OPERATORS.includes(step.operator)) {
-          errors.push(`${prefix}.operator: must be one of: ${VALID_OPERATORS.join(", ")} -- got "${step.operator}"`);
+          errors.push(`${prefix}.operator: must be one of: ${VALID_OPERATORS.join(", ")} — got "${step.operator}"`);
         }
         if (step.onFail && !VALID_ONFAIL.includes(step.onFail)) {
-          errors.push(`${prefix}.onFail: must be one of: ${VALID_ONFAIL.join(", ")} -- got "${step.onFail}"`);
+          errors.push(`${prefix}.onFail: must be one of: ${VALID_ONFAIL.join(", ")} — got "${step.onFail}"`);
         }
       }
 
       if (step.type === "workflow") {
         if (step.workflow && knownWorkflows && !knownWorkflows.includes(step.workflow)) {
-          warnings.push(`${prefix}: workflow "${step.workflow}" not in known workflows -- make sure it's pushed to the server`);
+          warnings.push(`${prefix}: workflow "${step.workflow}" not in known workflows — make sure it's pushed to the server`);
         }
       }
 
@@ -1627,7 +1627,7 @@ function validateEndpointJson(data: any, knownCollections?: string[], knownWorkf
 
   // Method + input warning
   if (data.method === "GET" && data.input && Object.keys(data.input).length > 0) {
-    warnings.push("GET endpoints typically don't have input fields -- consider using POST if you need to send data");
+    warnings.push("GET endpoints typically don't have input fields — consider using POST if you need to send data");
   }
 
   return { valid: errors.length === 0, errors, warnings };
@@ -1643,14 +1643,14 @@ function validateWorkflowJson(data: any): { valid: boolean; errors: string[]; wa
   } else if (typeof data.id !== "string") {
     errors.push("`id` must be a string");
   } else if (!WORKFLOW_ID_PATTERN.test(data.id)) {
-    errors.push(`\`id\` must match /^[a-z0-9-]+$/ -- got "${data.id}". Use lowercase letters, digits, and hyphens only.`);
+    errors.push(`\`id\` must match /^[a-z0-9-]+$/ — got "${data.id}". Use lowercase letters, digits, and hyphens only.`);
   }
 
   // Condition validation
   if (data.condition) {
     if (typeof data.condition === "object" && !Array.isArray(data.condition)) {
       if (data.condition.all || data.condition.any) {
-        // Compound condition -- validate each sub-condition
+        // Compound condition — validate each sub-condition
         const subs = data.condition.all || data.condition.any;
         if (!Array.isArray(subs)) {
           errors.push("`condition.all` / `condition.any` must be an array");
@@ -1660,7 +1660,7 @@ function validateWorkflowJson(data: any): { valid: boolean; errors: string[]; wa
         if (!data.condition.field) errors.push("`condition.field` is required");
         if (!data.condition.op) errors.push("`condition.op` is required");
         if (data.condition.op && !VALID_OPERATORS.includes(data.condition.op)) {
-          errors.push(`\`condition.op\` must be one of: ${VALID_OPERATORS.join(", ")} -- got "${data.condition.op}"`);
+          errors.push(`\`condition.op\` must be one of: ${VALID_OPERATORS.join(", ")} — got "${data.condition.op}"`);
         }
       }
       validateTemplates(data.condition, "condition", warnings);
@@ -1671,10 +1671,10 @@ function validateWorkflowJson(data: any): { valid: boolean; errors: string[]; wa
   if (data.onFail && typeof data.onFail === "object") {
     const of = data.onFail;
     if (of.severity && !["warning", "critical"].includes(of.severity)) {
-      errors.push(`onFail.severity: must be "warning" or "critical" -- got "${of.severity}"`);
+      errors.push(`onFail.severity: must be "warning" or "critical" — got "${of.severity}"`);
     }
     if (of.status && of.status !== 200) {
-      warnings.push(`onFail.status is ${of.status} -- non-200 status codes will cause s&box's Http API to throw and lose the error response body. Use 200 with ok: false instead.`);
+      warnings.push(`onFail.status is ${of.status} — non-200 status codes will cause s&box's Http API to throw and lose the error response body. Use 200 with ok: false instead.`);
     }
     if (of.errorMessage) {
       validateTemplates(of.errorMessage, "onFail.errorMessage", warnings);
@@ -1690,7 +1690,7 @@ function validateWorkflowJson(data: any): { valid: boolean; errors: string[]; wa
         return;
       }
       if (!VALID_STEP_TYPES.includes(step.type)) {
-        errors.push(`${prefix}.type: must be one of: ${VALID_STEP_TYPES.join(", ")} -- got "${step.type}"`);
+        errors.push(`${prefix}.type: must be one of: ${VALID_STEP_TYPES.join(", ")} — got "${step.type}"`);
         return;
       }
       const required = STEP_REQUIRED_FIELDS[step.type] || [];
@@ -1702,14 +1702,14 @@ function validateWorkflowJson(data: any): { valid: boolean; errors: string[]; wa
       }
       if (step.type === "condition") {
         if (step.operator && !VALID_OPERATORS.includes(step.operator)) {
-          errors.push(`${prefix}.operator: must be one of: ${VALID_OPERATORS.join(", ")} -- got "${step.operator}"`);
+          errors.push(`${prefix}.operator: must be one of: ${VALID_OPERATORS.join(", ")} — got "${step.operator}"`);
         }
         if (step.onFail && !VALID_ONFAIL.includes(step.onFail)) {
-          errors.push(`${prefix}.onFail: must be one of: ${VALID_ONFAIL.join(", ")} -- got "${step.onFail}"`);
+          errors.push(`${prefix}.onFail: must be one of: ${VALID_ONFAIL.join(", ")} — got "${step.onFail}"`);
         }
       }
       if (step.type === "transform" && step.operation && !VALID_OPERATIONS.includes(step.operation)) {
-        errors.push(`${prefix}.operation: must be one of: ${VALID_OPERATIONS.join(", ")} -- got "${step.operation}"`);
+        errors.push(`${prefix}.operation: must be one of: ${VALID_OPERATIONS.join(", ")} — got "${step.operation}"`);
       }
       validateTemplates(step, prefix, warnings);
     });
@@ -1748,10 +1748,10 @@ function validateEnvContent(content: string): { valid: boolean; errors: string[]
 
   // Prefix checks
   if (parsed.SBOXCOOL_PUBLIC_KEY && !parsed.SBOXCOOL_PUBLIC_KEY.startsWith("sbox_ns_")) {
-    errors.push(`SBOXCOOL_PUBLIC_KEY must start with "sbox_ns_" -- got "${parsed.SBOXCOOL_PUBLIC_KEY.slice(0, 20)}..."`);
+    errors.push(`SBOXCOOL_PUBLIC_KEY must start with "sbox_ns_" — got "${parsed.SBOXCOOL_PUBLIC_KEY.slice(0, 20)}..."`);
   }
   if (parsed.SBOXCOOL_SECRET_KEY && !parsed.SBOXCOOL_SECRET_KEY.startsWith("sbox_sk_")) {
-    errors.push(`SBOXCOOL_SECRET_KEY must start with "sbox_sk_" -- got "${parsed.SBOXCOOL_SECRET_KEY.slice(0, 20)}..."`);
+    errors.push(`SBOXCOOL_SECRET_KEY must start with "sbox_sk_" — got "${parsed.SBOXCOOL_SECRET_KEY.slice(0, 20)}..."`);
   }
 
   // Placeholder detection
@@ -1759,7 +1759,7 @@ function validateEnvContent(content: string): { valid: boolean; errors: string[]
     "sbox_ns_your_public_key", "sbox_sk_your_secret_key", "sbox_ns_your", "sbox_sk_your"];
   for (const [key, value] of Object.entries(parsed)) {
     if (placeholders.some(p => value.includes(p))) {
-      warnings.push(`${key} appears to contain a placeholder value -- replace with your actual key`);
+      warnings.push(`${key} appears to contain a placeholder value — replace with your actual key`);
     }
   }
 
@@ -1772,10 +1772,10 @@ function validateEnvContent(content: string): { valid: boolean; errors: string[]
     }
   }
   if (parsed.SBOXCOOL_API_VERSION && !/^v\d+$/.test(parsed.SBOXCOOL_API_VERSION)) {
-    warnings.push(`SBOXCOOL_API_VERSION expected format like "v3" -- got "${parsed.SBOXCOOL_API_VERSION}"`);
+    warnings.push(`SBOXCOOL_API_VERSION expected format like "v3" — got "${parsed.SBOXCOOL_API_VERSION}"`);
   }
   if (parsed.SBOXCOOL_DATA_SOURCE && !VALID_DATA_SOURCES.includes(parsed.SBOXCOOL_DATA_SOURCE as any)) {
-    errors.push(`SBOXCOOL_DATA_SOURCE must be one of: ${VALID_DATA_SOURCES.join(", ")} -- got "${parsed.SBOXCOOL_DATA_SOURCE}"`);
+    errors.push(`SBOXCOOL_DATA_SOURCE must be one of: ${VALID_DATA_SOURCES.join(", ")} — got "${parsed.SBOXCOOL_DATA_SOURCE}"`);
   }
 
   // Unknown keys
@@ -1788,7 +1788,7 @@ function validateEnvContent(content: string): { valid: boolean; errors: string[]
 
   // Security warning
   if (parsed.SBOXCOOL_SECRET_KEY && parsed.SBOXCOOL_SECRET_KEY.startsWith("sbox_sk_") && parsed.SBOXCOOL_SECRET_KEY.length > 15) {
-    warnings.push("This appears to contain a real secret key -- make sure the .env file is gitignored and never committed");
+    warnings.push("This appears to contain a real secret key — make sure the .env file is gitignored and never committed");
   }
 
   return { valid: errors.length === 0, errors, warnings, parsed };
@@ -1823,7 +1823,7 @@ function diagnoseError(error: string, context: string): {
     }
   }
 
-  // No match -- ask user for more info
+  // No match — ask user for more info
   return {
     errorCode: "UNKNOWN",
     explanation: "Could not automatically identify this error.",
@@ -1859,7 +1859,7 @@ const server = new McpServer({
 
 server.tool(
   "get_documentation",
-  "Get documentation about Network Storage -- collections, endpoints, workflows, setup, error handling, etc.",
+  "Get documentation about Network Storage — collections, endpoints, workflows, setup, error handling, etc.",
   {
     topic: z.enum([
       "overview", "collections", "endpoints", "workflows", "steps", "templates",
@@ -2013,7 +2013,7 @@ server.tool(
       type: z.enum(["string", "number", "boolean", "object", "array"]),
       required: z.boolean().optional(),
     })).optional().describe("Input field definitions"),
-    steps: z.array(z.record(z.any())).describe("Pipeline steps -- provide at minimum the type; defaults will be filled in"),
+    steps: z.array(z.record(z.any())).describe("Pipeline steps — provide at minimum the type; defaults will be filled in"),
   },
   async ({ slug, name, method, description, input, steps }) => {
     const displayName = name || slug.replace(/-/g, " ").replace(/\b\w/g, c => c.toUpperCase());
