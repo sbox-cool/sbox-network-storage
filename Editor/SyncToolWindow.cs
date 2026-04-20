@@ -1243,6 +1243,17 @@ public class SyncToolWindow : DockWindow
 			if ( !string.IsNullOrEmpty( slug ) ) localEpBySlug[slug] = ep;
 		}
 
+		// Also track deprecated local files so the diff loop can distinguish
+		// "remote endpoint has no local counterpart" (truly remote-only) from
+		// "remote endpoint has a local counterpart flagged deprecated" (intentionally ignored).
+		var localDeprecatedSlugs = new HashSet<string>();
+		foreach ( var ep in SyncToolConfig.LoadEndpoints( includeDeprecated: true ) )
+		{
+			if ( !SyncToolConfig.IsEndpointDeprecated( ep ) ) continue;
+			var slug = ep.TryGetProperty( "slug", out var s ) ? s.GetString() : "";
+			if ( !string.IsNullOrEmpty( slug ) ) localDeprecatedSlugs.Add( slug );
+		}
+
 		var localColByName = new Dictionary<string, string>();
 		foreach ( var (name, data) in localCollections )
 			localColByName[name] = JsonSerializer.Serialize( data, new JsonSerializerOptions { WriteIndented = true } );
@@ -1301,10 +1312,23 @@ public class SyncToolWindow : DockWindow
 
 					if ( !localEpBySlug.TryGetValue( slug, out var localEp ) )
 					{
-						SetItemState( id, remoteDiffers: true, status: SyncStatus.RemoteOnly,
-							diffSummary: "Remote only — not in local files",
-							localJson: "", remoteJson: PrettyJson( remoteJson ) );
-						diffs++;
+						if ( localDeprecatedSlugs.Contains( slug ) )
+						{
+							// Local file exists but is flagged `_deprecated` — sync intentionally
+							// ignores it. Treat as in-sync from a diff perspective so the row
+							// isn't flagged "Remote only" every check; the main endpoints list
+							// still labels it "deprecated, ignored by sync".
+							SetItemState( id, remoteDiffers: false, status: SyncStatus.InSync,
+								diffSummary: "Deprecated locally — ignored by sync",
+								localJson: "", remoteJson: PrettyJson( remoteJson ) );
+						}
+						else
+						{
+							SetItemState( id, remoteDiffers: true, status: SyncStatus.RemoteOnly,
+								diffSummary: "Remote only — not in local files",
+								localJson: "", remoteJson: PrettyJson( remoteJson ) );
+							diffs++;
+						}
 					}
 					else
 					{

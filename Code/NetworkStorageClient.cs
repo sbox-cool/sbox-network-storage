@@ -69,6 +69,21 @@ public static class NetworkStorage
 	private static bool _autoConfigAttempted;
 	private static string _cachedAuthToken;
 	private static DateTimeOffset _cachedAuthTokenAt;
+	private static readonly Dictionary<string, EndpointErrorInfo> _lastEndpointErrors = new();
+
+	public static bool TryGetLastEndpointError( string slug, out string code, out string message )
+	{
+		if ( _lastEndpointErrors.TryGetValue( slug, out var error ) )
+		{
+			code = error.Code;
+			message = error.Message;
+			return true;
+		}
+
+		code = null;
+		message = null;
+		return false;
+	}
 
 	/// <summary>
 	/// Configure the client manually. Call once at game startup.
@@ -215,6 +230,7 @@ public static class NetworkStorage
 	public static async Task<JsonElement?> CallEndpoint( string slug, object input = null )
 	{
 		EnsureConfigured();
+		ClearLastEndpointError( slug );
 
 		// If proxy mode is active and we're not the host, route through the host
 		if ( ProxyEnabled && !IsHost && RequestProxy != null )
@@ -263,6 +279,7 @@ public static class NetworkStorage
 				Log.Warning( $"[NetworkStorage]   Body: {bodyJson}" );
 			Log.Warning( $"[NetworkStorage]   Note: s&box Http API does not expose error response bodies — check server logs for details" );
 			NetLog.Error( slug, $"HTTP {status}" );
+			RecordEndpointError( slug, "HTTP_ERROR", $"HTTP {status}" );
 			return null;
 		}
 		catch ( Exception ex )
@@ -274,6 +291,7 @@ public static class NetworkStorage
 				Log.Warning( $"[NetworkStorage]   Body: {bodyJson}" );
 			Log.Warning( $"[NetworkStorage]   Exception: {ex}" );
 			NetLog.Error( slug, ex.Message );
+			RecordEndpointError( slug, "REQUEST_FAILED", ex.Message );
 			return null;
 		}
 	}
@@ -374,6 +392,7 @@ public static class NetworkStorage
 			{
 				Log.Warning( $"[NetworkStorage] {slug} PROXY returned null — host may have rejected the request" );
 				NetLog.Error( slug, "Proxy returned null" );
+				RecordEndpointError( slug, "PROXY_FAILED", "Proxy returned null" );
 				return null;
 			}
 
@@ -387,6 +406,7 @@ public static class NetworkStorage
 		{
 			Log.Warning( $"[NetworkStorage] {slug} PROXY FAILED — {ex.Message}" );
 			NetLog.Error( slug, $"Proxy error: {ex.Message}" );
+			RecordEndpointError( slug, "PROXY_FAILED", ex.Message );
 			return null;
 		}
 	}
@@ -448,6 +468,7 @@ public static class NetworkStorage
 	public static async Task<JsonElement?> CallEndpointAs( string targetSteamId, string clientToken, string slug, object input = null )
 	{
 		EnsureConfigured();
+		ClearLastEndpointError( slug );
 
 		// Same-machine shortcut: if the target is the host's own Steam ID (e.g. two
 		// editor instances on one machine share a Steam account), just call directly
@@ -502,6 +523,7 @@ public static class NetworkStorage
 				Log.Warning( $"[NetworkStorage]   Body: {bodyJson}" );
 			Log.Warning( $"[NetworkStorage]   Note: s&box Http API does not expose error response bodies — check server logs for details" );
 			NetLog.Error( slug, $"HTTP {status}" );
+			RecordEndpointError( slug, "HTTP_ERROR", $"HTTP {status}" );
 			return null;
 		}
 		catch ( Exception ex )
@@ -513,6 +535,7 @@ public static class NetworkStorage
 				Log.Warning( $"[NetworkStorage]   Body: {bodyJson}" );
 			Log.Warning( $"[NetworkStorage]   Exception: {ex}" );
 			NetLog.Error( slug, ex.Message );
+			RecordEndpointError( slug, "REQUEST_FAILED", ex.Message );
 			return null;
 		}
 	}
@@ -803,6 +826,7 @@ public static class NetworkStorage
 		if ( string.IsNullOrEmpty( raw ) )
 		{
 			NetLog.Error( slug, "Server returned empty response" );
+			RecordEndpointError( slug, "EMPTY_RESPONSE", "Server returned empty response" );
 			return null;
 		}
 
@@ -811,6 +835,7 @@ public static class NetworkStorage
 		if ( trimmed.Length > 0 && trimmed[0] != '{' && trimmed[0] != '[' )
 		{
 			NetLog.Error( slug, $"Non-JSON response: {raw[..Math.Min( raw.Length, 120 )]}" );
+			RecordEndpointError( slug, "INVALID_RESPONSE", "Server returned non-JSON response" );
 			return null;
 		}
 
@@ -822,6 +847,7 @@ public static class NetworkStorage
 		catch
 		{
 			NetLog.Error( slug, $"Invalid JSON: {raw[..Math.Min( raw.Length, 200 )]}" );
+			RecordEndpointError( slug, "INVALID_JSON", "Server returned invalid JSON" );
 			return null;
 		}
 
@@ -852,6 +878,7 @@ public static class NetworkStorage
 			{
 				Log.Warning( $"[NetworkStorage] {slug}: {errProp.GetString()}" );
 				NetLog.Error( slug, errProp.GetString() );
+				RecordEndpointError( slug, errProp.GetString() ?? "UNKNOWN", "" );
 				return null;
 			}
 		}
@@ -904,6 +931,31 @@ public static class NetworkStorage
 
 		Log.Warning( $"[NetworkStorage] {slug}: {code} — {message}" );
 		NetLog.Error( slug, $"{code}: {message}" );
+		RecordEndpointError( slug, code, message );
+	}
+
+	private static void ClearLastEndpointError( string slug )
+	{
+		if ( !string.IsNullOrEmpty( slug ) )
+			_lastEndpointErrors.Remove( slug );
+	}
+
+	private static void RecordEndpointError( string slug, string code, string message )
+	{
+		if ( string.IsNullOrEmpty( slug ) )
+			return;
+
+		_lastEndpointErrors[slug] = new EndpointErrorInfo
+		{
+			Code = string.IsNullOrWhiteSpace( code ) ? "UNKNOWN" : code,
+			Message = message ?? ""
+		};
+	}
+
+	private sealed class EndpointErrorInfo
+	{
+		public string Code { get; init; }
+		public string Message { get; init; }
 	}
 
 	private static string TruncateJson( JsonElement el ) => TruncateJson( el.ToString() ?? "", 120 );

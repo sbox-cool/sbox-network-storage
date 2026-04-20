@@ -105,7 +105,7 @@ public sealed class NetworkStorageProxyComponent : Component
 				input = JsonSerializer.Deserialize<JsonElement>( inputJson );
 
 			var result = await NetworkStorage.CallEndpointAs( steamId, clientToken, slug, input );
-			var resultJson = result.HasValue ? result.Value.ToString() : "";
+			var resultJson = result.HasValue ? result.Value.ToString() : CreateEndpointErrorJson( slug );
 
 			RpcRespondToClient( requestId, resultJson );
 		}
@@ -135,6 +135,22 @@ public sealed class NetworkStorageProxyComponent : Component
 	}
 
 	// ── RPC: host → client (response) ──
+
+	private static string CreateEndpointErrorJson( string slug )
+	{
+		if ( !NetworkStorage.TryGetLastEndpointError( slug, out var code, out var message ) )
+			return "";
+
+		return JsonSerializer.Serialize( new
+		{
+			ok = false,
+			error = new
+			{
+				code,
+				message
+			}
+		} );
+	}
 
 	[Rpc.Broadcast]
 	private void RpcRespondToClient( string requestId, string resultJson )
