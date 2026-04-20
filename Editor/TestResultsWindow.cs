@@ -86,7 +86,7 @@ public class TestResultsWindow : DockWindow
 
 			if ( !resp.HasValue )
 			{
-				_entries.Add( new TestEntry { Name = "Request Failed", Endpoint = "", Passed = false, Reason = SyncToolApi.LastErrorMessage ?? "Unknown error" } );
+				_entries.Add( new TestEntry { Name = "Request Failed", Endpoint = endpointFilter ?? "(all)", Passed = false, Reason = SyncToolApi.LastErrorMessage ?? "Unknown error" } );
 				_finished = true;
 				Update();
 				return;
@@ -94,15 +94,39 @@ public class TestResultsWindow : DockWindow
 
 			var result = resp.Value;
 
-			// Single endpoint response has no "results" array — wrap it
-			if ( !result.TryGetProperty( "results", out var results ) )
+			if ( result.ValueKind != JsonValueKind.Object )
 			{
-				ParseAutoTestEntry( result );
+				_entries.Add( new TestEntry
+				{
+					Name = "Malformed Response",
+					Endpoint = endpointFilter ?? "(all)",
+					Passed = false,
+					Reason = $"Server returned top-level {result.ValueKind}, expected Object. Raw: {TruncateRaw( result )}",
+				} );
+			}
+			// Single endpoint response has no "results" array — wrap it
+			else if ( !result.TryGetProperty( "results", out var results ) )
+			{
+				TryParseEntry( result, endpointFilter, index: -1 );
 			}
 			else if ( results.ValueKind == JsonValueKind.Array )
 			{
+				int idx = 0;
 				foreach ( var test in results.EnumerateArray() )
-					ParseAutoTestEntry( test );
+				{
+					TryParseEntry( test, endpointFilter, idx );
+					idx++;
+				}
+			}
+			else
+			{
+				_entries.Add( new TestEntry
+				{
+					Name = "Malformed Response",
+					Endpoint = endpointFilter ?? "(all)",
+					Passed = false,
+					Reason = $"'results' field is {results.ValueKind}, expected Array. Raw: {TruncateRaw( result )}",
+				} );
 			}
 
 			// Generate report file
@@ -110,7 +134,13 @@ public class TestResultsWindow : DockWindow
 		}
 		catch ( Exception ex )
 		{
-			_entries.Add( new TestEntry { Name = "Error", Endpoint = "", Passed = false, Reason = ex.Message } );
+			_entries.Add( new TestEntry
+			{
+				Name = "Runner Error",
+				Endpoint = endpointFilter ?? "(all)",
+				Passed = false,
+				Reason = $"{ex.GetType().Name}: {ex.Message}",
+			} );
 		}
 
 		_finished = true;
@@ -118,32 +148,115 @@ public class TestResultsWindow : DockWindow
 		Update();
 	}
 
+	/// <summary>Parse one entry; on failure, record an entry with raw JSON context instead of crashing the whole batch.</summary>
+	private void TryParseEntry( JsonElement test, string endpointFilter, int index )
+	{
+		try
+		{
+			// Defend against null or non-object entries before ParseAutoTestEntry runs.
+			if ( test.ValueKind != JsonValueKind.Object )
+			{
+				var label = index >= 0 ? $"results[{index}]" : "result";
+				_entries.Add( new TestEntry
+				{
+					Name = $"Malformed Entry ({label})",
+					Endpoint = endpointFilter ?? "(unknown)",
+					Passed = false,
+					Reason = $"Entry is {test.ValueKind}, expected Object. Raw: {TruncateRaw( test )}",
+				} );
+				return;
+			}
+
+			ParseAutoTestEntry( test );
+		}
+		catch ( Exception ex )
+		{
+			// Salvage whatever identifying info we can from the raw element.
+			var salvagedName = test.ValueKind == JsonValueKind.Object && test.TryGetProperty( "name", out var n ) && n.ValueKind == JsonValueKind.String ? n.GetString() : null;
+			var salvagedEp = test.ValueKind == JsonValueKind.Object && test.TryGetProperty( "endpoint", out var ep ) && ep.ValueKind == JsonValueKind.String ? ep.GetString() : null;
+			var salvagedMethod = test.ValueKind == JsonValueKind.Object && test.TryGetProperty( "method", out var m ) && m.ValueKind == JsonValueKind.String ? m.GetString() : "POST";
+			var label = index >= 0 ? $"results[{index}]" : "result";
+
+			_entries.Add( new TestEntry
+			{
+				Name = salvagedName ?? $"Parse Error ({label})",
+				Endpoint = salvagedEp ?? endpointFilter ?? "(unknown)",
+				Method = salvagedMethod,
+				Passed = false,
+				Reason = $"{ex.GetType().Name}: {ex.Message} — Raw: {TruncateRaw( test )}",
+				FullData = test,
+			} );
+		}
+	}
+
+	private static string TruncateRaw( JsonElement el, int max = 240 )
+	{
+		try
+		{
+			var raw = el.GetRawText();
+			if ( raw == null ) return "(null)";
+			return raw.Length > max ? raw[..max] + "..." : raw;
+		}
+		catch ( Exception ex )
+		{
+			return $"(unreadable: {ex.Message})";
+		}
+	}
+
 	private void ParseAutoTestEntry( JsonElement test )
 	{
 		var entry = new TestEntry
 		{
-			Name = test.TryGetProperty( "name", out var n ) ? n.GetString() : "?",
-			Endpoint = test.TryGetProperty( "endpoint", out var ep ) ? ep.GetString() : "",
-			Method = test.TryGetProperty( "method", out var m ) ? m.GetString() : "POST",
-			Passed = test.TryGetProperty( "passed", out var p ) && p.GetBoolean(),
-			Deprecated = test.TryGetProperty( "deprecated", out var dep ) && dep.GetBoolean(),
+			Name = ReadString( test, "name" ) ?? "(unnamed)",
+			Endpoint = ReadString( test, "endpoint" ) ?? "(no endpoint)",
+			Method = ReadString( test, "method" ) ?? "POST",
+			Passed = ReadBool( test, "passed" ),
+			Deprecated = ReadBool( test, "deprecated" ),
 			FullData = test,
 		};
 
 		// Collect errors and warnings as the reason string
 		var reasons = new List<string>();
 		if ( test.TryGetProperty( "errors", out var errs ) && errs.ValueKind == JsonValueKind.Array )
+		{
 			foreach ( var e in errs.EnumerateArray() )
-				reasons.Add( e.GetString() );
+			{
+				var s = e.ValueKind == JsonValueKind.String ? e.GetString() : e.GetRawText();
+				if ( !string.IsNullOrEmpty( s ) ) reasons.Add( s );
+			}
+		}
 		entry.Reason = reasons.Count > 0 ? string.Join( "; ", reasons ) : null;
 
 		if ( test.TryGetProperty( "warnings", out var ws ) && ws.ValueKind == JsonValueKind.Array )
-			entry.Warnings = ws.EnumerateArray().Select( w => w.GetString() ).ToArray();
+		{
+			entry.Warnings = ws.EnumerateArray()
+				.Select( w => w.ValueKind == JsonValueKind.String ? w.GetString() : w.GetRawText() )
+				.Where( s => !string.IsNullOrEmpty( s ) )
+				.ToArray();
+		}
 
-		if ( test.TryGetProperty( "result", out var res ) && res.TryGetProperty( "timing", out var tm ) && tm.TryGetProperty( "total", out var tt ) )
+		if ( test.TryGetProperty( "result", out var res ) && res.ValueKind == JsonValueKind.Object
+			&& res.TryGetProperty( "timing", out var tm ) && tm.ValueKind == JsonValueKind.Object
+			&& tm.TryGetProperty( "total", out var tt ) && tt.ValueKind == JsonValueKind.Number )
+		{
 			entry.TimingMs = tt.GetDouble();
+		}
 
 		_entries.Add( entry );
+	}
+
+	private static string ReadString( JsonElement obj, string field )
+	{
+		if ( obj.ValueKind != JsonValueKind.Object ) return null;
+		if ( !obj.TryGetProperty( field, out var v ) ) return null;
+		return v.ValueKind == JsonValueKind.String ? v.GetString() : null;
+	}
+
+	private static bool ReadBool( JsonElement obj, string field )
+	{
+		if ( obj.ValueKind != JsonValueKind.Object ) return false;
+		if ( !obj.TryGetProperty( field, out var v ) ) return false;
+		return v.ValueKind == JsonValueKind.True;
 	}
 
 	// ──────────────────────────────────────────────────────
@@ -450,13 +563,16 @@ public class TestResultsWindow : DockWindow
 
 	private void AppendEntryMd( System.Text.StringBuilder sb, TestEntry entry )
 	{
-		sb.AppendLine( $"### {( entry.Passed ? "PASS" : "FAIL" )} — {entry.Name}" );
-		sb.AppendLine( $"- **Endpoint:** `{entry.Method} {entry.Endpoint}`" );
+		var name = string.IsNullOrWhiteSpace( entry.Name ) ? "(unnamed)" : entry.Name;
+		var method = string.IsNullOrWhiteSpace( entry.Method ) ? "POST" : entry.Method;
+		var endpoint = string.IsNullOrWhiteSpace( entry.Endpoint ) ? "(endpoint missing)" : entry.Endpoint;
+		sb.AppendLine( $"### {( entry.Passed ? "PASS" : "FAIL" )} — {name}" );
+		sb.AppendLine( $"- **Endpoint:** `{method} {endpoint}`" );
 		sb.AppendLine( $"- **Timing:** {entry.TimingMs}ms" );
 		if ( !string.IsNullOrEmpty( entry.Reason ) )
 			sb.AppendLine( $"- **Reason:** {entry.Reason}" );
 
-		if ( entry.FullData.HasValue )
+		if ( entry.FullData.HasValue && entry.FullData.Value.ValueKind == JsonValueKind.Object )
 		{
 			var test = entry.FullData.Value;
 			if ( test.TryGetProperty( "input", out var inp ) )
@@ -468,10 +584,10 @@ public class TestResultsWindow : DockWindow
 			}
 			if ( test.TryGetProperty( "expect", out var exp ) )
 				sb.AppendLine( $"- **Expected:** `{JsonSerializer.Serialize( exp )}`" );
-			if ( test.TryGetProperty( "result", out var res ) )
+			if ( test.TryGetProperty( "result", out var res ) && res.ValueKind == JsonValueKind.Object )
 			{
-				var resOk = res.TryGetProperty( "ok", out var rok ) && rok.GetBoolean();
-				var resStatus = res.TryGetProperty( "status", out var rs ) ? rs.GetInt32() : 0;
+				var resOk = res.TryGetProperty( "ok", out var rok ) && rok.ValueKind == JsonValueKind.True;
+				var resStatus = res.TryGetProperty( "status", out var rs ) && rs.ValueKind == JsonValueKind.Number ? rs.GetInt32() : 0;
 				sb.AppendLine( $"- **Result:** ok={resOk}, status={resStatus}" );
 				if ( res.TryGetProperty( "body", out var body ) )
 				{
@@ -485,8 +601,9 @@ public class TestResultsWindow : DockWindow
 				sb.AppendLine( "- **Steps:**" );
 				foreach ( var step in steps.EnumerateArray() )
 				{
-					var sid = step.TryGetProperty( "id", out var si ) ? si.GetString() : "?";
-					var stype = step.TryGetProperty( "type", out var st ) ? st.GetString() : "?";
+					if ( step.ValueKind != JsonValueKind.Object ) continue;
+					var sid = step.TryGetProperty( "id", out var si ) && si.ValueKind == JsonValueKind.String ? si.GetString() : "?";
+					var stype = step.TryGetProperty( "type", out var st ) && st.ValueKind == JsonValueKind.String ? st.GetString() : "?";
 					var spass = !step.TryGetProperty( "passed", out var sp ) || sp.ValueKind != JsonValueKind.False;
 					sb.AppendLine( $"  - {( spass ? "+" : "x" )} `{sid}` ({stype})" );
 				}
@@ -524,16 +641,18 @@ public class TestResultsWindow : DockWindow
 		{
 			sb.AppendLine( "—-" );
 			sb.AppendLine();
-			sb.AppendLine( $"## FAIL — {entry.Name}" );
+			sb.AppendLine( $"## FAIL — {( string.IsNullOrWhiteSpace( entry.Name ) ? "(unnamed)" : entry.Name )}" );
 			sb.AppendLine();
 			sb.AppendLine( $"| Field | Value |" );
 			sb.AppendLine( $"|———-|———-|" );
-			sb.AppendLine( $"| **Endpoint** | `{entry.Method} {entry.Endpoint}` |" );
+			var methodStr = string.IsNullOrWhiteSpace( entry.Method ) ? "POST" : entry.Method;
+			var endpointStr = string.IsNullOrWhiteSpace( entry.Endpoint ) ? "(endpoint missing)" : entry.Endpoint;
+			sb.AppendLine( $"| **Endpoint** | `{methodStr} {endpointStr}` |" );
 			sb.AppendLine( $"| **Timing** | {entry.TimingMs}ms |" );
 			sb.AppendLine( $"| **Reason** | {entry.Reason ?? "—"} |" );
 			sb.AppendLine();
 
-			if ( entry.FullData.HasValue )
+			if ( entry.FullData.HasValue && entry.FullData.Value.ValueKind == JsonValueKind.Object )
 			{
 				var test = entry.FullData.Value;
 
@@ -572,12 +691,12 @@ public class TestResultsWindow : DockWindow
 				}
 
 				// Result
-				if ( test.TryGetProperty( "result", out var res ) )
+				if ( test.TryGetProperty( "result", out var res ) && res.ValueKind == JsonValueKind.Object )
 				{
 					sb.AppendLine();
 					sb.AppendLine( "### Actual Result" );
-					var resOk = res.TryGetProperty( "ok", out var rok ) && rok.GetBoolean();
-					var resStatus = res.TryGetProperty( "status", out var rs ) ? rs.GetInt32() : 0;
+					var resOk = res.TryGetProperty( "ok", out var rok ) && rok.ValueKind == JsonValueKind.True;
+					var resStatus = res.TryGetProperty( "status", out var rs ) && rs.ValueKind == JsonValueKind.Number ? rs.GetInt32() : 0;
 					sb.AppendLine( $"- **ok:** {resOk}" );
 					sb.AppendLine( $"- **status:** {resStatus}" );
 					if ( res.TryGetProperty( "body", out var body ) )
@@ -598,10 +717,15 @@ public class TestResultsWindow : DockWindow
 					sb.AppendLine( "|———|———|————|————|" );
 					foreach ( var step in steps.EnumerateArray() )
 					{
-						var sid = step.TryGetProperty( "id", out var si ) ? si.GetString() : "?";
-						var stype = step.TryGetProperty( "type", out var st ) ? st.GetString() : "?";
+						if ( step.ValueKind != JsonValueKind.Object )
+						{
+							sb.AppendLine( $"| `(non-object)` | — | — | {TruncateRaw( step, 60 )} |" );
+							continue;
+						}
+						var sid = step.TryGetProperty( "id", out var si ) && si.ValueKind == JsonValueKind.String ? si.GetString() : "?";
+						var stype = step.TryGetProperty( "type", out var st ) && st.ValueKind == JsonValueKind.String ? st.GetString() : "?";
 						var spass = !step.TryGetProperty( "passed", out var sp ) || sp.ValueKind != JsonValueKind.False;
-						var swarn = step.TryGetProperty( "warning", out var sw ) ? sw.GetString() : null;
+						var swarn = step.TryGetProperty( "warning", out var sw ) && sw.ValueKind == JsonValueKind.String ? sw.GetString() : null;
 						var status = swarn != null ? "Warning" : spass ? "OK" : "FAIL";
 						var sresult = "";
 						if ( step.TryGetProperty( "result", out var sr ) )
