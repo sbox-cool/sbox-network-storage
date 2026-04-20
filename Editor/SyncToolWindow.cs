@@ -228,6 +228,18 @@ public class SyncToolWindow : DockWindow
 			var checkRect = new Rect( pad, y, w, checkBtnH );
 			DrawWideButton( checkRect, checkLabel, Color.Cyan, "check_updates", () => _ = CheckForUpdates() );
 			y += checkBtnH + 8;
+
+			var remoteSemanticsCount = GetRemoteSemanticsCount();
+			if ( remoteSemanticsCount > 0 )
+			{
+				var semanticsLabel = remoteSemanticsCount == 1
+					? "Pull All (1 semantic item)"
+					: $"Pull All ({remoteSemanticsCount} semantic items)";
+				var semanticsRect = new Rect( pad, y, w, checkBtnH );
+				DrawWideButton( semanticsRect, semanticsLabel, Color.Green, "pull_remote_semantics_all",
+					() => PullAllRemoteSemantics() );
+				y += checkBtnH + 8;
+			}
 		}
 
 		DrawSeparator( ref y, w, pad );
@@ -349,7 +361,7 @@ public class SyncToolWindow : DockWindow
 			{
 				var itemId = $"wf_{wfId}";
 				var hasLocal = localWfIds.Contains( wfId );
-				var info = hasLocal ? GetWorkflowInfo( _workflowFiles.FirstOrDefault( f => Path.GetFileNameWithoutExtension( f ) == wfId ) ) : "remote only";
+				var info = hasLocal ? GetWorkflowInfo( SyncToolConfig.FindWorkflowFileById( wfId ) ) : "remote only";
 				DrawResourceRow( ref y, pad, w, $"{wfId}.json", info, itemId,
 					hasLocal ? () => PushItem( itemId ) : null,
 					() => PullItem( itemId ) );
@@ -404,12 +416,12 @@ public class SyncToolWindow : DockWindow
 				Paint.DrawText( new Rect( sx, y, 100, 16 ), $"▲ {mismatchCount} mismatch", TextFlag.LeftCenter );
 				sx += 90;
 			}
-			var mergeLogCount = _syncLog.Count( e => e.Detail != null && e.Detail.Contains( "merge available" ) );
+			var mergeLogCount = _syncLog.Count( e => e.Detail != null && e.Detail.Contains( "Remote semantics available" ) );
 			if ( mergeLogCount > 0 )
 			{
 				Paint.SetPen( Color.Green.WithAlpha( 0.8f ) );
-				Paint.DrawText( new Rect( sx, y, 100, 16 ), $"⇄ {mergeLogCount} to merge", TextFlag.LeftCenter );
-				sx += 90;
+				Paint.DrawText( new Rect( sx, y, 140, 16 ), $"⇄ {mergeLogCount} semantics", TextFlag.LeftCenter );
+				sx += 120;
 			}
 			if ( failCount > 0 )
 			{
@@ -426,7 +438,7 @@ public class SyncToolWindow : DockWindow
 					// Icon
 					var isMismatch = entry.Detail != null && entry.Detail.Contains( "Mismatch" );
 					var isVerified = entry.Detail != null && entry.Detail.Contains( "Verified" );
-					var isMergeAvail = entry.Detail != null && entry.Detail.Contains( "merge available" );
+					var isMergeAvail = entry.Detail != null && entry.Detail.Contains( "Remote semantics available" );
 					var icon = isMergeAvail ? "⇄"
 						: entry.Ok ? ( isVerified ? "●" : "✓" )
 						: ( isMismatch ? "▲" : "✗" );
@@ -538,6 +550,18 @@ public class SyncToolWindow : DockWindow
 			var checkRect = new Rect( pad, y, w, checkBtnH );
 			DrawWideButton( checkRect, checkLabel, Color.Cyan, "check_updates", () => _ = CheckForUpdates() );
 			y += checkBtnH + 8;
+
+			var remoteSemanticsCount = GetRemoteSemanticsCount();
+			if ( remoteSemanticsCount > 0 )
+			{
+				var semanticsLabel = remoteSemanticsCount == 1
+					? "Pull All (1 semantic item)"
+					: $"Pull All ({remoteSemanticsCount} semantic items)";
+				var semanticsRect = new Rect( pad, y, w, checkBtnH );
+				DrawWideButton( semanticsRect, semanticsLabel, Color.Green, "pull_remote_semantics_all",
+					() => PullAllRemoteSemantics() );
+				y += checkBtnH + 8;
+			}
 		}
 
 		DrawSeparator( ref y, w, pad );
@@ -658,14 +682,14 @@ public class SyncToolWindow : DockWindow
 		var contentX = pad + ( hasIndicator ? 22 : 8 );
 		var btnY = y + ( rowH - btnH ) / 2;
 
-		// Pull/Merge button — LEFT side (only if remote has changes to pull or merge)
+		// Pull/Review button — LEFT side (only if remote has changes to pull)
 		if ( state.Status == SyncStatus.MergeAvailable )
 		{
-			var mergeW = 52f;
+			var mergeW = 56f;
 			var mergeRect = new Rect( contentX, btnY, mergeW, btnH );
 			var capturedMergeId = id;
 			var capturedMergeName = name;
-			DrawSmallButton( mergeRect, "Merge", Color.Green, $"merge_{id}",
+			DrawSmallButton( mergeRect, "Review", Color.Green, $"merge_{id}",
 				() => OpenMergeView( capturedMergeId, capturedMergeName ) );
 			contentX += mergeW + 6;
 		}
@@ -684,7 +708,8 @@ public class SyncToolWindow : DockWindow
 
 		Paint.SetDefaultFont( size: 10 );
 		Paint.SetPen( deprecated ? Color.White.WithAlpha( 0.4f ) : Color.White.WithAlpha( 0.9f ) );
-		var nameW = w - ( contentX - pad ) - rightBtnsW - 70;
+		var badgeReserve = hasStatusBadge && !hasResult ? 86f : 70f;
+		var nameW = w - ( contentX - pad ) - rightBtnsW - badgeReserve;
 		Paint.DrawText( new Rect( contentX, y, nameW, rowH ), name, TextFlag.LeftCenter );
 
 		// Deprecated badge
@@ -714,7 +739,7 @@ public class SyncToolWindow : DockWindow
 				SyncStatus.LocalOnly => ("Local", Color.Yellow.WithAlpha( 0.7f )),
 				SyncStatus.RemoteOnly => ("Remote", Color.Cyan.WithAlpha( 0.7f )),
 				SyncStatus.Differs => ("Changed", Color.Orange.WithAlpha( 0.7f )),
-				SyncStatus.MergeAvailable => ("Merge", Color.Green.WithAlpha( 0.7f )),
+				SyncStatus.MergeAvailable => ("Semantic", Color.Green.WithAlpha( 0.7f )),
 				_ => ("", Color.White.WithAlpha( 0.3f ))
 			};
 
@@ -723,7 +748,8 @@ public class SyncToolWindow : DockWindow
 				Paint.SetDefaultFont( size: 8 );
 				Paint.SetPen( badgeColor );
 				var badgeX = contentX + nameW + 4;
-				Paint.DrawText( new Rect( badgeX, y, 50, rowH ), badgeText, TextFlag.LeftCenter );
+				var badgeW = Math.Max( 50f, Paint.MeasureText( badgeText ).x + 8 );
+				Paint.DrawText( new Rect( badgeX, y, badgeW, rowH ), badgeText, TextFlag.LeftCenter );
 			}
 		}
 
@@ -1077,7 +1103,7 @@ public class SyncToolWindow : DockWindow
 		else if ( id.StartsWith( "wf_" ) )
 		{
 			var wfId = id.Substring( 3 );
-			var localFile = _workflowFiles.FirstOrDefault( f => Path.GetFileNameWithoutExtension( f ) == wfId );
+			var localFile = SyncToolConfig.FindWorkflowFileById( wfId );
 			var hasLocal = localFile != null;
 			name = $"{wfId}.json";
 			info = hasLocal ? GetWorkflowInfo( localFile ) : "remote only";
@@ -1193,6 +1219,20 @@ public class SyncToolWindow : DockWindow
 		}
 	}
 
+	private string[] GetRemoteSemanticsIds()
+	{
+		return _items
+			.Where( x => x.Value.Status == SyncStatus.MergeAvailable && !string.IsNullOrEmpty( x.Value.RemoteJson ) )
+			.Select( x => x.Key )
+			.OrderBy( x => x )
+			.ToArray();
+	}
+
+	private int GetRemoteSemanticsCount()
+	{
+		return GetRemoteSemanticsIds().Length;
+	}
+
 	// ──────────────────────────────────────────────────────
 	//  Check for Updates (compare local vs remote)
 	// ──────────────────────────────────────────────────────
@@ -1229,6 +1269,7 @@ public class SyncToolWindow : DockWindow
 	private async Task DoCheckForUpdates()
 	{
 		var diffs = 0;
+		var remoteSemanticsCount = 0;
 		var localOnlyCount = 0;
 
 		// ── Load local files via SyncToolConfig (uses System.IO with correct project root) ──
@@ -1337,23 +1378,16 @@ public class SyncToolWindow : DockWindow
 
 						if ( differs )
 						{
-							// Classify: is the diff only server-added defaults?
-							var (addedFields, changedFields, isDefaultsOnly) = MergeViewWindow.AnalyzeDifferences(
-								PrettyJson( localJson ), PrettyJson( remoteJson ) );
+							var localPretty = PrettyJson( localJson );
+							var remotePretty = PrettyJson( remoteJson );
+							var classification = ClassifyRemoteDifference( id, localPretty, remotePretty );
 
-							if ( isDefaultsOnly && changedFields.Count == 0 )
-							{
-								SetItemState( id, remoteDiffers: true, status: SyncStatus.MergeAvailable,
-									diffSummary: $"Server added {addedFields.Count} default field(s) — click Merge to accept",
-									localJson: PrettyJson( localJson ), remoteJson: PrettyJson( remoteJson ) );
-							}
-							else
-							{
-								SetItemState( id, remoteDiffers: true, status: SyncStatus.Differs,
-									diffSummary: DiffEndpoint( localJson, remoteJson, slug ),
-									localJson: PrettyJson( localJson ), remoteJson: PrettyJson( remoteJson ) );
-							}
-							diffs++;
+							SetItemState( id, remoteDiffers: true, status: classification.Status,
+								diffSummary: classification.Summary,
+								localJson: localPretty, remoteJson: remotePretty );
+
+							if ( classification.Status == SyncStatus.MergeAvailable ) remoteSemanticsCount++;
+							else diffs++;
 						}
 						else
 						{
@@ -1401,23 +1435,16 @@ public class SyncToolWindow : DockWindow
 
 					if ( differs )
 					{
-						// Classify: is the diff only server-added defaults?
-						var (addedFields, changedFields, isDefaultsOnly) = MergeViewWindow.AnalyzeDifferences(
-							PrettyJson( localJson ), PrettyJson( remoteJson ) );
+						var localPretty = PrettyJson( localJson );
+						var remotePretty = PrettyJson( remoteJson );
+						var classification = ClassifyRemoteDifference( id, localPretty, remotePretty );
 
-						if ( isDefaultsOnly && changedFields.Count == 0 )
-						{
-							SetItemState( id, remoteDiffers: true, status: SyncStatus.MergeAvailable,
-								diffSummary: $"Server added {addedFields.Count} default field(s) — click Merge to accept",
-								localJson: PrettyJson( localJson ), remoteJson: PrettyJson( remoteJson ) );
-						}
-						else
-						{
-							SetItemState( id, remoteDiffers: true, status: SyncStatus.Differs,
-								diffSummary: DiffCollectionSchema( localJson, remoteJson ),
-								localJson: PrettyJson( localJson ), remoteJson: PrettyJson( remoteJson ) );
-						}
-						diffs++;
+						SetItemState( id, remoteDiffers: true, status: classification.Status,
+							diffSummary: classification.Summary,
+							localJson: localPretty, remoteJson: remotePretty );
+
+						if ( classification.Status == SyncStatus.MergeAvailable ) remoteSemanticsCount++;
+						else diffs++;
 					}
 					else
 					{
@@ -1474,22 +1501,16 @@ public class SyncToolWindow : DockWindow
 
 					if ( differs )
 					{
-						// Classify: is the diff only server-added defaults?
-						var (addedFields, changedFields, isDefaultsOnly) = MergeViewWindow.AnalyzeDifferences(
-							PrettyJson( localJson ), PrettyJson( remoteJson ) );
+						var localPretty = PrettyJson( localJson );
+						var remotePretty = PrettyJson( remoteJson );
+						var classification = ClassifyRemoteDifference( id, localPretty, remotePretty );
 
-						if ( isDefaultsOnly && changedFields.Count == 0 )
-						{
-							SetItemState( id, remoteDiffers: true, status: SyncStatus.MergeAvailable,
-								diffSummary: $"Server added {addedFields.Count} default field(s) — click Merge to accept",
-								localJson: PrettyJson( localJson ), remoteJson: PrettyJson( remoteJson ) );
-						}
-						else
-						{
-							SetItemState( id, remoteDiffers: true, status: SyncStatus.Differs, diffSummary: "Content differs",
-								localJson: PrettyJson( localJson ), remoteJson: PrettyJson( remoteJson ) );
-						}
-						diffs++;
+						SetItemState( id, remoteDiffers: true, status: classification.Status,
+							diffSummary: classification.Summary,
+							localJson: localPretty, remoteJson: remotePretty );
+
+						if ( classification.Status == SyncStatus.MergeAvailable ) remoteSemanticsCount++;
+						else diffs++;
 					}
 					else
 					{
@@ -1516,6 +1537,7 @@ public class SyncToolWindow : DockWindow
 			_hasCheckedRemote = true;
 		var parts = new List<string>();
 		if ( diffs > 0 ) parts.Add( $"{diffs} remote diff(s)" );
+		if ( remoteSemanticsCount > 0 ) parts.Add( $"{remoteSemanticsCount} remote semantics" );
 		if ( localOnlyCount > 0 ) parts.Add( $"{localOnlyCount} local only" );
 		_status = parts.Count > 0
 			? string.Join( ", ", parts )
@@ -1572,6 +1594,82 @@ public class SyncToolWindow : DockWindow
 			return JsonSerializer.Serialize( el, new JsonSerializerOptions { WriteIndented = true } );
 		}
 		catch { return json; }
+	}
+
+	private (SyncStatus Status, string Summary, JsonDiffUtilities.ComparisonResult Analysis) ClassifyRemoteDifference(
+		string id, string localJson, string remoteJson )
+	{
+		var analysis = JsonDiffUtilities.Analyze( localJson, remoteJson );
+		if ( analysis.IsRemoteAdditiveOnly )
+			return (SyncStatus.MergeAvailable, BuildRemoteSemanticsSummary( analysis ), analysis);
+
+		var lineSummary = JsonDiffUtilities.SummarizeLineDifferences( analysis.LineCounts );
+		var detail = BuildResourceDiffDetail( id, localJson, remoteJson );
+		return (SyncStatus.Differs, CombineDiffSummary( lineSummary, detail ), analysis);
+	}
+
+	private string BuildResourceDiffDetail( string id, string localJson, string remoteJson )
+	{
+		if ( id.StartsWith( "ep_" ) )
+			return DiffEndpoint( localJson, remoteJson, id[3..] );
+		if ( id.StartsWith( "col_" ) )
+			return DiffCollectionSchema( localJson, remoteJson );
+
+		return null;
+	}
+
+	private static string BuildRemoteSemanticsSummary( JsonDiffUtilities.ComparisonResult analysis )
+	{
+		var lineSummary = analysis.LineCounts.HasChanges
+			? JsonDiffUtilities.SummarizeLineDifferences( analysis.LineCounts )
+			: $"Remote added {analysis.Added.Count} field{Plural( analysis.Added.Count )}";
+		var preview = JsonDiffUtilities.PreviewPaths( analysis.Added );
+
+		return string.IsNullOrWhiteSpace( preview )
+			? $"{lineSummary} | Pull Remote Semantics"
+			: $"{lineSummary} | Pull Remote Semantics: {preview}";
+	}
+
+	private static string BuildRemoteSemanticsLogDetail( JsonDiffUtilities.ComparisonResult analysis )
+	{
+		var preview = JsonDiffUtilities.PreviewPaths( analysis.Added );
+		var count = analysis.Added.Count;
+		var countText = $"{count} remote field{Plural( count )}";
+
+		return string.IsNullOrWhiteSpace( preview )
+			? $"Remote semantics available - {countText}"
+			: $"Remote semantics available - {countText}: {preview}";
+	}
+
+	private static string CombineDiffSummary( string lineSummary, string detail )
+	{
+		if ( string.IsNullOrWhiteSpace( detail ) )
+			return lineSummary;
+
+		if ( detail.Equals( "Field ordering differs (content identical)", StringComparison.OrdinalIgnoreCase ) )
+			return lineSummary;
+
+		if ( detail.StartsWith( "Content differs", StringComparison.OrdinalIgnoreCase ) )
+			return lineSummary;
+
+		if ( string.IsNullOrWhiteSpace( lineSummary ) )
+			return detail;
+
+		return $"{lineSummary} | {detail}";
+	}
+
+	private static string Plural( int count )
+	{
+		return count == 1 ? "" : "s";
+	}
+
+	private static string DescribeSyncItem( string id )
+	{
+		if ( id.StartsWith( "ep_" ) ) return $"{id[3..]}.json (endpoint)";
+		if ( id.StartsWith( "col_" ) ) return $"{id[4..]}.json (collection)";
+		if ( id.StartsWith( "wf_" ) ) return $"{id[3..]}.json (workflow)";
+		if ( id.StartsWith( "test_" ) ) return $"{id[5..]}.json (test)";
+		return id;
 	}
 
 	// ──────────────────────────────────────────────────────
@@ -1691,10 +1789,10 @@ public class SyncToolWindow : DockWindow
 		var failCount = _syncLog.Count( e => !e.Ok );
 		var mismatchCount = _syncLog.Count( e => e.Detail != null && e.Detail.Contains( "Mismatch" ) );
 		var verifiedCount = _syncLog.Count( e => e.Detail != null && e.Detail.Contains( "Verified" ) );
-		var mergeCount = _syncLog.Count( e => e.Detail != null && e.Detail.Contains( "merge available" ) );
+		var mergeCount = _syncLog.Count( e => e.Detail != null && e.Detail.Contains( "Remote semantics available" ) );
 
 		if ( mergeCount > 0 && mismatchCount == 0 && failCount == 0 )
-			_status = $"Pushed OK — {mergeCount} item(s) have server defaults to merge";
+			_status = $"Pushed OK - {mergeCount} item(s) can pull remote semantics";
 		else if ( mismatchCount > 0 )
 			_status = $"Done: {okCount} pushed, {mismatchCount} mismatch(es) — check diffs";
 		else if ( failCount > 0 )
@@ -1771,24 +1869,15 @@ public class SyncToolWindow : DockWindow
 							var eid = $"ep_{slug}";
 							var localPretty = localEpBySlug.TryGetValue( slug, out var lj ) ? PrettyJson( lj ) : "{}";
 							var remotePretty = PrettyJson( JsonSerializer.Serialize( remoteLocal ) );
-							var (addedFields, changedFields, isDefaultsOnly) = MergeViewWindow.AnalyzeDifferences( localPretty, remotePretty );
+							var classification = ClassifyRemoteDifference( eid, localPretty, remotePretty );
 
-							if ( isDefaultsOnly && changedFields.Count == 0 )
-							{
-								entry.Detail = $"Server added {addedFields.Count} default(s) — merge available";
-								entry.Ok = true;
-								SetItemState( eid, remoteDiffers: true, status: SyncStatus.MergeAvailable,
-									diffSummary: $"Server added {addedFields.Count} default field(s) — click Merge to accept",
-									localJson: localPretty, remoteJson: remotePretty );
-							}
-							else
-							{
-								entry.Detail = "Mismatch — pushed but remote differs. See diff";
-								entry.Ok = false;
-								SetItemState( eid, remoteDiffers: true, status: SyncStatus.Differs,
-									diffSummary: "Post-push verification failed — remote doesn't match local",
-									localJson: localPretty, remoteJson: remotePretty );
-							}
+							entry.Detail = classification.Status == SyncStatus.MergeAvailable
+								? BuildRemoteSemanticsLogDetail( classification.Analysis )
+								: $"Mismatch - {classification.Summary}";
+							entry.Ok = classification.Status == SyncStatus.MergeAvailable;
+							SetItemState( eid, remoteDiffers: true, status: classification.Status,
+								diffSummary: classification.Summary,
+								localJson: localPretty, remoteJson: remotePretty );
 						}
 						_syncLog[logIdx] = entry;
 					}
@@ -1817,24 +1906,15 @@ public class SyncToolWindow : DockWindow
 						var cid = $"col_{colName}";
 						var localPretty = PrettyJson( localColByName.GetValueOrDefault( colName, "{}" ) );
 						var remotePretty = PrettyJson( JsonSerializer.Serialize( remoteLocal ) );
-						var (addedFields, changedFields, isDefaultsOnly) = MergeViewWindow.AnalyzeDifferences( localPretty, remotePretty );
+						var classification = ClassifyRemoteDifference( cid, localPretty, remotePretty );
 
-						if ( isDefaultsOnly && changedFields.Count == 0 )
-						{
-							entry.Detail = $"Server added {addedFields.Count} default(s) — merge available";
-							entry.Ok = true;
-							SetItemState( cid, remoteDiffers: true, status: SyncStatus.MergeAvailable,
-								diffSummary: $"Server added {addedFields.Count} default field(s) — click Merge to accept",
-								localJson: localPretty, remoteJson: remotePretty );
-						}
-						else
-						{
-							entry.Detail = "Mismatch — pushed but remote differs. See diff";
-							entry.Ok = false;
-							SetItemState( cid, remoteDiffers: true, status: SyncStatus.Differs,
-								diffSummary: "Post-push verification failed — remote doesn't match local",
-								localJson: localPretty, remoteJson: remotePretty );
-						}
+						entry.Detail = classification.Status == SyncStatus.MergeAvailable
+							? BuildRemoteSemanticsLogDetail( classification.Analysis )
+							: $"Mismatch - {classification.Summary}";
+						entry.Ok = classification.Status == SyncStatus.MergeAvailable;
+						SetItemState( cid, remoteDiffers: true, status: classification.Status,
+							diffSummary: classification.Summary,
+							localJson: localPretty, remoteJson: remotePretty );
 					}
 					_syncLog[logIdx] = entry;
 				}
@@ -1862,24 +1942,15 @@ public class SyncToolWindow : DockWindow
 						var wid = $"wf_{wfId}";
 						var localPretty = PrettyJson( localWfById.GetValueOrDefault( wfId, "{}" ) );
 						var remotePretty = PrettyJson( JsonSerializer.Serialize( remoteLocal ) );
-						var (addedFields, changedFields, isDefaultsOnly) = MergeViewWindow.AnalyzeDifferences( localPretty, remotePretty );
+						var classification = ClassifyRemoteDifference( wid, localPretty, remotePretty );
 
-						if ( isDefaultsOnly && changedFields.Count == 0 )
-						{
-							entry.Detail = $"Server added {addedFields.Count} default(s) — merge available";
-							entry.Ok = true;
-							SetItemState( wid, remoteDiffers: true, status: SyncStatus.MergeAvailable,
-								diffSummary: $"Server added {addedFields.Count} default field(s) — click Merge to accept",
-								localJson: localPretty, remoteJson: remotePretty );
-						}
-						else
-						{
-							entry.Detail = "Mismatch — pushed but remote differs. See diff";
-							entry.Ok = false;
-							SetItemState( wid, remoteDiffers: true, status: SyncStatus.Differs,
-								diffSummary: "Post-push verification failed — remote doesn't match local",
-								localJson: localPretty, remoteJson: remotePretty );
-						}
+						entry.Detail = classification.Status == SyncStatus.MergeAvailable
+							? BuildRemoteSemanticsLogDetail( classification.Analysis )
+							: $"Mismatch - {classification.Summary}";
+						entry.Ok = classification.Status == SyncStatus.MergeAvailable;
+						SetItemState( wid, remoteDiffers: true, status: classification.Status,
+							diffSummary: classification.Summary,
+							localJson: localPretty, remoteJson: remotePretty );
 					}
 					_syncLog[logIdx] = entry;
 				}
@@ -2305,7 +2376,7 @@ public class SyncToolWindow : DockWindow
 
 	/// <summary>
 	/// Compare two endpoint JSON files key-by-key.
-	/// Categorizes changes as cosmetic (name, description) vs structural (steps, input, response, method).
+	/// Categorizes changes as cosmetic (name, description, notes) vs structural (steps, input, response, method).
 	/// </summary>
 	private string DiffEndpoint( string localJson, string remoteJson, string slug )
 	{
@@ -2328,6 +2399,14 @@ public class SyncToolWindow : DockWindow
 			if ( localDesc != remoteDesc )
 			{
 				var label = string.IsNullOrEmpty( remoteDesc ) ? "description added locally" : "description differs";
+				cosmetic.Add( label );
+			}
+
+			var localNotes = GetStr( local, "notes" );
+			var remoteNotes = GetStr( remote, "notes" );
+			if ( localNotes != remoteNotes )
+			{
+				var label = string.IsNullOrEmpty( remoteNotes ) ? "notes added locally" : "notes differ";
 				cosmetic.Add( label );
 			}
 
@@ -2513,7 +2592,79 @@ public class SyncToolWindow : DockWindow
 	}
 
 	/// <summary>
-	/// Open the MergeViewWindow showing server-added fields with explanations.
+	/// Pull additive remote-only fields into every eligible local file.
+	/// </summary>
+	private void PullAllRemoteSemantics()
+	{
+		if ( _busy || !SyncToolConfig.IsValid ) return;
+
+		var ids = GetRemoteSemanticsIds();
+		if ( ids.Length == 0 ) return;
+
+		var detail = string.Join( "\n", ids.Select( DescribeSyncItem ) );
+		ConfirmDialog.Show(
+			"Pull Remote Semantics",
+			$"This will update {ids.Length} local file(s) with additive remote-only fields. Files with modified or missing content are excluded from this action.",
+			() => _ = DoPullAllRemoteSemantics( ids ),
+			detail: detail );
+	}
+
+	private Task DoPullAllRemoteSemantics( string[] ids )
+	{
+		_busy = true;
+		_busyItem = "pull_remote_semantics_all";
+		_status = $"Pulling remote semantics for {ids.Length} item(s)...";
+		Update();
+
+		try
+		{
+			var okCount = 0;
+			var failCount = 0;
+
+			foreach ( var id in ids )
+			{
+				if ( !_items.TryGetValue( id, out var state ) || string.IsNullOrEmpty( state.RemoteJson ) )
+				{
+					failCount++;
+					continue;
+				}
+
+				if ( TryApplyRemoteJsonToLocal( id, state.RemoteJson, out var error ) )
+				{
+					okCount++;
+					SetItemState( id, result: "OK", remoteDiffers: false, status: SyncStatus.InSync, diffSummary: "" );
+				}
+				else
+				{
+					failCount++;
+					SetItemState( id, result: "FAIL" );
+					Log.Warning( $"[SyncTool] Pull remote semantics failed for {id}: {error}" );
+				}
+			}
+
+			if ( okCount > 0 )
+			{
+				RefreshFileList();
+				TryRunCodeGeneration( "pull remote semantics" );
+				InvalidateRemoteCache();
+			}
+
+			_status = failCount == 0
+				? $"Pulled remote semantics for {okCount} item(s)"
+				: $"Pulled remote semantics for {okCount} item(s), {failCount} failed";
+		}
+		finally
+		{
+			_busy = false;
+			_busyItem = null;
+			Update();
+		}
+
+		return Task.CompletedTask;
+	}
+
+	/// <summary>
+	/// Open the MergeViewWindow showing additive remote-only fields with explanations.
 	/// </summary>
 	private void OpenMergeView( string id, string name )
 	{
@@ -2531,17 +2682,34 @@ public class SyncToolWindow : DockWindow
 	}
 
 	/// <summary>
-	/// Accept the server's version by saving the remote JSON to the local file.
+	/// Accept the additive remote semantics by saving the remote JSON to the local file.
 	/// </summary>
 	private void DoMergeItem( string id )
 	{
 		_items.TryGetValue( id, out var state );
 		if ( string.IsNullOrEmpty( state.RemoteJson ) ) return;
 
+		if ( TryApplyRemoteJsonToLocal( id, state.RemoteJson, out var error ) )
+		{
+			SetItemState( id, result: "OK", remoteDiffers: false, status: SyncStatus.InSync, diffSummary: "" );
+			RefreshFileList();
+			TryRunCodeGeneration( "pull remote semantics" );
+			InvalidateRemoteCache();
+			_status = $"Pulled remote semantics for {id}";
+			Update();
+		}
+		else
+		{
+			_status = $"Pull remote semantics failed: {error}";
+			Update();
+		}
+	}
+
+	private bool TryApplyRemoteJsonToLocal( string id, string remoteJson, out string error )
+	{
 		try
 		{
-			// Pretty-print for consistent formatting
-			var json = PrettyJson( state.RemoteJson );
+			var json = PrettyJson( remoteJson );
 
 			if ( id.StartsWith( "ep_" ) )
 			{
@@ -2560,9 +2728,8 @@ public class SyncToolWindow : DockWindow
 			else if ( id.StartsWith( "wf_" ) )
 			{
 				var wfId = id[3..];
-				var dir = SyncToolConfig.Abs( SyncToolConfig.WorkflowsPath );
-				if ( !Directory.Exists( dir ) ) Directory.CreateDirectory( dir );
-				File.WriteAllText( Path.Combine( dir, $"{wfId}.json" ), json );
+				var data = JsonSerializer.Deserialize<Dictionary<string, object>>( json, _readOptions );
+				SyncToolConfig.SaveWorkflow( wfId, data );
 			}
 			else if ( id.StartsWith( "test_" ) )
 			{
@@ -2571,17 +2738,39 @@ public class SyncToolWindow : DockWindow
 				if ( !Directory.Exists( dir ) ) Directory.CreateDirectory( dir );
 				File.WriteAllText( Path.Combine( dir, $"{testId}.json" ), json );
 			}
+			else
+			{
+				error = $"Unsupported sync item: {id}";
+				return false;
+			}
 
-			SetItemState( id, result: "OK", remoteDiffers: false, status: SyncStatus.InSync, diffSummary: "" );
-			_status = $"Merged server defaults for {id}";
-			RefreshFileList();
-			Update();
+			error = null;
+			return true;
 		}
 		catch ( Exception ex )
 		{
-			_status = $"Merge failed: {ex.Message}";
-			Update();
+			error = ex.Message;
+			return false;
 		}
+	}
+
+	private void TryRunCodeGeneration( string context )
+	{
+		try
+		{
+			CodeGenerator.Generate();
+		}
+		catch ( Exception ex )
+		{
+			Log.Warning( $"[SyncTool] Code generation after {context} failed: {ex.Message}" );
+		}
+	}
+
+	private void InvalidateRemoteCache()
+	{
+		_remoteEndpoints = null;
+		_remoteCollections = null;
+		_remoteWorkflows = null;
 	}
 
 	private void OpenDiffView( string id, string name )

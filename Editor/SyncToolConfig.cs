@@ -554,7 +554,7 @@ public static class SyncToolConfig
 	/// <summary>Load all workflow definitions from the workflows/ directory.</summary>
 	public static List<JsonElement> LoadWorkflows()
 	{
-		var list = new List<JsonElement>();
+		var list = new List<(string File, JsonElement Workflow)>();
 		var files = FindFiles( WorkflowsPath, "*.json" );
 
 		foreach ( var file in files )
@@ -571,10 +571,18 @@ public static class SyncToolConfig
 				wf = JsonSerializer.Deserialize<JsonElement>( JsonSerializer.Serialize( dict ) );
 			}
 
-			list.Add( wf );
+			list.Add( (file, wf) );
 		}
 
-		return list;
+		return list
+			.GroupBy( x => x.Workflow.TryGetProperty( "id", out var id ) ? id.GetString() ?? Path.GetFileNameWithoutExtension( x.File ) : Path.GetFileNameWithoutExtension( x.File ),
+				StringComparer.OrdinalIgnoreCase )
+			.Select( group =>
+				group.OrderByDescending( x => string.Equals( Path.GetFileNameWithoutExtension( x.File ),
+					group.Key, StringComparison.OrdinalIgnoreCase ) )
+				.ThenBy( x => x.File, StringComparer.OrdinalIgnoreCase )
+				.First().Workflow )
+			.ToList();
 	}
 
 	// ──────────────────────────────────────────────────────
@@ -634,7 +642,9 @@ public static class SyncToolConfig
 	{
 		EnsureSyncToolsDir();
 		EnsureDir( WorkflowsPath );
-		File.WriteAllText( Abs( $"{WorkflowsPath}/{id}.json" ), JsonSerializer.Serialize( data, _writeOptions ) );
+		var canonicalFile = $"{id}.json";
+		File.WriteAllText( Abs( $"{WorkflowsPath}/{canonicalFile}" ), JsonSerializer.Serialize( data, _writeOptions ) );
+		DeleteDuplicateWorkflowFiles( id, canonicalFile );
 		Log.Info( $"[SyncTool] Saved workflows/{id}.json" );
 	}
 
@@ -708,6 +718,23 @@ public static class SyncToolConfig
 			|| FindFiles( TestsPath, "*.json" ).Length > 0;
 	}
 
+	/// <summary>Find the local workflow file whose embedded id matches the given workflow id.</summary>
+	public static string FindWorkflowFileById( string id )
+	{
+		var files = FindFiles( WorkflowsPath, "*.json" );
+		var canonical = files.FirstOrDefault( f => string.Equals( Path.GetFileNameWithoutExtension( f ), id, StringComparison.OrdinalIgnoreCase ) );
+		if ( canonical != null )
+			return Abs( $"{WorkflowsPath}/{canonical}" );
+
+		foreach ( var file in files )
+		{
+			if ( WorkflowFileMatchesId( file, id ) )
+				return Abs( $"{WorkflowsPath}/{file}" );
+		}
+
+		return null;
+	}
+
 	private static void EnsureSyncToolsDir()
 	{
 		EnsureDir( SyncToolsPath );
@@ -718,6 +745,35 @@ public static class SyncToolConfig
 		EnsureDir( EndpointsPath );
 		EnsureDir( WorkflowsPath );
 		EnsureDir( TestsPath );
+	}
+
+	private static void DeleteDuplicateWorkflowFiles( string id, string keepFile )
+	{
+		foreach ( var file in FindFiles( WorkflowsPath, "*.json" ) )
+		{
+			if ( string.Equals( file, keepFile, StringComparison.OrdinalIgnoreCase ) )
+				continue;
+
+			if ( WorkflowFileMatchesId( file, id ) )
+				File.Delete( Abs( $"{WorkflowsPath}/{file}" ) );
+		}
+	}
+
+	private static bool WorkflowFileMatchesId( string file, string id )
+	{
+		var fullPath = Abs( $"{WorkflowsPath}/{file}" );
+		try
+		{
+			var text = File.ReadAllText( fullPath );
+			var wf = JsonSerializer.Deserialize<JsonElement>( text, _readOptions );
+			if ( wf.TryGetProperty( "id", out var wfId ) )
+				return string.Equals( wfId.GetString(), id, StringComparison.OrdinalIgnoreCase );
+		}
+		catch
+		{
+		}
+
+		return string.Equals( Path.GetFileNameWithoutExtension( file ), id, StringComparison.OrdinalIgnoreCase );
 	}
 
 	// ──────────────────────────────────────────────────────

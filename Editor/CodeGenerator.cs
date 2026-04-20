@@ -536,6 +536,8 @@ public static class CodeGenerator
 				element: wf
 			) )
 			.Where( x => !string.IsNullOrEmpty( x.id ) )
+			.GroupBy( x => x.id, StringComparer.OrdinalIgnoreCase )
+			.Select( g => g.First() )
 			.OrderBy( x => x.id )
 			.ToList();
 

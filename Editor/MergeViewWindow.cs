@@ -1,24 +1,22 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text.Json;
 using Sandbox;
 using Editor;
 
 /// <summary>
-/// Shows a breakdown of server-added fields after a push or check-for-updates,
-/// explaining what the server added and allowing the user to merge those
-/// additions into their local files with one click.
+/// Shows additive remote-only fields after a push or remote check so the user can
+/// review and pull those semantics into their local files.
 /// </summary>
 public class MergeViewWindow : DockWindow
 {
 	public struct FieldDiff
 	{
 		public string Name;
-		public string LocalValue;  // null if field was added (not present locally)
+		public string LocalValue;
 		public string RemoteValue;
 		public string Reason;
-		public bool IsAdded;       // true = field only exists on remote
+		public bool IsAdded;
 	}
 
 	private readonly string _resourceName;
@@ -34,12 +32,8 @@ public class MergeViewWindow : DockWindow
 	private const float LineH = 16f;
 	private const float FieldBlockH = 56f;
 
-	/// <summary>
-	/// Known server-added fields and why they exist.
-	/// </summary>
 	private static readonly Dictionary<string, string> Explanations = new()
 	{
-		// Collection metadata
 		["rateLimits"] = "Rate limit configuration. Controls how many saves per time period are allowed.",
 		["rateLimitAction"] = "Action when rate limit is exceeded. 'reject' returns an error, 'clamp' caps values.",
 		["webhookOnRateLimit"] = "Discord webhook notification when a rate limit is triggered.",
@@ -49,24 +43,11 @@ public class MergeViewWindow : DockWindow
 		["allowRecordDelete"] = "Whether players can delete their own records.",
 		["requireSaveVersion"] = "Version tracking for conflict detection on saves.",
 		["collectionType"] = "Whether data is stored per-player or globally.",
-
-		// Endpoint metadata
 		["input"] = "Input validation schema. Defines what parameters the endpoint accepts.",
-
-		// Common
 		["description"] = "Human-readable description of this resource.",
+		["notes"] = "Editor notes saved with this resource.",
+		["builtIn"] = "System flag added by the remote project metadata.",
 		["enabled"] = "Whether this resource is active.",
-	};
-
-	/// <summary>
-	/// Fields that are known to be added by the server as defaults during creation.
-	/// If a diff contains ONLY these fields, it is classified as server-defaults-only.
-	/// </summary>
-	private static readonly HashSet<string> KnownServerDefaults = new()
-	{
-		"rateLimits", "rateLimitAction", "webhookOnRateLimit", "version",
-		"input", "accessMode", "maxRecords", "allowRecordDelete",
-		"requireSaveVersion", "collectionType",
 	};
 
 	public MergeViewWindow( string resourceName, string resourceType,
@@ -77,87 +58,28 @@ public class MergeViewWindow : DockWindow
 		_addedFields = addedFields;
 		_changedFields = changedFields;
 		_onMerge = onMerge;
-		Title = $"Remote Merge — {resourceName}";
+		Title = $"Pull Remote Semantics - {resourceName}";
 
 		var fieldCount = addedFields.Count + changedFields.Count;
 		Size = new Vector2( 540, Math.Min( 640, 260 + fieldCount * FieldBlockH ) );
 		MinimumSize = new Vector2( 420, 280 );
 	}
 
-	// ──────────────────────────────────────────────────────
-	//  Static analysis: compare local vs remote JSON
-	// ──────────────────────────────────────────────────────
-
 	/// <summary>
-	/// Compare local and remote JSON to identify server-added or changed fields.
-	/// Returns (addedFields, changedFields, isServerDefaultsOnly).
+	/// Compare local and remote JSON to identify additive remote fields versus real content changes.
+	/// Returns (addedFields, changedFields, isRemoteAdditiveOnly).
 	/// </summary>
-	public static (List<FieldDiff> Added, List<FieldDiff> Changed, bool IsDefaultsOnly) AnalyzeDifferences(
+	public static (List<FieldDiff> Added, List<FieldDiff> Changed, bool IsRemoteAdditiveOnly) AnalyzeDifferences(
 		string localJson, string remoteJson )
 	{
-		var added = new List<FieldDiff>();
-		var changed = new List<FieldDiff>();
+		var analysis = JsonDiffUtilities.Analyze( localJson, remoteJson );
 
-		try
-		{
-			var local = JsonSerializer.Deserialize<JsonElement>( localJson );
-			var remote = JsonSerializer.Deserialize<JsonElement>( remoteJson );
-
-			if ( local.ValueKind != JsonValueKind.Object || remote.ValueKind != JsonValueKind.Object )
-				return (added, changed, false);
-
-			var localKeys = new HashSet<string>();
-			foreach ( var prop in local.EnumerateObject() )
-				localKeys.Add( prop.Name );
-
-			foreach ( var prop in remote.EnumerateObject() )
-			{
-				var key = prop.Name;
-				var remoteVal = FormatShort( prop.Value );
-
-				if ( !localKeys.Contains( key ) )
-				{
-					added.Add( new FieldDiff
-					{
-						Name = key,
-						LocalValue = null,
-						RemoteValue = remoteVal,
-						Reason = Explanations.GetValueOrDefault( key, "Added by the server when saving." ),
-						IsAdded = true,
-					} );
-				}
-				else
-				{
-					var localVal = local.GetProperty( key );
-					var localNorm = NormalizeJson( localVal.GetRawText() );
-					var remoteNorm = NormalizeJson( prop.Value.GetRawText() );
-
-					if ( localNorm != remoteNorm )
-					{
-						changed.Add( new FieldDiff
-						{
-							Name = key,
-							LocalValue = FormatShort( localVal ),
-							RemoteValue = remoteVal,
-							Reason = Explanations.GetValueOrDefault( key, "Modified by the server." ),
-							IsAdded = false,
-						} );
-					}
-				}
-			}
-		}
-		catch { /* If parsing fails, return empty lists */ }
-
-		var isDefaultsOnly = (added.Count > 0 || changed.Count > 0)
-			&& added.All( f => KnownServerDefaults.Contains( f.Name ) )
-			&& changed.All( f => KnownServerDefaults.Contains( f.Name ) );
-
-		return (added, changed, isDefaultsOnly);
+		return (
+			analysis.Added.Select( ToFieldDiff ).ToList(),
+			analysis.Changed.Select( ToFieldDiff ).ToList(),
+			analysis.IsRemoteAdditiveOnly
+		);
 	}
-
-	// ──────────────────────────────────────────────────────
-	//  Rendering
-	// ──────────────────────────────────────────────────────
 
 	private float ContentHeight => 180 + ( _addedFields.Count + _changedFields.Count ) * FieldBlockH + 80;
 	private float MaxScroll => Math.Max( 0, ContentHeight - Height + 40 );
@@ -170,21 +92,18 @@ public class MergeViewWindow : DockWindow
 		var w = Width - pad * 2;
 		var y = 20f - _scroll;
 
-		// ── Title ──
 		Paint.SetDefaultFont( size: 13, weight: 700 );
 		Paint.SetPen( Color.White );
-		Paint.DrawText( new Rect( pad, y, w, 22 ), $"Remote Merge — {_resourceName}", TextFlag.LeftCenter );
+		Paint.DrawText( new Rect( pad, y, w, 22 ), $"Pull Remote Semantics - {_resourceName}", TextFlag.LeftCenter );
 		y += 30;
 
-		// ── Explanation ──
 		Paint.SetDefaultFont( size: 10 );
 		Paint.SetPen( Color.White.WithAlpha( 0.75f ) );
 		DrawWrappedText( pad, ref y, w,
-			$"The server added default configuration when saving this {_resourceType}. " +
-			"Your content is unchanged. Review the additions below and click Merge Changes to accept them into your local files." );
+			$"The remote version of this {_resourceType} contains additive fields only. " +
+			"Your local content still matches what is stored remotely. Review the remote-only semantics below and pull them into your local files if you want to keep those additions locally." );
 		y += 12;
 
-		// ── Stats bar ──
 		Paint.SetDefaultFont( size: 9, weight: 600 );
 		var sx = pad;
 		if ( _addedFields.Count > 0 )
@@ -196,55 +115,45 @@ public class MergeViewWindow : DockWindow
 		if ( _changedFields.Count > 0 )
 		{
 			Paint.SetPen( Color.Yellow.WithAlpha( 0.8f ) );
-			Paint.DrawText( new Rect( sx, y, 100, 14 ), $"~{_changedFields.Count} changed", TextFlag.LeftCenter );
+			Paint.DrawText( new Rect( sx, y, 110, 14 ), $"~{_changedFields.Count} changed", TextFlag.LeftCenter );
 		}
 		y += 22;
 
-		// ── Separator ──
 		Paint.SetPen( Color.White.WithAlpha( 0.1f ) );
 		Paint.DrawLine( new Vector2( pad, y ), new Vector2( pad + w, y ) );
 		y += 8;
 
-		// ── Added fields ──
 		if ( _addedFields.Count > 0 )
 		{
 			Paint.SetDefaultFont( size: 9, weight: 700 );
 			Paint.SetPen( Color.Green.WithAlpha( 0.7f ) );
-			Paint.DrawText( new Rect( pad, y, w, 16 ), "ADDED BY SERVER", TextFlag.LeftCenter );
+			Paint.DrawText( new Rect( pad, y, w, 16 ), "ADDED ON REMOTE", TextFlag.LeftCenter );
 			y += 22;
 
 			foreach ( var field in _addedFields )
-			{
 				DrawFieldBlock( pad, w, ref y, field, Color.Green );
-			}
 		}
 
-		// ── Changed fields ──
 		if ( _changedFields.Count > 0 )
 		{
 			Paint.SetDefaultFont( size: 9, weight: 700 );
 			Paint.SetPen( Color.Yellow.WithAlpha( 0.7f ) );
-			Paint.DrawText( new Rect( pad, y, w, 16 ), "CHANGED BY SERVER", TextFlag.LeftCenter );
+			Paint.DrawText( new Rect( pad, y, w, 16 ), "DIFFERENT ON REMOTE", TextFlag.LeftCenter );
 			y += 22;
 
 			foreach ( var field in _changedFields )
-			{
 				DrawFieldBlock( pad, w, ref y, field, Color.Yellow );
-			}
 		}
 
 		y += 16;
 
-		// ── Separator ──
 		Paint.SetPen( Color.White.WithAlpha( 0.1f ) );
 		Paint.DrawLine( new Vector2( pad, y ), new Vector2( pad + w, y ) );
 		y += 12;
 
-		// ── Buttons row ──
 		var btnH = 34f;
 		var btnW = ( w - 16 ) / 2;
 
-		// Cancel button (left)
 		_cancelRect = new Rect( pad, y, btnW, btnH );
 		var cancelHovered = _cancelRect.IsInside( _mousePos );
 		Paint.SetBrush( Color.White.WithAlpha( cancelHovered ? 0.1f : 0.04f ) );
@@ -254,7 +163,6 @@ public class MergeViewWindow : DockWindow
 		Paint.SetPen( Color.White.WithAlpha( cancelHovered ? 0.9f : 0.6f ) );
 		Paint.DrawText( _cancelRect, "Cancel", TextFlag.Center );
 
-		// Merge Changes button (right)
 		_mergeRect = new Rect( pad + btnW + 16, y, btnW, btnH );
 		var mergeHovered = _mergeRect.IsInside( _mousePos );
 		Paint.SetBrush( Color.Green.WithAlpha( mergeHovered ? 0.25f : 0.12f ) );
@@ -262,23 +170,20 @@ public class MergeViewWindow : DockWindow
 		Paint.DrawRect( _mergeRect, 4 );
 		Paint.SetDefaultFont( size: 11, weight: 700 );
 		Paint.SetPen( Color.Green.WithAlpha( mergeHovered ? 1f : 0.85f ) );
-		Paint.DrawText( _mergeRect, "Merge Changes", TextFlag.Center );
+		Paint.DrawText( _mergeRect, "Pull Remote Semantics", TextFlag.Center );
 	}
 
 	private void DrawFieldBlock( float pad, float w, ref float y, FieldDiff field, Color accentColor )
 	{
-		// Background
 		Paint.SetBrush( accentColor.WithAlpha( 0.04f ) );
 		Paint.SetPen( accentColor.WithAlpha( 0.12f ) );
 		Paint.DrawRect( new Rect( pad, y, w, FieldBlockH - 6 ), 4 );
 
-		// Field name
 		Paint.SetDefaultFont( size: 10, weight: 600 );
 		Paint.SetPen( accentColor.WithAlpha( 0.9f ) );
 		var prefix = field.IsAdded ? "+" : "~";
 		Paint.DrawText( new Rect( pad + 10, y + 4, w - 20, 16 ), $"{prefix} {field.Name}", TextFlag.LeftCenter );
 
-		// Value
 		Paint.SetDefaultFont( size: 9 );
 		if ( field.IsAdded )
 		{
@@ -288,11 +193,10 @@ public class MergeViewWindow : DockWindow
 		else
 		{
 			Paint.SetPen( Color.White.WithAlpha( 0.45f ) );
-			var valueText = $"{field.LocalValue ?? "null"} → {field.RemoteValue}";
+			var valueText = $"{field.LocalValue ?? "null"} -> {field.RemoteValue}";
 			Paint.DrawText( new Rect( pad + 10, y + 20, w - 20, 14 ), valueText, TextFlag.LeftCenter );
 		}
 
-		// Reason
 		Paint.SetDefaultFont( size: 8 );
 		Paint.SetPen( Color.White.WithAlpha( 0.4f ) );
 		Paint.DrawText( new Rect( pad + 10, y + 34, w - 20, 12 ), field.Reason, TextFlag.LeftCenter );
@@ -318,16 +222,13 @@ public class MergeViewWindow : DockWindow
 				line = test;
 			}
 		}
+
 		if ( !string.IsNullOrEmpty( line ) )
 		{
 			Paint.DrawText( new Rect( x, y, maxW, 16 ), line, TextFlag.LeftCenter );
 			y += 17;
 		}
 	}
-
-	// ──────────────────────────────────────────────────────
-	//  Input
-	// ──────────────────────────────────────────────────────
 
 	protected override void OnMousePress( MouseEvent e )
 	{
@@ -372,53 +273,26 @@ public class MergeViewWindow : DockWindow
 		}
 	}
 
-	// ──────────────────────────────────────────────────────
-	//  JSON helpers
-	// ──────────────────────────────────────────────────────
-
-	private static string FormatShort( JsonElement el )
+	private static FieldDiff ToFieldDiff( JsonDiffUtilities.FieldDifference diff )
 	{
-		if ( el.ValueKind == JsonValueKind.String )
-			return $"\"{el.GetString()}\"";
-
-		var text = el.GetRawText();
-		return text.Length > 80 ? text[..77] + "..." : text;
+		return new FieldDiff
+		{
+			Name = diff.Path,
+			LocalValue = diff.LocalValue,
+			RemoteValue = diff.RemoteValue,
+			Reason = GetReason( diff.Path, diff.IsAdded ),
+			IsAdded = diff.IsAdded
+		};
 	}
 
-	private static string NormalizeJson( string json )
+	private static string GetReason( string path, bool isAdded )
 	{
-		try
-		{
-			var el = JsonSerializer.Deserialize<JsonElement>( json );
-			return JsonSerializer.Serialize( SortElement( el ), new JsonSerializerOptions { WriteIndented = false } );
-		}
-		catch { return json.Trim(); }
-	}
+		var key = path?.Split( '.' ).LastOrDefault() ?? "";
+		if ( Explanations.TryGetValue( key, out var explanation ) )
+			return explanation;
 
-	private static object SortElement( JsonElement el )
-	{
-		switch ( el.ValueKind )
-		{
-			case JsonValueKind.Object:
-				var dict = new SortedDictionary<string, object>();
-				foreach ( var prop in el.EnumerateObject() )
-					dict[prop.Name] = SortElement( prop.Value );
-				return dict;
-			case JsonValueKind.Array:
-				var arr = new List<object>();
-				foreach ( var item in el.EnumerateArray() )
-					arr.Add( SortElement( item ) );
-				return arr;
-			case JsonValueKind.String:
-				return el.GetString();
-			case JsonValueKind.Number:
-				return el.TryGetInt64( out var l ) ? (object)l : el.GetDouble();
-			case JsonValueKind.True:
-				return true;
-			case JsonValueKind.False:
-				return false;
-			default:
-				return null;
-		}
+		return isAdded
+			? "Present on remote but missing locally."
+			: "Value differs between local and remote.";
 	}
 }

@@ -22,6 +22,7 @@ public class DiffViewWindow : DockWindow
 	private float _dragStartScroll;
 
 	private enum LineKind { Same, Changed, Added, Removed }
+	private enum DiffOpKind { Same, Added, Removed }
 
 	private struct DiffLine
 	{
@@ -30,6 +31,13 @@ public class DiffViewWindow : DockWindow
 		public string LocalText;
 		public string RemoteText;
 		public LineKind Kind;
+	}
+
+	private struct DiffOp
+	{
+		public DiffOpKind Kind;
+		public int? LocalIndex;
+		public int? RemoteIndex;
 	}
 
 	private const float LineH = 16f;
@@ -302,45 +310,164 @@ public class DiffViewWindow : DockWindow
 
 	private static DiffLine[] BuildDiff( string[] localLines, string[] remoteLines )
 	{
+		var ops = BuildOperations( localLines, remoteLines );
 		var result = new List<DiffLine>();
-		var maxLines = Math.Max( localLines.Length, remoteLines.Length );
+		var index = 0;
 
-		for ( int i = 0; i < maxLines; i++ )
+		while ( index < ops.Count )
 		{
-			var hasLocal = i < localLines.Length;
-			var hasRemote = i < remoteLines.Length;
-			var localText = hasLocal ? localLines[i].TrimEnd( '\r' ) : null;
-			var remoteText = hasRemote ? remoteLines[i].TrimEnd( '\r' ) : null;
+			if ( ops[index].Kind == DiffOpKind.Same )
+			{
+				var op = ops[index++];
+				result.Add( new DiffLine
+				{
+					LocalNum = op.LocalIndex + 1,
+					RemoteNum = op.RemoteIndex + 1,
+					LocalText = GetLineText( localLines, op.LocalIndex ),
+					RemoteText = GetLineText( remoteLines, op.RemoteIndex ),
+					Kind = LineKind.Same
+				} );
+				continue;
+			}
 
-			if ( hasLocal && hasRemote )
+			var removed = new List<DiffOp>();
+			var added = new List<DiffOp>();
+			while ( index < ops.Count && ops[index].Kind != DiffOpKind.Same )
+			{
+				if ( ops[index].Kind == DiffOpKind.Removed ) removed.Add( ops[index] );
+				else added.Add( ops[index] );
+				index++;
+			}
+
+			var paired = Math.Min( removed.Count, added.Count );
+			for ( int i = 0; i < paired; i++ )
 			{
 				result.Add( new DiffLine
 				{
-					LocalNum = i + 1, RemoteNum = i + 1,
-					LocalText = localText, RemoteText = remoteText,
-					Kind = localText == remoteText ? LineKind.Same : LineKind.Changed
+					LocalNum = removed[i].LocalIndex + 1,
+					RemoteNum = added[i].RemoteIndex + 1,
+					LocalText = GetLineText( localLines, removed[i].LocalIndex ),
+					RemoteText = GetLineText( remoteLines, added[i].RemoteIndex ),
+					Kind = LineKind.Changed
 				} );
 			}
-			else if ( hasLocal )
+
+			for ( int i = paired; i < removed.Count; i++ )
 			{
 				result.Add( new DiffLine
 				{
-					LocalNum = i + 1, RemoteNum = null,
-					LocalText = localText, RemoteText = null,
+					LocalNum = removed[i].LocalIndex + 1,
+					RemoteNum = null,
+					LocalText = GetLineText( localLines, removed[i].LocalIndex ),
+					RemoteText = null,
 					Kind = LineKind.Removed
 				} );
 			}
-			else
+
+			for ( int i = paired; i < added.Count; i++ )
 			{
 				result.Add( new DiffLine
 				{
-					LocalNum = null, RemoteNum = i + 1,
-					LocalText = null, RemoteText = remoteText,
+					LocalNum = null,
+					RemoteNum = added[i].RemoteIndex + 1,
+					LocalText = null,
+					RemoteText = GetLineText( remoteLines, added[i].RemoteIndex ),
 					Kind = LineKind.Added
 				} );
 			}
 		}
 
 		return result.ToArray();
+	}
+
+	private static List<DiffOp> BuildOperations( string[] localLines, string[] remoteLines )
+	{
+		var localCount = localLines.Length;
+		var remoteCount = remoteLines.Length;
+		var lcs = new int[localCount + 1, remoteCount + 1];
+
+		for ( int local = localCount - 1; local >= 0; local-- )
+		{
+			var localText = GetLineText( localLines, local );
+			for ( int remote = remoteCount - 1; remote >= 0; remote-- )
+			{
+				if ( localText == GetLineText( remoteLines, remote ) )
+				{
+					lcs[local, remote] = lcs[local + 1, remote + 1] + 1;
+				}
+				else
+				{
+					lcs[local, remote] = Math.Max( lcs[local + 1, remote], lcs[local, remote + 1] );
+				}
+			}
+		}
+
+		var ops = new List<DiffOp>();
+		var localIndex = 0;
+		var remoteIndex = 0;
+
+		while ( localIndex < localCount && remoteIndex < remoteCount )
+		{
+			var localText = GetLineText( localLines, localIndex );
+			var remoteText = GetLineText( remoteLines, remoteIndex );
+
+			if ( localText == remoteText )
+			{
+				ops.Add( new DiffOp
+				{
+					Kind = DiffOpKind.Same,
+					LocalIndex = localIndex,
+					RemoteIndex = remoteIndex
+				} );
+				localIndex++;
+				remoteIndex++;
+			}
+			else if ( lcs[localIndex + 1, remoteIndex] >= lcs[localIndex, remoteIndex + 1] )
+			{
+				ops.Add( new DiffOp
+				{
+					Kind = DiffOpKind.Removed,
+					LocalIndex = localIndex
+				} );
+				localIndex++;
+			}
+			else
+			{
+				ops.Add( new DiffOp
+				{
+					Kind = DiffOpKind.Added,
+					RemoteIndex = remoteIndex
+				} );
+				remoteIndex++;
+			}
+		}
+
+		while ( localIndex < localCount )
+		{
+			ops.Add( new DiffOp
+			{
+				Kind = DiffOpKind.Removed,
+				LocalIndex = localIndex
+			} );
+			localIndex++;
+		}
+
+		while ( remoteIndex < remoteCount )
+		{
+			ops.Add( new DiffOp
+			{
+				Kind = DiffOpKind.Added,
+				RemoteIndex = remoteIndex
+			} );
+			remoteIndex++;
+		}
+
+		return ops;
+	}
+
+	private static string GetLineText( string[] lines, int? index )
+	{
+		if ( !index.HasValue ) return null;
+		return lines[index.Value].TrimEnd( '\r' );
 	}
 }
