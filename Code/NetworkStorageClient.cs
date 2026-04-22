@@ -67,22 +67,18 @@ public static class NetworkStorage
 	public static bool IsHost => !Networking.IsActive || Networking.IsHost;
 
 	private static bool _autoConfigAttempted;
-	private static string _cachedAuthToken;
-	private static DateTimeOffset _cachedAuthTokenAt;
 	private static DateTimeOffset _lastAuthTokenLookupFailedAt;
 	private static readonly Dictionary<string, EndpointErrorInfo> _lastEndpointErrors = new();
-	private static readonly TimeSpan ProactiveAuthTokenReuseWindow = TimeSpan.FromMinutes( 2 );
-	private static readonly TimeSpan FailedLookupCachedReuseWindow = TimeSpan.FromMinutes( 30 );
 	private static readonly TimeSpan FailedAuthLookupCooldown = TimeSpan.FromSeconds( 5 );
+	private static readonly TimeSpan PreparedAuthTokenLifetime = TimeSpan.FromSeconds( 10 );
+	private static readonly object _preparedAuthTokensLock = new();
+	private static readonly Queue<PreparedAuthTokenEntry> _preparedAuthTokens = new();
 
 	private static void InvalidateCachedAuthToken( string reason )
 	{
-		if ( string.IsNullOrWhiteSpace( _cachedAuthToken ) )
-			return;
-
 		Log.Warning( $"[NetworkStorage] Clearing cached auth token: {reason}" );
-		_cachedAuthToken = null;
-		_cachedAuthTokenAt = default;
+		lock ( _preparedAuthTokensLock )
+			_preparedAuthTokens.Clear();
 	}
 
 	public static bool TryGetLastEndpointError( string slug, out string code, out string message )
@@ -107,7 +103,10 @@ public static class NetworkStorage
 		var steamId = Game.SteamId.ToString();
 		var token = await GetAuthTokenWithRetry( $"steamId={steamId}" );
 		if ( !string.IsNullOrWhiteSpace( token ) )
+		{
+			RememberPreparedAuthToken( token );
 			return true;
+		}
 
 		RecordEndpointError(
 			slug,
@@ -766,20 +765,53 @@ public static class NetworkStorage
 	private static bool IsCdnRoot( string root )
 		=> root.Contains( "storage.sbox.cool" ) || root.Contains( "storage.sboxcool.com" );
 
+	private sealed class PreparedAuthTokenEntry
+	{
+		public string Token { get; init; }
+		public DateTimeOffset CreatedAt { get; init; }
+	}
+
+	private static void RememberPreparedAuthToken( string token )
+	{
+		if ( string.IsNullOrWhiteSpace( token ) )
+			return;
+
+		lock ( _preparedAuthTokensLock )
+		{
+			_preparedAuthTokens.Enqueue( new PreparedAuthTokenEntry
+			{
+				Token = token,
+				CreatedAt = DateTimeOffset.UtcNow
+			} );
+		}
+	}
+
+	private static string TryTakePreparedAuthToken()
+	{
+		lock ( _preparedAuthTokensLock )
+		{
+			while ( _preparedAuthTokens.Count > 0 )
+			{
+				var next = _preparedAuthTokens.Dequeue();
+				if ( next is not null
+					&& !string.IsNullOrWhiteSpace( next.Token )
+					&& DateTimeOffset.UtcNow - next.CreatedAt < PreparedAuthTokenLifetime )
+				{
+					return next.Token;
+				}
+			}
+		}
+
+		return null;
+	}
+
 	/// <summary>
 	/// Auth tokens can lag briefly behind startup, especially in editor flows.
 	/// Retry a few times before treating the request as unauthenticated.
 	/// </summary>
 	private static async Task<string> GetAuthTokenWithRetry( string context, int attempts = 6, int delayMs = 500 )
 	{
-		if ( !string.IsNullOrWhiteSpace( _cachedAuthToken )
-			&& DateTimeOffset.UtcNow - _cachedAuthTokenAt < ProactiveAuthTokenReuseWindow )
-		{
-			return _cachedAuthToken;
-		}
-
-		if ( string.IsNullOrWhiteSpace( _cachedAuthToken )
-			&& _lastAuthTokenLookupFailedAt != default
+		if ( _lastAuthTokenLookupFailedAt != default
 			&& DateTimeOffset.UtcNow - _lastAuthTokenLookupFailedAt < FailedAuthLookupCooldown )
 		{
 			return null;
@@ -794,8 +826,6 @@ public static class NetworkStorage
 				var token = await Services.Auth.GetToken( "sbox-network-storage" );
 				if ( !string.IsNullOrWhiteSpace( token ) )
 				{
-					_cachedAuthToken = token;
-					_cachedAuthTokenAt = DateTimeOffset.UtcNow;
 					_lastAuthTokenLookupFailedAt = default;
 					if ( attempt > 1 )
 						Log.Info( $"[NetworkStorage] Auth token acquired for {context} after retry {attempt}/{attempts}" );
@@ -817,14 +847,6 @@ public static class NetworkStorage
 			Log.Warning( $"[NetworkStorage] Auth token remained empty for {context} after {attempts} attempts" );
 
 		_lastAuthTokenLookupFailedAt = DateTimeOffset.UtcNow;
-
-		if ( !string.IsNullOrWhiteSpace( _cachedAuthToken ) &&
-			DateTimeOffset.UtcNow - _cachedAuthTokenAt < FailedLookupCachedReuseWindow )
-		{
-			Log.Warning( $"[NetworkStorage] Reusing cached auth token for {context} after fresh token lookup failed" );
-			return _cachedAuthToken;
-		}
-
 		return null;
 	}
 
@@ -850,7 +872,7 @@ public static class NetworkStorage
 	private static async Task<Dictionary<string, string>> BuildAuthHeaders()
 	{
 		var steamId = Game.SteamId.ToString();
-		var token = await GetAuthTokenWithRetry( $"steamId={steamId}" );
+		var token = TryTakePreparedAuthToken() ?? await GetAuthTokenWithRetry( $"steamId={steamId}" );
 
 		if ( string.IsNullOrEmpty( token ) )
 		{
