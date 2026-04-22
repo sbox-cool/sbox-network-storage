@@ -69,7 +69,21 @@ public static class NetworkStorage
 	private static bool _autoConfigAttempted;
 	private static string _cachedAuthToken;
 	private static DateTimeOffset _cachedAuthTokenAt;
+	private static DateTimeOffset _lastAuthTokenLookupFailedAt;
 	private static readonly Dictionary<string, EndpointErrorInfo> _lastEndpointErrors = new();
+	private static readonly TimeSpan ProactiveAuthTokenReuseWindow = TimeSpan.FromMinutes( 2 );
+	private static readonly TimeSpan FailedLookupCachedReuseWindow = TimeSpan.FromMinutes( 30 );
+	private static readonly TimeSpan FailedAuthLookupCooldown = TimeSpan.FromSeconds( 5 );
+
+	private static void InvalidateCachedAuthToken( string reason )
+	{
+		if ( string.IsNullOrWhiteSpace( _cachedAuthToken ) )
+			return;
+
+		Log.Warning( $"[NetworkStorage] Clearing cached auth token: {reason}" );
+		_cachedAuthToken = null;
+		_cachedAuthTokenAt = default;
+	}
 
 	public static bool TryGetLastEndpointError( string slug, out string code, out string message )
 	{
@@ -82,6 +96,23 @@ public static class NetworkStorage
 
 		code = null;
 		message = null;
+		return false;
+	}
+
+	public static async Task<bool> EnsureEndpointAuthAsync( string slug )
+	{
+		EnsureConfigured();
+		ClearLastEndpointError( slug );
+
+		var steamId = Game.SteamId.ToString();
+		var token = await GetAuthTokenWithRetry( $"steamId={steamId}" );
+		if ( !string.IsNullOrWhiteSpace( token ) )
+			return true;
+
+		RecordEndpointError(
+			slug,
+			"SBOX_AUTH_FAILED",
+			$"Missing token or steamId. token=NO steamId={steamId} This endpoint requires a valid s&box player token." );
 		return false;
 	}
 
@@ -307,9 +338,8 @@ public static class NetworkStorage
 		try
 		{
 			var url = BuildUrl( $"/values/{ProjectId}" );
-			var headers = await BuildAuthHeaders();
 			NetLog.Request( "game-values", $"GET {ApiRoot}/values/{ProjectId}" );
-			var result = await Http.RequestStringAsync( url, "GET", null, headers );
+			var result = await Http.RequestStringAsync( url, "GET", null, null );
 			Log.Info( $"[NetworkStorage] game-values → {TruncateJson( result, 300 )}" );
 			var parsed = ParseResponse( "game-values", result );
 			if ( parsed.HasValue )
@@ -333,6 +363,7 @@ public static class NetworkStorage
 	public static async Task<JsonElement?> GetDocument( string collectionId, string documentId = null )
 	{
 		EnsureConfigured();
+		ClearLastEndpointError( "storage" );
 
 		// If proxy mode is active and we're not the host, route through the host
 		if ( ProxyEnabled && !IsHost && DocumentProxy != null )
@@ -357,6 +388,7 @@ public static class NetworkStorage
 		{
 			Log.Warning( $"[NetworkStorage] GetDocument: {ex.Message}" );
 			NetLog.Error( "storage", ex.Message );
+			RecordEndpointError( "storage", "REQUEST_FAILED", ex.Message );
 			return null;
 		}
 	}
@@ -440,6 +472,7 @@ public static class NetworkStorage
 			{
 				Log.Warning( $"[NetworkStorage] storage PROXY returned null for {collectionId}/{docId}" );
 				NetLog.Error( "storage", "Proxy returned null" );
+				RecordEndpointError( "storage", "PROXY_FAILED", "Proxy returned null" );
 				return null;
 			}
 
@@ -453,6 +486,7 @@ public static class NetworkStorage
 		{
 			Log.Warning( $"[NetworkStorage] storage PROXY FAILED — {ex.Message}" );
 			NetLog.Error( "storage", $"Proxy error: {ex.Message}" );
+			RecordEndpointError( "storage", "PROXY_FAILED", ex.Message );
 			return null;
 		}
 	}
@@ -547,6 +581,7 @@ public static class NetworkStorage
 	public static async Task<JsonElement?> GetDocumentAs( string targetSteamId, string clientToken, string collectionId, string documentId = null )
 	{
 		EnsureConfigured();
+		ClearLastEndpointError( "storage" );
 
 		// Same-machine shortcut: same Steam account as host, call directly
 		if ( targetSteamId == Game.SteamId.ToString() )
@@ -578,6 +613,7 @@ public static class NetworkStorage
 		{
 			Log.Warning( $"[NetworkStorage] GetDocumentAs({targetSteamId}): {ex.Message}" );
 			NetLog.Error( "storage", ex.Message );
+			RecordEndpointError( "storage", "REQUEST_FAILED", ex.Message );
 			return null;
 		}
 	}
@@ -736,6 +772,19 @@ public static class NetworkStorage
 	/// </summary>
 	private static async Task<string> GetAuthTokenWithRetry( string context, int attempts = 6, int delayMs = 500 )
 	{
+		if ( !string.IsNullOrWhiteSpace( _cachedAuthToken )
+			&& DateTimeOffset.UtcNow - _cachedAuthTokenAt < ProactiveAuthTokenReuseWindow )
+		{
+			return _cachedAuthToken;
+		}
+
+		if ( string.IsNullOrWhiteSpace( _cachedAuthToken )
+			&& _lastAuthTokenLookupFailedAt != default
+			&& DateTimeOffset.UtcNow - _lastAuthTokenLookupFailedAt < FailedAuthLookupCooldown )
+		{
+			return null;
+		}
+
 		string lastError = null;
 
 		for ( int attempt = 1; attempt <= attempts; attempt++ )
@@ -747,6 +796,7 @@ public static class NetworkStorage
 				{
 					_cachedAuthToken = token;
 					_cachedAuthTokenAt = DateTimeOffset.UtcNow;
+					_lastAuthTokenLookupFailedAt = default;
 					if ( attempt > 1 )
 						Log.Info( $"[NetworkStorage] Auth token acquired for {context} after retry {attempt}/{attempts}" );
 					return token;
@@ -766,8 +816,10 @@ public static class NetworkStorage
 		else
 			Log.Warning( $"[NetworkStorage] Auth token remained empty for {context} after {attempts} attempts" );
 
+		_lastAuthTokenLookupFailedAt = DateTimeOffset.UtcNow;
+
 		if ( !string.IsNullOrWhiteSpace( _cachedAuthToken ) &&
-			DateTimeOffset.UtcNow - _cachedAuthTokenAt < TimeSpan.FromMinutes( 30 ) )
+			DateTimeOffset.UtcNow - _cachedAuthTokenAt < FailedLookupCachedReuseWindow )
 		{
 			Log.Warning( $"[NetworkStorage] Reusing cached auth token for {context} after fresh token lookup failed" );
 			return _cachedAuthToken;
@@ -911,6 +963,7 @@ public static class NetworkStorage
 	{
 		var code = "UNKNOWN";
 		var message = "";
+		var authFailureKind = "";
 
 		if ( json.TryGetProperty( "error", out var err ) )
 		{
@@ -918,6 +971,9 @@ public static class NetworkStorage
 			{
 				code = err.TryGetProperty( "code", out var c ) ? c.GetString() ?? "UNKNOWN" : "UNKNOWN";
 				message = err.TryGetProperty( "message", out var m ) ? m.GetString() ?? "" : "";
+				authFailureKind = err.TryGetProperty( "authFailureKind", out var authKind )
+					? authKind.GetString() ?? ""
+					: "";
 			}
 			else if ( err.ValueKind == JsonValueKind.String )
 			{
@@ -928,6 +984,12 @@ public static class NetworkStorage
 		// Top-level message (server copies error.message here for convenience)
 		if ( string.IsNullOrEmpty( message ) && json.TryGetProperty( "message", out var topMsg ) )
 			message = topMsg.GetString() ?? "";
+
+		if ( string.Equals( code, "SBOX_AUTH_FAILED", StringComparison.OrdinalIgnoreCase )
+			|| string.Equals( authFailureKind, "token_rejected", StringComparison.OrdinalIgnoreCase ) )
+		{
+			InvalidateCachedAuthToken( $"{slug} {code} {authFailureKind}".Trim() );
+		}
 
 		Log.Warning( $"[NetworkStorage] {slug}: {code} — {message}" );
 		NetLog.Error( slug, $"{code}: {message}" );
