@@ -2899,7 +2899,9 @@ public class SyncToolWindow : DockWindow
 	{
 		try
 		{
-			var json = PrettyJson( remoteJson );
+			var json = TryGetCurrentLocalJson( id, out var localJson )
+				? MergeRemoteOnlyFields( localJson, remoteJson )
+				: PrettyJson( remoteJson );
 
 			if ( id.StartsWith( "ep_" ) )
 			{
@@ -2940,6 +2942,98 @@ public class SyncToolWindow : DockWindow
 			error = ex.Message;
 			return false;
 		}
+	}
+
+	private bool TryGetCurrentLocalJson( string id, out string localJson )
+	{
+		localJson = null;
+		JsonElement local;
+
+		if ( id.StartsWith( "ep_" ) )
+		{
+			var slug = id[3..];
+			var localFile = _endpointFiles.FirstOrDefault( f => ResourceIdFromFile( f, "endpoint" ) == slug );
+			if ( localFile == null || !TryReadLocalResourceFile( localFile, "endpoint", out local ) )
+				return false;
+
+			localJson = JsonSerializer.Serialize( SyncToolTransforms.ServerEndpointToLocal( local ), new JsonSerializerOptions { WriteIndented = true } );
+			return true;
+		}
+
+		if ( id.StartsWith( "col_" ) )
+		{
+			var colName = id[4..];
+			var localFile = _collectionFiles.FirstOrDefault( f => ResourceIdFromFile( f, "collection" ) == colName );
+			if ( localFile == null || !TryReadLocalResourceFile( localFile, "collection", out local ) )
+				return false;
+
+			var data = JsonSerializer.Deserialize<Dictionary<string, object>>( local.GetRawText(), _readOptions );
+			localJson = JsonSerializer.Serialize( SyncToolTransforms.StripServerManagedFields( data ), new JsonSerializerOptions { WriteIndented = true } );
+			return true;
+		}
+
+		if ( id.StartsWith( "wf_" ) )
+		{
+			var wfId = id[3..];
+			var localFile = SyncToolConfig.FindWorkflowFileById( wfId );
+			if ( localFile == null || !TryReadLocalResourceFile( localFile, "workflow", out local ) )
+				return false;
+
+			localJson = JsonSerializer.Serialize( SyncToolTransforms.ServerWorkflowToLocal( local ), new JsonSerializerOptions { WriteIndented = true } );
+			return true;
+		}
+
+		return false;
+	}
+
+	private static string MergeRemoteOnlyFields( string localJson, string remoteJson )
+	{
+		var local = JsonSerializer.Deserialize<JsonElement>( localJson );
+		var remote = JsonSerializer.Deserialize<JsonElement>( remoteJson );
+		var merged = MergeRemoteOnlyFields( local, remote );
+		return JsonSerializer.Serialize( merged, new JsonSerializerOptions { WriteIndented = true } );
+	}
+
+	private static object MergeRemoteOnlyFields( JsonElement local, JsonElement remote )
+	{
+		if ( local.ValueKind == JsonValueKind.Object && remote.ValueKind == JsonValueKind.Object )
+		{
+			var result = new Dictionary<string, object>( StringComparer.OrdinalIgnoreCase );
+			var remoteProps = remote.EnumerateObject().ToDictionary( prop => prop.Name, prop => prop.Value, StringComparer.OrdinalIgnoreCase );
+
+			foreach ( var localProp in local.EnumerateObject() )
+			{
+				result[localProp.Name] = remoteProps.TryGetValue( localProp.Name, out var remoteValue )
+					? MergeRemoteOnlyFields( localProp.Value, remoteValue )
+					: JsonElementToPlainObject( localProp.Value );
+			}
+
+			foreach ( var remoteProp in remote.EnumerateObject() )
+			{
+				if ( !result.ContainsKey( remoteProp.Name ) )
+					result[remoteProp.Name] = JsonElementToPlainObject( remoteProp.Value );
+			}
+
+			return result;
+		}
+
+		return JsonElementToPlainObject( local );
+	}
+
+	private static object JsonElementToPlainObject( JsonElement value )
+	{
+		return value.ValueKind switch
+		{
+			JsonValueKind.Object => value.EnumerateObject()
+				.ToDictionary( prop => prop.Name, prop => JsonElementToPlainObject( prop.Value ), StringComparer.OrdinalIgnoreCase ),
+			JsonValueKind.Array => value.EnumerateArray().Select( JsonElementToPlainObject ).ToList(),
+			JsonValueKind.String => value.GetString(),
+			JsonValueKind.Number when value.TryGetInt64( out var integer ) => integer,
+			JsonValueKind.Number when value.TryGetDouble( out var number ) => number,
+			JsonValueKind.True => true,
+			JsonValueKind.False => false,
+			_ => null
+		};
 	}
 
 	private void TryRunCodeGeneration( string context )
