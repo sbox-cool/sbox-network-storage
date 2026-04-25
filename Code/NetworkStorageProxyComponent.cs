@@ -35,10 +35,13 @@ public sealed class NetworkStorageProxyComponent : Component
 		NetworkStorage.RequestProxy = ProxyEndpointRequest;
 		NetworkStorage.DocumentProxy = ProxyDocumentRequest;
 
-		if ( Networking.IsHost )
-			Log.Info( "[NSProxy] Running as host — will handle proxy requests from clients" );
-		else
-			Log.Info( "[NSProxy] Proxy delegates registered (non-host client)" );
+		if ( NetworkStorageLogConfig.LogProxy )
+		{
+			if ( Networking.IsHost )
+				Log.Info( "[NSProxy] Running as host — will handle proxy requests from clients" );
+			else
+				Log.Info( "[NSProxy] Proxy delegates registered (non-host client)" );
+		}
 	}
 
 	// ── Client-side: send requests to host ──
@@ -49,7 +52,8 @@ public sealed class NetworkStorageProxyComponent : Component
 		var tcs = new TaskCompletionSource<string>();
 		_pending[requestId] = tcs;
 
-		Log.Info( $"[NSProxy] Sending endpoint proxy: {slug} for {steamId} (req={requestId})" );
+		if ( NetworkStorageLogConfig.LogProxy )
+			Log.Info( $"[NSProxy] Sending endpoint proxy: {slug} for {steamId} (req={requestId})" );
 		RpcRequestEndpoint( requestId, steamId, clientToken ?? "", slug, inputJson ?? "" );
 
 		var result = await tcs.Task;
@@ -64,7 +68,8 @@ public sealed class NetworkStorageProxyComponent : Component
 		var tcs = new TaskCompletionSource<string>();
 		_pending[requestId] = tcs;
 
-		Log.Info( $"[NSProxy] Sending document proxy: {collectionId}/{documentId} for {steamId} (req={requestId})" );
+		if ( NetworkStorageLogConfig.LogProxy )
+			Log.Info( $"[NSProxy] Sending document proxy: {collectionId}/{documentId} for {steamId} (req={requestId})" );
 		RpcRequestDocument( requestId, steamId, clientToken ?? "", collectionId, documentId );
 
 		var result = await tcs.Task;
@@ -96,7 +101,8 @@ public sealed class NetworkStorageProxyComponent : Component
 
 	private async Task HandleEndpointRequest( string requestId, string steamId, string clientToken, string slug, string inputJson )
 	{
-		Log.Info( $"[NSProxy] Host processing endpoint: {slug} for {steamId} (req={requestId})" );
+		if ( NetworkStorageLogConfig.LogProxy )
+			Log.Info( $"[NSProxy] Host processing endpoint: {slug} for {steamId} (req={requestId})" );
 
 		try
 		{
@@ -111,14 +117,16 @@ public sealed class NetworkStorageProxyComponent : Component
 		}
 		catch ( Exception ex )
 		{
-			Log.Warning( $"[NSProxy] Host endpoint error: {slug} for {steamId} — {ex.Message}" );
+			if ( NetworkStorageLogConfig.LogErrors )
+				Log.Warning( $"[NSProxy] Host endpoint error: {slug} for {steamId} — {ex.Message}" );
 			RpcRespondToClient( requestId, "" );
 		}
 	}
 
 	private async Task HandleDocumentRequest( string requestId, string steamId, string clientToken, string collectionId, string documentId )
 	{
-		Log.Info( $"[NSProxy] Host processing document: {collectionId}/{documentId} for {steamId} (req={requestId})" );
+		if ( NetworkStorageLogConfig.LogProxy )
+			Log.Info( $"[NSProxy] Host processing document: {collectionId}/{documentId} for {steamId} (req={requestId})" );
 
 		try
 		{
@@ -129,7 +137,8 @@ public sealed class NetworkStorageProxyComponent : Component
 		}
 		catch ( Exception ex )
 		{
-			Log.Warning( $"[NSProxy] Host document error: {collectionId}/{documentId} for {steamId} — {ex.Message}" );
+			if ( NetworkStorageLogConfig.LogErrors )
+				Log.Warning( $"[NSProxy] Host document error: {collectionId}/{documentId} for {steamId} — {ex.Message}" );
 			RpcRespondToClient( requestId, "" );
 		}
 	}

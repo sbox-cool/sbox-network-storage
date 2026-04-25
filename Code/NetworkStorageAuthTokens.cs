@@ -67,7 +67,7 @@ public static partial class NetworkStorage
 				if ( !string.IsNullOrWhiteSpace( token ) )
 				{
 					_lastAuthTokenLookupFailedAt = default;
-					if ( attempt > 1 )
+					if ( attempt > 1 && NetworkStorageLogConfig.LogTokens )
 						Log.Info( $"[NetworkStorage] Auth token acquired for {context} after retry {attempt}/{attempts}" );
 					return token;
 				}
@@ -81,10 +81,13 @@ public static partial class NetworkStorage
 				await Task.Delay( delayMs );
 		}
 
-		if ( !string.IsNullOrEmpty( lastError ) )
-			Log.Warning( $"[NetworkStorage] Failed to get auth token for {context} after {attempts} attempts: {lastError}" );
-		else
-			Log.Warning( $"[NetworkStorage] Auth token remained empty for {context} after {attempts} attempts" );
+		if ( NetworkStorageLogConfig.LogTokens )
+		{
+			if ( !string.IsNullOrEmpty( lastError ) )
+				Log.Warning( $"[NetworkStorage] Failed to get auth token for {context} after {attempts} attempts: {lastError}" );
+			else
+				Log.Warning( $"[NetworkStorage] Auth token remained empty for {context} after {attempts} attempts" );
+		}
 
 		_lastAuthTokenLookupFailedAt = DateTimeOffset.UtcNow;
 		return null;

@@ -119,6 +119,7 @@ public static class SyncToolApi
 			if ( !response.IsSuccessStatusCode )
 			{
 				Log.Warning( $"[SyncTool] {method} {path}: HTTP {(int)response.StatusCode}" );
+				Log.Warning( $"[SyncTool] {method} {path}: raw error response:\n{TruncateForLog( text, 4000 )}" );
 				try
 				{
 					var errJson = JsonSerializer.Deserialize<JsonElement>( text, _readOptions );
@@ -153,7 +154,7 @@ public static class SyncToolApi
 				}
 				catch
 				{
-					var detail = text[..Math.Min( text.Length, 500 )];
+					var detail = TruncateForLog( text, 500 );
 					LastErrorMessage = string.IsNullOrWhiteSpace( detail )
 						? $"HTTP {(int)response.StatusCode}"
 						: $"HTTP {(int)response.StatusCode}: {detail}";
@@ -257,9 +258,9 @@ public static class SyncToolApi
 			if ( !response.IsSuccessStatusCode )
 			{
 				LastErrorCode = $"HTTP_{(int)response.StatusCode}";
-				LastErrorMessage = $"Server returned HTTP {(int)response.StatusCode}. Response: {text[..Math.Min( text.Length, 300 )]}";
+				LastErrorMessage = $"Server returned HTTP {(int)response.StatusCode}. Response: {TruncateForLog( text, 300 )}";
 				Log.Warning( $"[SyncTool] Validate failed: HTTP {(int)response.StatusCode}" );
-				Log.Warning( $"[SyncTool]   Response: {text[..Math.Min( text.Length, 500 )]}" );
+				Log.Warning( $"[SyncTool]   Response: {TruncateForLog( text, 4000 )}" );
 				return null;
 			}
 
@@ -487,5 +488,13 @@ public static class SyncToolApi
 		{
 			return text;
 		}
+	}
+
+	private static string TruncateForLog( string text, int maxLength )
+	{
+		if ( string.IsNullOrEmpty( text ) || text.Length <= maxLength )
+			return text;
+
+		return $"{text[..maxLength]}... (truncated, {text.Length} chars)";
 	}
 }

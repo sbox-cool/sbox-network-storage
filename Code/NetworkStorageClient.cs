@@ -81,7 +81,8 @@ public static partial class NetworkStorage
 
 	private static void InvalidateCachedAuthToken( string reason )
 	{
-		Log.Warning( $"[NetworkStorage] Clearing cached auth token: {reason}" );
+		if ( NetworkStorageLogConfig.LogTokens )
+			Log.Warning( $"[NetworkStorage] Clearing cached auth token: {reason}" );
 		lock ( _preparedAuthTokensLock )
 			_preparedAuthTokens.Clear();
 	}
@@ -132,7 +133,8 @@ public static partial class NetworkStorage
 		if ( !string.IsNullOrEmpty( apiVersion ) ) ApiVersion = apiVersion.Trim( '/' );
 		CdnUrl = string.IsNullOrEmpty( cdnUrl ) ? null : cdnUrl.TrimEnd( '/' );
 		_autoConfigAttempted = true;
-		NetLog.Info( "config", $"NetworkStorage ready — {ApiRoot}" );
+		if ( NetworkStorageLogConfig.LogConfig )
+			NetLog.Info( "config", $"NetworkStorage ready — {ApiRoot}" );
 	}
 
 	/// <summary>
@@ -183,7 +185,8 @@ public static partial class NetworkStorage
 			if ( TryConfigureFromNSConfig() )
 				return;
 
-			Log.Warning( "[NetworkStorage] No network-storage.credentials.json found — run Editor → Network Storage → Setup" );
+			if ( NetworkStorageLogConfig.LogConfig )
+				Log.Warning( "[NetworkStorage] No network-storage.credentials.json found — run Editor → Network Storage → Setup" );
 			return;
 		}
 
@@ -210,14 +213,15 @@ public static partial class NetworkStorage
 			{
 				Configure( projectId, publicKey, baseUrl, apiVersion, cdnUrl );
 			}
-			else
+			else if ( NetworkStorageLogConfig.LogConfig )
 			{
 				Log.Warning( "[NetworkStorage] credentials.json missing projectId or publicKey" );
 			}
 		}
 		catch ( Exception ex )
 		{
-			Log.Warning( $"[NetworkStorage] Failed to parse credentials.json: {ex.Message}" );
+			if ( NetworkStorageLogConfig.LogConfig )
+				Log.Warning( $"[NetworkStorage] Failed to parse credentials.json: {ex.Message}" );
 		}
 	}
 
@@ -254,7 +258,8 @@ public static partial class NetworkStorage
 					EnableEncryptedRequests = encryptedRequestsBool;
 
 				Configure( projectId, publicKey, baseUrl, apiVersion );
-				NetLog.Info( "config", $"Configured from NSConfig constants (ProxyEnabled={ProxyEnabled})" );
+				if ( NetworkStorageLogConfig.LogConfig )
+					NetLog.Info( "config", $"Configured from NSConfig constants (ProxyEnabled={ProxyEnabled})" );
 				return true;
 			}
 		}
@@ -272,7 +277,10 @@ public static partial class NetworkStorage
 	/// Call a server endpoint by slug.
 	/// Returns the response body on success, null on any failure.
 	/// </summary>
-	public static async Task<JsonElement?> CallEndpoint( string slug, object input = null )
+	public static Task<JsonElement?> CallEndpoint( string slug, object input = null )
+		=> CallEndpointInternal( slug, input, allowSecurityRetry: true );
+
+	private static async Task<JsonElement?> CallEndpointInternal( string slug, object input, bool allowSecurityRetry )
 	{
 		EnsureConfigured();
 		ClearLastEndpointError( slug );
@@ -283,59 +291,85 @@ public static partial class NetworkStorage
 			return await CallEndpointViaProxy( slug, input );
 		}
 
-		if ( !IsHost )
+		if ( !IsHost && NetworkStorageLogConfig.LogRequests )
 			Log.Info( $"[NetworkStorage] {slug} direct (proxy bypass: enabled={ProxyEnabled} isHost={IsHost} hasDelegate={RequestProxy != null})" );
 		string url = null;
 		string bodyJson = null;
 		try
 		{
-			url = BuildUrl( $"/endpoints/{ProjectId}/{slug}" );
-			var headers = await BuildAuthHeaders();
+			var securityRequest = await BuildEndpointSecurityRequest( slug, input ?? new { } );
+			url = BuildUrl( securityRequest.RoutePath );
+			var headers = securityRequest.Headers;
 
 			string result;
 			if ( input is not null )
 			{
-				bodyJson = JsonSerializer.Serialize( input );
-				NetLog.Request( slug, $"POST {bodyJson}" );
-				Log.Info( $"[NetworkStorage] {slug} request: POST {ApiRoot}/endpoints/{ProjectId}/{slug} body={bodyJson}" );
-				var content = Http.CreateJsonContent( input );
+				bodyJson = JsonSerializer.Serialize( securityRequest.Body );
+				if ( NetworkStorageLogConfig.LogRequests )
+				{
+					NetLog.Request( slug, $"POST {securityRequest.Mode} {bodyJson}" );
+					Log.Info( $"[NetworkStorage] {slug} request: POST {ApiRoot}{securityRequest.RouteLabel} mode={securityRequest.Mode} body={bodyJson}" );
+				}
+				var content = Http.CreateJsonContent( securityRequest.Body );
 				result = await Http.RequestStringAsync( url, "POST", content, headers );
 			}
 			else
 			{
-				NetLog.Request( slug, "GET" );
-				Log.Info( $"[NetworkStorage] {slug} request: GET {ApiRoot}/endpoints/{ProjectId}/{slug}" );
+				if ( NetworkStorageLogConfig.LogRequests )
+				{
+					NetLog.Request( slug, "GET" );
+					Log.Info( $"[NetworkStorage] {slug} request: GET {ApiRoot}/endpoints/{ProjectId}/{slug}" );
+				}
 				result = await Http.RequestStringAsync( url, "GET", null, headers );
 			}
 
-			Log.Info( $"[NetworkStorage] {slug} → {result}" );
+			if ( NetworkStorageLogConfig.LogResponses )
+				Log.Info( $"[NetworkStorage] {slug} → {result}" );
 			var parsed = ParseResponse( slug, result );
 			if ( parsed.HasValue )
-				NetLog.Response( slug, TruncateJson( parsed.Value ) );
-			return parsed;
+			{
+				if ( NetworkStorageLogConfig.LogResponses )
+					NetLog.Response( slug, TruncateJson( parsed.Value ) );
+				return parsed;
+			}
+
+			// Security mismatch: config was auto-updated by ParseResponse → LogServerError, retry once
+			if ( allowSecurityRetry && TryGetLastEndpointError( slug, out var code, out _ ) && IsSecurityConfigMismatchCode( code ) )
+			{
+				Log.Info( $"[NetworkStorage] {slug} security mismatch detected ({code}), retrying with updated config..." );
+				return await CallEndpointInternal( slug, input, allowSecurityRetry: false );
+			}
+
+			return null;
 		}
 		catch ( System.Net.Http.HttpRequestException httpEx )
 		{
 			var status = httpEx.StatusCode.HasValue ? $"{(int)httpEx.StatusCode.Value} {httpEx.StatusCode.Value}" : "unknown";
-			Log.Warning( $"[NetworkStorage] {slug} FAILED — HTTP {status}" );
-			Log.Warning( $"[NetworkStorage]   URL: {ApiRoot}/endpoints/{ProjectId}/{slug}" );
-			Log.Warning( $"[NetworkStorage]   Method: {( input is not null ? "POST" : "GET" )}" );
-			if ( bodyJson != null )
-				Log.Warning( $"[NetworkStorage]   Body: {bodyJson}" );
-			Log.Warning( $"[NetworkStorage]   Note: s&box Http API does not expose error response bodies — check server logs for details" );
-			NetLog.Error( slug, $"HTTP {status}" );
+			if ( NetworkStorageLogConfig.LogErrors )
+			{
+				Log.Warning( $"[NetworkStorage] {slug} FAILED — HTTP {status}" );
+				Log.Warning( $"[NetworkStorage]   URL: {url ?? $"{ApiRoot}/endpoints/{ProjectId}/{slug}"}" );
+				Log.Warning( $"[NetworkStorage]   Method: {( input is not null ? "POST" : "GET" )}" );
+				if ( bodyJson != null )
+					Log.Warning( $"[NetworkStorage]   Body: {bodyJson}" );
+				Log.Warning( $"[NetworkStorage]   Note: s&box Http API does not expose error response bodies — check server logs for details" );
+				NetLog.Error( slug, $"HTTP {status}" );
+			}
 			RecordEndpointError( slug, "HTTP_ERROR", $"HTTP {status}" );
 			return null;
 		}
 		catch ( Exception ex )
 		{
-			Log.Warning( $"[NetworkStorage] {slug} FAILED — {ex.Message}" );
-			Log.Warning( $"[NetworkStorage]   URL: {ApiRoot}/endpoints/{ProjectId}/{slug}" );
-			Log.Warning( $"[NetworkStorage]   Method: {( input is not null ? "POST" : "GET" )}" );
-			if ( bodyJson != null )
-				Log.Warning( $"[NetworkStorage]   Body: {bodyJson}" );
-			Log.Warning( $"[NetworkStorage]   Exception: {ex}" );
-			NetLog.Error( slug, ex.Message );
+			if ( NetworkStorageLogConfig.LogErrors )
+			{
+				Log.Warning( $"[NetworkStorage] {slug} FAILED — {ex.Message}" );
+				Log.Warning( $"[NetworkStorage]   URL: {url ?? $"{ApiRoot}/endpoints/{ProjectId}/{slug}"}" );
+				Log.Warning( $"[NetworkStorage]   Method: {( input is not null ? "POST" : "GET" )}" );
+				if ( bodyJson != null )
+					Log.Warning( $"[NetworkStorage]   Body: {bodyJson}" );
+				Log.Warning( $"[NetworkStorage]   Exception: {ex}" );
+				NetLog.Error( slug, ex.Message );
+			}
 			RecordEndpointError( slug, "REQUEST_FAILED", ex.Message );
 			return null;
 		}
@@ -352,18 +386,23 @@ public static partial class NetworkStorage
 		try
 		{
 			var url = BuildUrl( $"/values/{ProjectId}" );
-			NetLog.Request( "game-values", $"GET {ApiRoot}/values/{ProjectId}" );
+			if ( NetworkStorageLogConfig.LogRequests )
+				NetLog.Request( "game-values", $"GET {ApiRoot}/values/{ProjectId}" );
 			var result = await Http.RequestStringAsync( url, "GET", null, null );
-			Log.Info( $"[NetworkStorage] game-values → {TruncateJson( result, 300 )}" );
+			if ( NetworkStorageLogConfig.LogResponses )
+				Log.Info( $"[NetworkStorage] game-values → {TruncateJson( result, 300 )}" );
 			var parsed = ParseResponse( "game-values", result );
-			if ( parsed.HasValue )
+			if ( parsed.HasValue && NetworkStorageLogConfig.LogResponses )
 				NetLog.Response( "game-values", $"OK ({result.Length} bytes)" );
 			return parsed;
 		}
 		catch ( Exception ex )
 		{
-			Log.Warning( $"[NetworkStorage] GameValues: {ex.Message}" );
-			NetLog.Error( "game-values", ex.Message );
+			if ( NetworkStorageLogConfig.LogErrors )
+			{
+				Log.Warning( $"[NetworkStorage] GameValues: {ex.Message}" );
+				NetLog.Error( "game-values", ex.Message );
+			}
 			return null;
 		}
 	}
@@ -390,18 +429,23 @@ public static partial class NetworkStorage
 			var url = BuildUrl( $"/storage/{ProjectId}/{collectionId}/{docId}" );
 			var headers = await BuildAuthHeaders();
 
-			NetLog.Request( "storage", $"GET {collectionId}/{docId}" );
+			if ( NetworkStorageLogConfig.LogRequests )
+				NetLog.Request( "storage", $"GET {collectionId}/{docId}" );
 			var result = await Http.RequestStringAsync( url, "GET", null, headers );
-			Log.Info( $"[NetworkStorage] storage → {TruncateJson( result, 300 )}" );
+			if ( NetworkStorageLogConfig.LogResponses )
+				Log.Info( $"[NetworkStorage] storage → {TruncateJson( result, 300 )}" );
 			var parsed = ParseResponse( "storage", result );
-			if ( parsed.HasValue )
+			if ( parsed.HasValue && NetworkStorageLogConfig.LogResponses )
 				NetLog.Response( "storage", $"OK ({result.Length} bytes)" );
 			return parsed;
 		}
 		catch ( Exception ex )
 		{
-			Log.Warning( $"[NetworkStorage] GetDocument: {ex.Message}" );
-			NetLog.Error( "storage", ex.Message );
+			if ( NetworkStorageLogConfig.LogErrors )
+			{
+				Log.Warning( $"[NetworkStorage] GetDocument: {ex.Message}" );
+				NetLog.Error( "storage", ex.Message );
+			}
 			RecordEndpointError( "storage", "REQUEST_FAILED", ex.Message );
 			return null;
 		}
@@ -415,7 +459,9 @@ public static partial class NetworkStorage
 	private static async Task<JsonElement?> CallEndpointViaProxy( string slug, object input )
 	{
 		var steamId = Game.SteamId.ToString();
-		string inputJson = input is not null ? JsonSerializer.Serialize( input ) : null;
+		var securityRequest = await BuildEndpointSecurityRequest( slug, input ?? new { }, allowAuthSession: false );
+		string proxySlug = "";
+		string inputJson = JsonSerializer.Serialize( securityRequest.Body );
 
 		// Get the client's auth token as consent proof (included in HMAC signature)
 		string clientToken = null;
@@ -425,33 +471,44 @@ public static partial class NetworkStorage
 		}
 		catch ( Exception ex )
 		{
-			Log.Warning( $"[NetworkStorage] {slug} PROXY: failed to get client token — {ex.Message}" );
+			if ( NetworkStorageLogConfig.LogErrors )
+				Log.Warning( $"[NetworkStorage] {slug} PROXY: failed to get client token — {ex.Message}" );
 		}
 
-		NetLog.Request( slug, $"PROXY → host (steamId={steamId})" );
-		Log.Info( $"[NetworkStorage] {slug} PROXY request via host for steamId={steamId} input={inputJson ?? "null"}" );
+		if ( NetworkStorageLogConfig.LogProxy )
+		{
+			NetLog.Request( slug, $"PROXY → host (steamId={steamId})" );
+			Log.Info( $"[NetworkStorage] {slug} PROXY request via host for steamId={steamId} route={(string.IsNullOrEmpty( proxySlug ) ? "obfuscated" : proxySlug)} input={inputJson ?? "null"}" );
+		}
 
 		try
 		{
-			var result = await RequestProxy( steamId, clientToken ?? "", slug, inputJson );
+			var result = await RequestProxy( steamId, clientToken ?? "", proxySlug, inputJson );
 			if ( result == null )
 			{
-				Log.Warning( $"[NetworkStorage] {slug} PROXY returned null — host may have rejected the request" );
-				NetLog.Error( slug, "Proxy returned null" );
+				if ( NetworkStorageLogConfig.LogErrors )
+				{
+					Log.Warning( $"[NetworkStorage] {slug} PROXY returned null — host may have rejected the request" );
+					NetLog.Error( slug, "Proxy returned null" );
+				}
 				RecordEndpointError( slug, "PROXY_FAILED", "Proxy returned null" );
 				return null;
 			}
 
-			Log.Info( $"[NetworkStorage] {slug} PROXY → {TruncateJson( result, 200 )}" );
+			if ( NetworkStorageLogConfig.LogProxy )
+				Log.Info( $"[NetworkStorage] {slug} PROXY → {TruncateJson( result, 200 )}" );
 			var parsed = ParseResponse( slug, result );
-			if ( parsed.HasValue )
+			if ( parsed.HasValue && NetworkStorageLogConfig.LogProxy )
 				NetLog.Response( slug, $"PROXY OK — {TruncateJson( parsed.Value )}" );
 			return parsed;
 		}
 		catch ( Exception ex )
 		{
-			Log.Warning( $"[NetworkStorage] {slug} PROXY FAILED — {ex.Message}" );
-			NetLog.Error( slug, $"Proxy error: {ex.Message}" );
+			if ( NetworkStorageLogConfig.LogErrors )
+			{
+				Log.Warning( $"[NetworkStorage] {slug} PROXY FAILED — {ex.Message}" );
+				NetLog.Error( slug, $"Proxy error: {ex.Message}" );
+			}
 			RecordEndpointError( slug, "PROXY_FAILED", ex.Message );
 			return null;
 		}
@@ -473,33 +530,44 @@ public static partial class NetworkStorage
 		}
 		catch ( Exception ex )
 		{
-			Log.Warning( $"[NetworkStorage] storage PROXY: failed to get client token — {ex.Message}" );
+			if ( NetworkStorageLogConfig.LogErrors )
+				Log.Warning( $"[NetworkStorage] storage PROXY: failed to get client token — {ex.Message}" );
 		}
 
-		NetLog.Request( "storage", $"PROXY → host GET {collectionId}/{docId}" );
-		Log.Info( $"[NetworkStorage] storage PROXY request via host for {collectionId}/{docId}" );
+		if ( NetworkStorageLogConfig.LogProxy )
+		{
+			NetLog.Request( "storage", $"PROXY → host GET {collectionId}/{docId}" );
+			Log.Info( $"[NetworkStorage] storage PROXY request via host for {collectionId}/{docId}" );
+		}
 
 		try
 		{
 			var result = await DocumentProxy( steamId, clientToken ?? "", collectionId, docId );
 			if ( result == null )
 			{
-				Log.Warning( $"[NetworkStorage] storage PROXY returned null for {collectionId}/{docId}" );
-				NetLog.Error( "storage", "Proxy returned null" );
+				if ( NetworkStorageLogConfig.LogErrors )
+				{
+					Log.Warning( $"[NetworkStorage] storage PROXY returned null for {collectionId}/{docId}" );
+					NetLog.Error( "storage", "Proxy returned null" );
+				}
 				RecordEndpointError( "storage", "PROXY_FAILED", "Proxy returned null" );
 				return null;
 			}
 
-			Log.Info( $"[NetworkStorage] storage PROXY → {TruncateJson( result, 200 )}" );
+			if ( NetworkStorageLogConfig.LogProxy )
+				Log.Info( $"[NetworkStorage] storage PROXY → {TruncateJson( result, 200 )}" );
 			var parsed = ParseResponse( "storage", result );
-			if ( parsed.HasValue )
+			if ( parsed.HasValue && NetworkStorageLogConfig.LogProxy )
 				NetLog.Response( "storage", $"PROXY OK ({result.Length} bytes)" );
 			return parsed;
 		}
 		catch ( Exception ex )
 		{
-			Log.Warning( $"[NetworkStorage] storage PROXY FAILED — {ex.Message}" );
-			NetLog.Error( "storage", $"Proxy error: {ex.Message}" );
+			if ( NetworkStorageLogConfig.LogErrors )
+			{
+				Log.Warning( $"[NetworkStorage] storage PROXY FAILED — {ex.Message}" );
+				NetLog.Error( "storage", $"Proxy error: {ex.Message}" );
+			}
 			RecordEndpointError( "storage", "PROXY_FAILED", ex.Message );
 			return null;
 		}
@@ -523,7 +591,8 @@ public static partial class NetworkStorage
 		// using the host's auth — no proxy headers needed.
 		if ( targetSteamId == Game.SteamId.ToString() )
 		{
-			Log.Info( $"[NetworkStorage] {slug} same-account shortcut (targetSteamId == hostSteamId), calling directly" );
+			if ( NetworkStorageLogConfig.LogProxy )
+				Log.Info( $"[NetworkStorage] {slug} same-account shortcut (targetSteamId == hostSteamId), calling directly" );
 			return await CallEndpoint( slug, input );
 		}
 
@@ -531,7 +600,8 @@ public static partial class NetworkStorage
 		string bodyJson = null;
 		try
 		{
-			url = BuildUrl( $"/endpoints/{ProjectId}/{slug}" );
+			var routePath = $"/endpoints/{ProjectId}";
+			url = BuildUrl( routePath );
 			var headers = await BuildAuthHeaders();
 
 			// Proxy headers: client identity + token + scoped signature
@@ -543,46 +613,59 @@ public static partial class NetworkStorage
 			if ( input is not null )
 			{
 				bodyJson = JsonSerializer.Serialize( input );
-				NetLog.Request( slug, $"POST (as {targetSteamId}) {bodyJson}" );
-				Log.Info( $"[NetworkStorage] {slug} request: POST (as {targetSteamId}) {ApiRoot}/endpoints/{ProjectId}/{slug} body={bodyJson}" );
+				if ( NetworkStorageLogConfig.LogRequests )
+				{
+					NetLog.Request( slug, $"POST (as {targetSteamId}) {bodyJson}" );
+					Log.Info( $"[NetworkStorage] {slug} request: POST (as {targetSteamId}) {ApiRoot}{routePath} body={bodyJson}" );
+				}
 				var content = Http.CreateJsonContent( input );
 				result = await Http.RequestStringAsync( url, "POST", content, headers );
 			}
 			else
 			{
-				NetLog.Request( slug, $"GET (as {targetSteamId})" );
-				Log.Info( $"[NetworkStorage] {slug} request: GET (as {targetSteamId}) {ApiRoot}/endpoints/{ProjectId}/{slug}" );
+				if ( NetworkStorageLogConfig.LogRequests )
+				{
+					NetLog.Request( slug, $"GET (as {targetSteamId})" );
+					Log.Info( $"[NetworkStorage] {slug} request: GET (as {targetSteamId}) {ApiRoot}/endpoints/{ProjectId}/{slug}" );
+				}
 				result = await Http.RequestStringAsync( url, "GET", null, headers );
 			}
 
-			Log.Info( $"[NetworkStorage] {slug} (as {targetSteamId}) → {result}" );
+			if ( NetworkStorageLogConfig.LogResponses )
+				Log.Info( $"[NetworkStorage] {slug} (as {targetSteamId}) → {result}" );
 			var parsed = ParseResponse( slug, result );
-			if ( parsed.HasValue )
+			if ( parsed.HasValue && NetworkStorageLogConfig.LogResponses )
 				NetLog.Response( slug, TruncateJson( parsed.Value ) );
 			return parsed;
 		}
 		catch ( System.Net.Http.HttpRequestException httpEx )
 		{
 			var status = httpEx.StatusCode.HasValue ? $"{(int)httpEx.StatusCode.Value} {httpEx.StatusCode.Value}" : "unknown";
-			Log.Warning( $"[NetworkStorage] {slug} (as {targetSteamId}) FAILED — HTTP {status}" );
-			Log.Warning( $"[NetworkStorage]   URL: {ApiRoot}/endpoints/{ProjectId}/{slug}" );
-			Log.Warning( $"[NetworkStorage]   Method: {( input is not null ? "POST" : "GET" )}" );
-			if ( bodyJson != null )
-				Log.Warning( $"[NetworkStorage]   Body: {bodyJson}" );
-			Log.Warning( $"[NetworkStorage]   Note: s&box Http API does not expose error response bodies — check server logs for details" );
-			NetLog.Error( slug, $"HTTP {status}" );
+			if ( NetworkStorageLogConfig.LogErrors )
+			{
+				Log.Warning( $"[NetworkStorage] {slug} (as {targetSteamId}) FAILED — HTTP {status}" );
+				Log.Warning( $"[NetworkStorage]   URL: {ApiRoot}/endpoints/{ProjectId}/{slug}" );
+				Log.Warning( $"[NetworkStorage]   Method: {( input is not null ? "POST" : "GET" )}" );
+				if ( bodyJson != null )
+					Log.Warning( $"[NetworkStorage]   Body: {bodyJson}" );
+				Log.Warning( $"[NetworkStorage]   Note: s&box Http API does not expose error response bodies — check server logs for details" );
+				NetLog.Error( slug, $"HTTP {status}" );
+			}
 			RecordEndpointError( slug, "HTTP_ERROR", $"HTTP {status}" );
 			return null;
 		}
 		catch ( Exception ex )
 		{
-			Log.Warning( $"[NetworkStorage] {slug} (as {targetSteamId}) FAILED — {ex.Message}" );
-			Log.Warning( $"[NetworkStorage]   URL: {ApiRoot}/endpoints/{ProjectId}/{slug}" );
-			Log.Warning( $"[NetworkStorage]   Method: {( input is not null ? "POST" : "GET" )}" );
-			if ( bodyJson != null )
-				Log.Warning( $"[NetworkStorage]   Body: {bodyJson}" );
-			Log.Warning( $"[NetworkStorage]   Exception: {ex}" );
-			NetLog.Error( slug, ex.Message );
+			if ( NetworkStorageLogConfig.LogErrors )
+			{
+				Log.Warning( $"[NetworkStorage] {slug} (as {targetSteamId}) FAILED — {ex.Message}" );
+				Log.Warning( $"[NetworkStorage]   URL: {ApiRoot}/endpoints/{ProjectId}/{slug}" );
+				Log.Warning( $"[NetworkStorage]   Method: {( input is not null ? "POST" : "GET" )}" );
+				if ( bodyJson != null )
+					Log.Warning( $"[NetworkStorage]   Body: {bodyJson}" );
+				Log.Warning( $"[NetworkStorage]   Exception: {ex}" );
+				NetLog.Error( slug, ex.Message );
+			}
 			RecordEndpointError( slug, "REQUEST_FAILED", ex.Message );
 			return null;
 		}
@@ -600,7 +683,8 @@ public static partial class NetworkStorage
 		// Same-machine shortcut: same Steam account as host, call directly
 		if ( targetSteamId == Game.SteamId.ToString() )
 		{
-			Log.Info( $"[NetworkStorage] storage/{collectionId} same-account shortcut, calling directly" );
+			if ( NetworkStorageLogConfig.LogProxy )
+				Log.Info( $"[NetworkStorage] storage/{collectionId} same-account shortcut, calling directly" );
 			return await GetDocument( collectionId, documentId );
 		}
 
@@ -615,18 +699,23 @@ public static partial class NetworkStorage
 			headers["x-on-behalf-of-token"] = clientToken ?? "";
 			headers["x-proxy-signature"] = ComputeProxySignature( ApiKey, ProjectId, slugKey, targetSteamId, clientToken ?? "" );
 
-			NetLog.Request( "storage", $"GET (as {targetSteamId}) {collectionId}/{docId}" );
+			if ( NetworkStorageLogConfig.LogRequests )
+				NetLog.Request( "storage", $"GET (as {targetSteamId}) {collectionId}/{docId}" );
 			var result = await Http.RequestStringAsync( url, "GET", null, headers );
-			Log.Info( $"[NetworkStorage] storage (as {targetSteamId}) → {TruncateJson( result, 300 )}" );
+			if ( NetworkStorageLogConfig.LogResponses )
+				Log.Info( $"[NetworkStorage] storage (as {targetSteamId}) → {TruncateJson( result, 300 )}" );
 			var parsed = ParseResponse( "storage", result );
-			if ( parsed.HasValue )
+			if ( parsed.HasValue && NetworkStorageLogConfig.LogResponses )
 				NetLog.Response( "storage", $"OK ({result.Length} bytes)" );
 			return parsed;
 		}
 		catch ( Exception ex )
 		{
-			Log.Warning( $"[NetworkStorage] GetDocumentAs({targetSteamId}): {ex.Message}" );
-			NetLog.Error( "storage", ex.Message );
+			if ( NetworkStorageLogConfig.LogErrors )
+			{
+				Log.Warning( $"[NetworkStorage] GetDocumentAs({targetSteamId}): {ex.Message}" );
+				NetLog.Error( "storage", ex.Message );
+			}
 			RecordEndpointError( "storage", "REQUEST_FAILED", ex.Message );
 			return null;
 		}
@@ -665,27 +754,35 @@ public static partial class NetworkStorage
 	/// Sending auth via headers avoids URL-encoding issues that corrupt
 	/// base64 tokens in query strings (+ decoded as space, etc.).
 	/// </summary>
-	private static async Task<Dictionary<string, string>> BuildAuthHeaders()
+	private static async Task<Dictionary<string, string>> BuildAuthHeaders( string authSessionToken = null, string clientMode = null )
 	{
 		var steamId = Game.SteamId.ToString();
 		var token = TryTakePreparedAuthToken() ?? await GetAuthTokenWithRetry( $"steamId={steamId}" );
 
 		if ( string.IsNullOrEmpty( token ) )
 		{
-			Log.Warning( $"[NetworkStorage] Auth token is empty for steamId={steamId} — requests may fail" );
+			if ( NetworkStorageLogConfig.LogTokens )
+				Log.Warning( $"[NetworkStorage] Auth token is empty for steamId={steamId} — requests may fail" );
 		}
-		else
+		else if ( NetworkStorageLogConfig.LogTokens )
 		{
 			var preview = token.Length > 8 ? $"{token[..4]}...{token[^4..]}" : "****";
 			Log.Info( $"[NetworkStorage] Auth token acquired for steamId={steamId} ({token.Length} chars, preview={preview})" );
 		}
 
-		return new Dictionary<string, string>
+		var headers = new Dictionary<string, string>
 		{
 			{ "x-public-key", ApiKey ?? "" },
 			{ "x-steam-id", steamId },
 			{ "x-sbox-token", token ?? "" }
 		};
+		if ( !string.IsNullOrWhiteSpace( authSessionToken ) )
+			headers["x-auth-session"] = authSessionToken;
+		if ( !string.IsNullOrWhiteSpace( clientMode ) )
+			headers["x-ns-security-mode"] = clientMode;
+		if ( !string.IsNullOrWhiteSpace( RuntimeSecurityConfigVersion ) )
+			headers["x-ns-security-config-version"] = RuntimeSecurityConfigVersion;
+		return headers;
 	}
 
 	/// <summary>
@@ -696,7 +793,8 @@ public static partial class NetworkStorage
 	{
 		if ( string.IsNullOrEmpty( raw ) )
 		{
-			NetLog.Error( slug, "Server returned empty response" );
+			if ( NetworkStorageLogConfig.LogErrors )
+				NetLog.Error( slug, "Server returned empty response" );
 			RecordEndpointError( slug, "EMPTY_RESPONSE", "Server returned empty response" );
 			return null;
 		}
@@ -705,7 +803,8 @@ public static partial class NetworkStorage
 		var trimmed = raw.TrimStart();
 		if ( trimmed.Length > 0 && trimmed[0] != '{' && trimmed[0] != '[' )
 		{
-			NetLog.Error( slug, $"Non-JSON response: {raw[..Math.Min( raw.Length, 120 )]}" );
+			if ( NetworkStorageLogConfig.LogErrors )
+				NetLog.Error( slug, $"Non-JSON response: {raw[..Math.Min( raw.Length, 120 )]}" );
 			RecordEndpointError( slug, "INVALID_RESPONSE", "Server returned non-JSON response" );
 			return null;
 		}
@@ -717,7 +816,8 @@ public static partial class NetworkStorage
 		}
 		catch
 		{
-			NetLog.Error( slug, $"Invalid JSON: {raw[..Math.Min( raw.Length, 200 )]}" );
+			if ( NetworkStorageLogConfig.LogErrors )
+				NetLog.Error( slug, $"Invalid JSON: {raw[..Math.Min( raw.Length, 200 )]}" );
 			RecordEndpointError( slug, "INVALID_JSON", "Server returned invalid JSON" );
 			return null;
 		}
@@ -747,8 +847,11 @@ public static partial class NetworkStorage
 			// { error: "string message" } — simple error
 			else if ( errProp.ValueKind == JsonValueKind.String )
 			{
-				Log.Warning( $"[NetworkStorage] {slug}: {errProp.GetString()}" );
-				NetLog.Error( slug, errProp.GetString() );
+				if ( NetworkStorageLogConfig.LogErrors )
+				{
+					Log.Warning( $"[NetworkStorage] {slug}: {errProp.GetString()}" );
+					NetLog.Error( slug, errProp.GetString() );
+				}
 				RecordEndpointError( slug, errProp.GetString() ?? "UNKNOWN", "" );
 				return null;
 			}
@@ -810,8 +913,35 @@ public static partial class NetworkStorage
 			InvalidateCachedAuthToken( $"{slug} {code} {authFailureKind}".Trim() );
 		}
 
-		Log.Warning( $"[NetworkStorage] {slug}: {code} — {message}" );
-		NetLog.Error( slug, $"{code}: {message}" );
+		if ( IsSecurityConfigMismatchCode( code ) )
+		{
+			JsonElement expected = default;
+			string expectedConfigVersion = null;
+			if ( err.ValueKind == JsonValueKind.Object )
+			{
+				if ( err.TryGetProperty( "security", out var secObj ) )
+				{
+					if ( secObj.TryGetProperty( "configVersion", out var cv ) )
+						expectedConfigVersion = cv.GetString();
+					secObj.TryGetProperty( "expected", out expected );
+				}
+				if ( expected.ValueKind != JsonValueKind.Object )
+					err.TryGetProperty( "expected", out expected );
+			}
+			if ( expected.ValueKind != JsonValueKind.Object && json.TryGetProperty( "security", out var topSec ) )
+			{
+				if ( expectedConfigVersion == null && topSec.TryGetProperty( "configVersion", out var cv ) )
+					expectedConfigVersion = cv.GetString();
+				topSec.TryGetProperty( "expected", out expected );
+			}
+			ApplyServerExpectedSecurityConfig( code, expected, expectedConfigVersion );
+		}
+
+		if ( NetworkStorageLogConfig.LogErrors )
+		{
+			Log.Warning( $"[NetworkStorage] {slug}: {code} — {message}" );
+			NetLog.Error( slug, $"{code}: {message}" );
+		}
 		RecordEndpointError( slug, code, message );
 	}
 
