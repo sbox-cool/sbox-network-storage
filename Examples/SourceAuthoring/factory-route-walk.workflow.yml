@@ -1,0 +1,91 @@
+sourceVersion: 1
+kind: workflow
+id: factory-route-walk
+name: Factory Route Walk
+description: Find the terminal storage bucket through a dynamic conveyor and processor graph.
+definition:
+  params:
+    startBuildingId:
+      type: string
+    links:
+      type: array
+    buildings:
+      type: object
+  budgets:
+    maxIterations: 64
+    maxReads: 128
+    maxWrites: 0
+    maxNestedCalls: 4
+  steps:
+    - id: initialize_route
+      type: transform
+      set:
+        queue:
+          - "{{startBuildingId}}"
+        visited: {}
+        terminalBucket: null
+    - id: walk_connected_outputs
+      type: while
+      maxIterations: 64
+      condition:
+        field: "{{queue.length}}"
+        op: ">"
+        value: 0
+      body:
+        - id: take_next
+          type: transform
+          set:
+            current: "{{queue.shift()}}"
+        - id: skip_visited
+          type: condition
+          check:
+            field: "{{visited[current]}}"
+            op: "!="
+            value: true
+          onFail: skip
+        - id: mark_visited
+          type: transform
+          set:
+            visited:
+              "{{current}}": true
+        - id: inspect_building
+          type: lookup
+          from: "{{buildings}}"
+          key: "{{current}}"
+          as: building
+        - id: found_storage_bucket
+          type: condition
+          check:
+            field: "{{building.kind}}"
+            op: "=="
+            value: bucket
+          then:
+            - id: return_bucket
+              type: return
+              value:
+                ok: true
+                terminalBucket: "{{current}}"
+        - id: connected_outputs
+          type: filter
+          from: "{{links}}"
+          where:
+            field: fromBuildingId
+            op: "=="
+            value: "{{current}}"
+          as: outputs
+        - id: enqueue_outputs
+          type: foreach
+          maxIterations: 16
+          from: "{{outputs}}"
+          item: link
+          body:
+            - id: enqueue_target
+              type: transform
+              append:
+                queue: "{{link.toBuildingId}}"
+    - id: no_bucket
+      type: return
+      value:
+        ok: false
+        terminalBucket: null
+        error: NO_CONNECTED_BUCKET

@@ -1,0 +1,24 @@
+sourceVersion: 1
+kind: workflow
+id: check-currency
+name: Check Currency
+description: Validate that a player has enough currency for a cost.
+definition:
+  params:
+    balance:
+      type: number
+    cost:
+      type: number
+  steps:
+    - id: has_currency
+      type: condition
+      check:
+        field: "{{balance}}"
+        op: ">="
+        value: "{{cost}}"
+      onFail:
+        status: 409
+        error: INSUFFICIENT_CURRENCY
+        message: Not enough currency.
+  returns:
+    ok: true

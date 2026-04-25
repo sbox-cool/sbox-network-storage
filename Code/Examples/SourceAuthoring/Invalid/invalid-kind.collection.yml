@@ -1,0 +1,5 @@
+sourceVersion: 1
+kind: widget
+id: invalid-kind
+definition:
+  fields: {}

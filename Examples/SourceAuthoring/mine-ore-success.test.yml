@@ -1,0 +1,20 @@
+sourceVersion: 1
+kind: test
+id: mine-ore-success
+name: Mine Ore Success
+description: Dry-run fixture for a successful mine-ore call.
+definition:
+  endpoint: mine-ore
+  input:
+    amount: 3
+  seed:
+    collections:
+      players:
+        "76561198000000000":
+          playerName: Tester
+          ores:
+            stone: 0
+  expect:
+    status: 200
+    body:
+      ok: true

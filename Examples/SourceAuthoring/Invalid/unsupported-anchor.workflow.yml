@@ -1,0 +1,11 @@
+sourceVersion: 1
+kind: workflow
+id: unsupported-anchor
+definition:
+  sharedStep: &readStep
+    type: read
+    collection: players
+    key: "{{steamId}}"
+  steps:
+    - id: read-player
+      <<: *readStep

@@ -1,0 +1,14 @@
+{
+  "Title": "Network Storage",
+  "Type": "library",
+  "Org": "sboxcool",
+  "Ident": "network-storage",
+  "Schema": 1,
+  "IncludeSourceFiles": false,
+  "Resources": null,
+  "PackageReferences": [],
+  "EditorReferences": null,
+  "Mounts": null,
+  "IsStandaloneOnly": false,
+  "Metadata": {}
+}
