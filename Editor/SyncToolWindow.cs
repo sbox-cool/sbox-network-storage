@@ -16,7 +16,7 @@ using Editor;
 /// After push or pull, re-checks and clears stale state.
 /// </summary>
 [Dock( "Editor", "Network Storage Sync", "cloud" )]
-public class SyncToolWindow : DockWindow
+public partial class SyncToolWindow : DockWindow
 {
 	private static readonly JsonSerializerOptions _readOptions = new()
 	{
@@ -872,10 +872,7 @@ public class SyncToolWindow : DockWindow
 
 		foreach ( var mapping in SyncToolConfig.SyncMappings )
 		{
-			var csPath = SyncToolConfig.GetMappingCsPath( mapping );
-			var colPath = SyncToolConfig.GetMappingCollectionPath( mapping );
-			var csExists = File.Exists( csPath ) || Directory.Exists( csPath );
-			var colExists = File.Exists( colPath );
+			var status = GetDataSourceStatus( mapping );
 
 			var rowH = 28f;
 			var btnW = 68f;
@@ -891,22 +888,19 @@ public class SyncToolWindow : DockWindow
 			}
 
 			// Status icon
-			var statusColor = csExists && colExists ? Color.Green.WithAlpha( 0.6f )
-				: csExists ? Color.Yellow.WithAlpha( 0.7f )
-				: Color.Red.WithAlpha( 0.7f );
 			Paint.SetDefaultFont( size: 9 );
-			Paint.SetPen( statusColor );
-			Paint.DrawText( new Rect( pad + 2, y, 18, rowH ),
-				csExists && colExists ? "✓" : csExists ? "●" : "✗", TextFlag.Center );
+			Paint.SetPen( status.Color );
+			Paint.DrawText( new Rect( pad + 2, y, 18, rowH ), status.Icon, TextFlag.Center );
 
 			// Mapping label
 			Paint.SetDefaultFont( size: 9 );
 			Paint.SetPen( Color.White.WithAlpha( 0.75f ) );
+			var labelSuffix = status.IsStale ? " (stale)" : "";
 			Paint.DrawText( new Rect( pad + 22, y, w - btnW - 30, rowH ),
-				$"{mapping.CsFile} → {mapping.Collection}.collection.yml", TextFlag.LeftCenter );
+				$"{mapping.CsFile} → {mapping.Collection}.collection.yml{labelSuffix}", TextFlag.LeftCenter );
 
 			// Generate button
-			if ( csExists )
+			if ( status.SourceExists )
 			{
 				var btnY = y + ( rowH - btnH ) / 2;
 				var btnRect = new Rect( pad + w - btnW - 4, btnY, btnW, btnH );
@@ -924,11 +918,14 @@ public class SyncToolWindow : DockWindow
 			y += rowH + 1;
 
 			// Description
-			if ( !string.IsNullOrEmpty( mapping.Description ) )
+			var detailText = string.IsNullOrEmpty( mapping.Description )
+				? status.Detail
+				: $"{status.Label}: {status.Detail} - {mapping.Description}";
+			if ( !string.IsNullOrEmpty( detailText ) )
 			{
 				Paint.SetDefaultFont( size: 8 );
-				Paint.SetPen( Color.White.WithAlpha( 0.35f ) );
-				Paint.DrawText( new Rect( pad + 22, y, w - 30, 14 ), mapping.Description, TextFlag.LeftCenter );
+				Paint.SetPen( status.IsStale ? Color.Yellow.WithAlpha( 0.75f ) : Color.White.WithAlpha( 0.35f ) );
+				Paint.DrawText( new Rect( pad + 22, y, w - 30, 14 ), detailText, TextFlag.LeftCenter );
 				y += 16;
 			}
 		}
@@ -1642,7 +1639,7 @@ public class SyncToolWindow : DockWindow
 						continue;
 					sorted[prop.Name] = SortJsonElement( prop.Value );
 				}
-				return sorted;
+				return sorted.Count == 0 ? null : sorted;
 			case JsonValueKind.Array:
 				var arr = new List<object>();
 				foreach ( var item in el.EnumerateArray() )
