@@ -15,7 +15,7 @@ using Editor;
 ///   config/secret/secret_key.json     — secret key ONLY (gitignored, editor-only, NEVER published)
 ///
 /// The public config is also written to the project root as network-storage.credentials.json
-/// so the runtime client can auto-configure via s&box's sandboxed FileSystem.
+/// so the runtime client can auto-configure via s&amp;box's sandboxed FileSystem.
 /// </summary>
 public static partial class SyncToolConfig
 {

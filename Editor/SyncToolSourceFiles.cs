@@ -363,7 +363,7 @@ public static partial class SyncToolConfig
 
 		while ( index < lines.Length )
 		{
-			if ( string.IsNullOrWhiteSpace( lines[index] ) )
+			if ( IsBlankOrCommentLine( lines[index] ) )
 			{
 				index++;
 				continue;
@@ -407,7 +407,7 @@ public static partial class SyncToolConfig
 
 		while ( index < lines.Length )
 		{
-			if ( string.IsNullOrWhiteSpace( lines[index] ) )
+			if ( IsBlankOrCommentLine( lines[index] ) )
 			{
 				index++;
 				continue;
@@ -650,8 +650,14 @@ public static partial class SyncToolConfig
 
 	private static void SkipBlankLines( string[] lines, ref int index )
 	{
-		while ( index < lines.Length && string.IsNullOrWhiteSpace( lines[index] ) )
+		while ( index < lines.Length && IsBlankOrCommentLine( lines[index] ) )
 			index++;
+	}
+
+	private static bool IsBlankOrCommentLine( string value )
+	{
+		return string.IsNullOrWhiteSpace( value )
+			|| value.TrimStart().StartsWith( "#", StringComparison.Ordinal );
 	}
 
 	private static int CountLeadingSpaces( string value )
