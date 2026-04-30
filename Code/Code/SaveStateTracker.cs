@@ -37,7 +37,8 @@ public class SaveStateTracker
 		PendingCalls++;
 		SetState( SaveState.Saving );
 
-		NetLog.Info( slug, $"Calling endpoint... input={( input != null ? JsonSerializer.Serialize( input ) : "null" )}" );
+		if ( NetworkStorageLogConfig.LogRequests )
+			NetLog.Info( slug, $"Calling endpoint... input={( input != null ? JsonSerializer.Serialize( input ) : "null" )}" );
 
 		var result = await NetworkStorage.CallEndpoint( slug, input );
 
@@ -46,13 +47,15 @@ public class SaveStateTracker
 		{
 			if ( PendingCalls <= 0 )
 				SetState( SaveState.Saved );
-			NetLog.Info( slug, "Success" );
+			if ( NetworkStorageLogConfig.LogResponses )
+				NetLog.Info( slug, "Success" );
 		}
 		else
 		{
 			var error = $"{slug} failed — server returned null";
 			SetState( SaveState.Error, error );
-			NetLog.Error( slug, error );
+			if ( NetworkStorageLogConfig.LogErrors )
+				NetLog.Error( slug, error );
 		}
 
 		return result;

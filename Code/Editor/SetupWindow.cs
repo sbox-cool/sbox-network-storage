@@ -26,7 +26,6 @@ public class SetupWindow : DockWindow
 	// ── UI state ──
 	private string _status = "";
 	private string _statusColor = "white";
-	private int _dataSourceIndex;
 	private bool _secretKeyMasked = true;
 	private List<ButtonRect> _buttons = new();
 	private Vector2 _mousePos;
@@ -52,13 +51,6 @@ public class SetupWindow : DockWindow
 		MinimumSize = new Vector2( 400, 580 );
 
 		SyncToolConfig.Load();
-		_dataSourceIndex = SyncToolConfig.DataSource switch
-		{
-			SyncToolConfig.DataSourceMode.ApiOnly => 1,
-			SyncToolConfig.DataSourceMode.JsonOnly => 2,
-			_ => 0
-		};
-
 		CreateInputWidgets();
 	}
 
@@ -244,16 +236,8 @@ public class SetupWindow : DockWindow
 		// ── Data Source Preference ──
 		Paint.SetDefaultFont( size: 10, weight: 600 );
 		Paint.SetPen( Color.White.WithAlpha( 0.7f ) );
-		Paint.DrawText( new Rect( pad, y, w, 18 ), "Data Source (GET requests)", TextFlag.LeftCenter );
+		Paint.DrawText( new Rect( pad, y, w, 18 ), "Data Source: API Only", TextFlag.LeftCenter );
 		y += 24;
-
-		var thirdW = ( w - 16 ) / 3;
-		DrawToggleButton( pad, y, thirdW, 0, "API + Fallback", _dataSourceIndex == 0 );
-		DrawToggleButton( pad + thirdW + 8, y, thirdW, 1, "API Only", _dataSourceIndex == 1 );
-		DrawToggleButton( pad + ( thirdW + 8 ) * 2, y, thirdW, 2, "JSON Only", _dataSourceIndex == 2 );
-		y += 38 + 12;
-
-		DrawSeparator( ref y, w, pad );
 
 		// ── Save button ──
 		var saveBtnH = 34f;
@@ -331,39 +315,6 @@ public class SetupWindow : DockWindow
 		y += 18;
 	}
 
-	private void DrawToggleButton( float x, float y, float w, int index, string label, bool active )
-	{
-		var h = 36f;
-		var rect = new Rect( x, y, w, h );
-		var hovered = rect.IsInside( _mousePos );
-
-		var color = active ? Color.Cyan : Color.White;
-		var bgAlpha = active ? 0.12f : hovered ? 0.06f : 0.02f;
-		var borderAlpha = active ? 0.4f : hovered ? 0.15f : 0.08f;
-
-		Paint.SetBrush( color.WithAlpha( bgAlpha ) );
-		Paint.SetPen( color.WithAlpha( borderAlpha ) );
-		Paint.DrawRect( rect, 4 );
-
-		Paint.SetDefaultFont( size: 10, weight: active ? 700 : 400 );
-		Paint.SetPen( color.WithAlpha( active ? 0.9f : 0.5f ) );
-		Paint.DrawText( rect, label, TextFlag.Center );
-
-		if ( !active )
-		{
-			_buttons.Add( new ButtonRect
-			{
-				Rect = rect,
-				Id = $"ds_{index}",
-				OnClick = () =>
-				{
-					_dataSourceIndex = index;
-					Update();
-				}
-			} );
-		}
-	}
-
 	private void DrawSeparator( ref float y, float w, float pad )
 	{
 		Paint.SetPen( Color.White.WithAlpha( 0.08f ) );
@@ -439,14 +390,7 @@ public class SetupWindow : DockWindow
 			return;
 		}
 
-		var dataSource = _dataSourceIndex switch
-		{
-			1 => SyncToolConfig.DataSourceMode.ApiOnly,
-			2 => SyncToolConfig.DataSourceMode.JsonOnly,
-			_ => SyncToolConfig.DataSourceMode.ApiThenJson
-		};
-
-		SyncToolConfig.Save( secretKey, publicKey, projectId, baseUrl, dataSource, dataFolder, cdnUrl );
+		SyncToolConfig.Save( secretKey, publicKey, projectId, baseUrl, SyncToolConfig.DataSourceMode.ApiOnly, dataFolder, cdnUrl );
 
 		// Warn about non-standard prefixes but still save
 		var warnings = "";

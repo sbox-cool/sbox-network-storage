@@ -1,6 +1,6 @@
 # Network Storage Source Authoring
 
-Network Storage source authoring treats YAML as source code for resources. Legacy JSON authoring is deprecated; when matching YAML source exists, local JSON endpoint files are ignored by the sync tool.
+Network Storage source authoring treats YAML as source code for resources. Legacy JSON authoring, JSON export, and local JSON fallback are no longer supported.
 
 ## File Names
 
@@ -15,7 +15,7 @@ Editor/Network Storage/
   libraries/<id>.library.yml
 ```
 
-`.yaml` is also accepted, but project documentation and generated examples should prefer `.yml`. The resource kind is part of the file name and must match the `kind` field inside the source. Existing `.json` resources are legacy resources and should be migrated to YAML before editing.
+`.yaml` is also accepted, but project documentation and generated examples should prefer `.yml`. The resource kind is part of the file name and must match the `kind` field inside the source. Existing `.json` resources are unsupported and should be migrated to YAML before editing.
 
 ## Source Model
 
@@ -68,12 +68,12 @@ The backend compiler stores original source text and compiles it into a typed ex
 
 ## Legacy JSON
 
-Legacy JSON resources are deprecated:
+Legacy JSON resources are unsupported:
 
-- YAML source is authoritative when present.
-- JSON endpoint files are ignored when matching YAML source exists.
-- The website should label remaining JSON resources as `Legacy JSON`.
-- JSON export mode is for compatibility only.
+- YAML source is the only local authoring format.
+- JSON resource files are ignored by local project scans.
+- Explicit `.json` compiler input returns a `JSON_UNSUPPORTED` diagnostic.
+- JSON export mode has been removed.
 
 ## Compiler Fingerprints
 
@@ -124,7 +124,7 @@ python Libraries/sboxcool.network-storage/Editor/source_compiler.py --file "Edit
 
 The compiler emits:
 
-- source format and authoring mode (`source` or `legacy-json`)
+- source format and authoring mode (`source`; unsupported JSON input reports `unsupported-json`)
 - compiler fingerprint and fingerprint hash
 - source, dependency, canonical, and execution-plan hashes
 - deterministic canonical definition
@@ -133,4 +133,4 @@ The compiler emits:
 
 `sync.py --sources` runs this validation before upload. Invalid YAML source is rejected locally and prints per-resource diagnostics.
 
-Automatic JSON-to-YAML reverse conversion is only used by local migration tooling. Legacy JSON can be imported into canonical definitions and exported as JSON for compatibility, but YAML source should be edited going forward.
+Automatic JSON-to-YAML reverse conversion is not supported by the local tooling. Migrate legacy JSON manually or pull YAML source from the Network Storage API.

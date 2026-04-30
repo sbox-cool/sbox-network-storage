@@ -15,7 +15,7 @@ Persistent cloud storage, server-side endpoints, and an editor sync tool for s&b
 - **Setup Wizard** — Editor window for entering and validating your API credentials
 - **Diff Viewer** — Side-by-side comparison of local vs remote data before syncing
 - **Network Logger** — Ring buffer that captures all API traffic for in-game debug panels
-- **JSON Helpers** — Extension methods for safe deserialization with fallbacks
+- **JSON Helpers** — Extension methods for reading API response payloads
 
 ## Installation
 
@@ -130,7 +130,7 @@ See the [Examples/](Examples/) folder for complete working patterns.
 
 ### JsonHelpers (static)
 
-Safe extraction from `JsonElement` with fallback defaults. Handles missing keys and string-to-number coercion.
+Safe extraction from API `JsonElement` payloads with caller-provided defaults. Handles missing keys and string-to-number coercion.
 
 ```csharp
 var name = JsonHelpers.GetString( data, "playerName", "Unknown" );
@@ -202,8 +202,8 @@ var version = NetLog.Version; // increments on every add/clear
 
 ## Editor Sync Tool
 
-The Sync Tool lets you manage your sboxcool.com project data as local files, then push/pull changes.
-YAML source definitions are the authoritative local format. Legacy JSON authoring is deprecated, and JSON endpoint files are ignored when matching YAML source exists.
+The Sync Tool lets you manage your sboxcool.com project data as local YAML source files, then push/pull changes through the API.
+YAML source definitions are the only supported local authoring format. Legacy JSON authoring and local JSON fallback are no longer supported.
 
 ### Open the Sync Tool
 
@@ -212,7 +212,7 @@ YAML source definitions are the authoritative local format. Legacy JSON authorin
 ### Workflow
 
 1. **Define new collections, endpoints, workflows, tests, and libraries** as YAML source files in `Editor/Network Storage/`
-2. Migrate existing JSON resources to YAML before editing them
+2. Migrate existing JSON resources to YAML before editing them; `.json` resources are ignored by the tooling
 3. Click **Check for Updates** to compare local files against the remote server
 4. **Push** sends your local changes to sboxcool.com
 5. **Pull** downloads the latest from sboxcool.com to your local files
@@ -230,7 +230,7 @@ tests/<id>.test.yml
 libraries/<id>.library.yml
 ```
 
-`.yaml` is also accepted, but project documentation and generated examples should prefer `.yml`. Legacy JSON files are deprecated compatibility artifacts and are not automatically reverse-converted into YAML.
+`.yaml` is also accepted, but project documentation and generated examples should prefer `.yml`. Legacy JSON files are unsupported and are not automatically reverse-converted into YAML.
 
 Each source file starts with:
 
@@ -287,15 +287,9 @@ Editor/
 - The `.env` file is gitignored by default — never commit it to version control
 - See `.env.example` for the expected format
 
-## Data Source Modes
+## Data Source Mode
 
-Configure in **Editor > Network Storage > Setup** under "Data Source":
-
-| Mode | Behavior |
-|———|—————|
-| **API + Fallback** (default) | Try API first, fall back to local source files if unavailable |
-| **API Only** | Always fetch from API, no fallback |
-| **JSON Only** | Deprecated compatibility mode for local JSON files only, no API calls |
+Network Storage runs in **API Only** mode. Runtime reads and editor sync operations use the API; local JSON files and API fallback modes are unsupported.
 
 ## MCP Server (for AI Agents)
 
@@ -338,13 +332,13 @@ Set the working directory to this repository root.
 | Tool | Description |
 |———|——————-|
 | `get_documentation` | Retrieve docs by topic (collections, endpoints, workflows, setup, errors, etc.) |
-| `validate_collection` | Validate a collection JSON for correct schema and naming |
-| `validate_endpoint` | Validate an endpoint JSON — steps, operators, templates, constraints |
-| `validate_workflow` | Validate a workflow JSON — conditions, onFail config |
-| `scaffold_collection` | Generate a collection JSON template |
-| `scaffold_endpoint` | Generate an endpoint JSON template |
-| `scaffold_workflow` | Generate a workflow JSON template |
-| `get_examples` | Get example JSONs for common game scenarios (inventory, currency, leaderboard, etc.) |
+| `validate_collection` | Validate a collection definition for correct schema and naming |
+| `validate_endpoint` | Validate an endpoint definition — steps, operators, templates, constraints |
+| `validate_workflow` | Validate a workflow definition — conditions, onFail config |
+| `scaffold_collection` | Generate a collection YAML source template |
+| `scaffold_endpoint` | Generate an endpoint YAML source template |
+| `scaffold_workflow` | Generate a workflow YAML source template |
+| `get_examples` | Get examples for common game scenarios (inventory, currency, leaderboard, etc.) |
 | `validate_env_config` | Validate `.env` credential file format |
 | `diagnose_error` | Diagnose s&box console errors and suggest fixes |
 

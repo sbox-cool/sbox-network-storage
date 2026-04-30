@@ -33,7 +33,7 @@ internal static class NetworkStorageBootstrap
 		// Only show editor hint when the editor assembly is expected but didn't load
 		var editorLoaded = TypeLibrary.GetType( "SetupWindow" ) != null;
 
-		if ( !editorLoaded )
+		if ( !editorLoaded && NetworkStorageLogConfig.LogConfig )
 		{
 			Log.Warning( "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" );
 			Log.Warning( "[Network Storage] Not configured." );

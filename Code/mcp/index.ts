@@ -21,7 +21,7 @@ const VALID_COLLECTION_TYPES = ["per-steamid", "global"] as const;
 const VALID_ACCESS_MODES = ["public", "private"] as const;
 const VALID_FIELD_TYPES = ["string", "number", "boolean", "object", "array"] as const;
 const VALID_METHODS = ["GET", "POST"] as const;
-const VALID_DATA_SOURCES = ["api_then_json", "api_only", "json_only"] as const;
+const VALID_DATA_SOURCES = ["api_only"] as const;
 
 const COLLECTION_NAME_PATTERN = /^[a-z0-9_]+$/;
 const ENDPOINT_SLUG_PATTERN = /^[a-z0-9-]+$/;
@@ -51,7 +51,7 @@ const STEP_REQUIRED_FIELDS: Record<string, string[]> = {
 const DOCUMENTATION: Record<string, string> = {
   overview: `# Network Storage — Overview
 
-Network Storage is an s&box editor library providing a complete backend-as-a-service for s&box games. It connects your game to the sbox.cool cloud platform for persistent player data, game configuration, and server-side logic — all managed through JSON files.
+Network Storage is an s&box editor library providing a complete backend-as-a-service for s&box games. It connects your game to the sbox.cool cloud platform for persistent player data, game configuration, and server-side logic — all managed through YAML source files.
 
 ## Two Halves
 
@@ -60,7 +60,7 @@ Network Storage is an s&box editor library providing a complete backend-as-a-ser
 
 ## Data Flow
 
-- Developers edit JSON files in \`Editor/Network Storage/\`
+- Developers edit YAML source files in \`Editor/Network Storage/\`
 - Sync Tool pushes changes to sbox.cool (live immediately)
 - Game code uses \`NetworkStorageClient\` to call endpoints
 - Server executes pipelines atomically (read → validate → transform → write → respond)
@@ -68,15 +68,15 @@ Network Storage is an s&box editor library providing a complete backend-as-a-ser
 ## Key Principles
 
 - **Editor/ never ships** — secrets and management tools stay on dev machines
-- **JSON as source of truth** — version-controllable, human-readable, PR-reviewable
+- **YAML source as source of truth** — version-controllable, human-readable, PR-reviewable
 - **Backend-first design** — all validation/logic runs server-side via endpoints
 - **HTTP 200 for rejections** — s&box's Http API throws on 4xx/5xx, so errors return 200 with \`ok: false\``,
 
   collections: `# Collections
 
-Collections define where and how your data is stored. Each collection is a JSON file in \`Editor/Network Storage/collections/\`.
+Collections define where and how your data is stored. Each collection is a YAML source file in \`Editor/Network Storage/collections/\`.
 
-## Collection JSON Format
+## Collection YAML Source Format
 
 \`\`\`json
 {
@@ -158,9 +158,9 @@ Collection names must match \`/^[a-z0-9_]+$/\` — lowercase letters, digits, an
 
   endpoints: `# Endpoints
 
-Endpoints are server-side pipelines that your game calls via the API. Each endpoint is a JSON file in \`Editor/Network Storage/endpoints/\`.
+Endpoints are server-side pipelines that your game calls via the API. Each endpoint is a YAML source file in \`Editor/Network Storage/endpoints/\`.
 
-## Endpoint JSON Format
+## Endpoint YAML Source Format
 
 \`\`\`json
 {
@@ -220,9 +220,9 @@ var data = await NetworkStorage.CallEndpoint("load-player");
 
   workflows: `# Workflows
 
-Workflows are reusable validation/logic blocks that endpoints can reference. Each workflow is a JSON file in \`Editor/Network Storage/workflows/\`.
+Workflows are reusable validation/logic blocks that endpoints can reference. Each workflow is a YAML source file in \`Editor/Network Storage/workflows/\`.
 
-## Workflow JSON Format
+## Workflow YAML Source Format
 
 \`\`\`json
 {
@@ -510,8 +510,8 @@ SBOXCOOL_API_VERSION=v3
 # Editor subfolder for sync data (default: Network Storage)
 SBOXCOOL_DATA_FOLDER=Network Storage
 
-# Data source: api_then_json, api_only, json_only
-SBOXCOOL_DATA_SOURCE=api_then_json
+# Data source: api_only
+SBOXCOOL_DATA_SOURCE=api_only
 \`\`\`
 
 ## Required Keys
@@ -529,7 +529,7 @@ SBOXCOOL_DATA_SOURCE=api_then_json
 | \`SBOXCOOL_BASE_URL\` | \`https://api.sboxcool.com\` | API base URL |
 | \`SBOXCOOL_API_VERSION\` | \`v3\` | API version |
 | \`SBOXCOOL_DATA_FOLDER\` | \`Network Storage\` | Editor subfolder name |
-| \`SBOXCOOL_DATA_SOURCE\` | \`api_then_json\` | Data source mode: \`api_then_json\`, \`api_only\`, \`json_only\` |
+| \`SBOXCOOL_DATA_SOURCE\` | \`api_only\` | Data source mode. Only \`api_only\` is supported. |
 
 ## Security
 
@@ -551,8 +551,8 @@ On first load, the library scaffolds:
 Editor/Network Storage/
 ├── config/.env           ← Placeholder credentials
 ├── config/.gitignore     ← Keeps .env out of git
-├── collections/players.json ← Sample collection
-├── endpoints/init-player.json ← Sample endpoint
+├── collections/players.collection.yml ← Sample collection
+├── endpoints/init-player.endpoint.yml ← Sample endpoint
 └── workflows/            ← Empty
 \`\`\`
 
@@ -720,7 +720,7 @@ Open via **Editor → Network Storage → Sync Tool**.
 
 ## What It Does
 
-Compares local JSON files with sbox.cool server state, lets you push/pull changes.
+Compares local YAML source files with sbox.cool server state, lets you push/pull changes.
 
 ## Status Indicators
 
@@ -767,7 +767,7 @@ Compares local JSON files with sbox.cool server state, lets you push/pull change
 - Collection types: per-steamid, global
 - Access modes: public, private
 - HTTP methods: GET, POST
-- Data sources: api_then_json, api_only, json_only
+- Data sources: api_only
 
 ## API Keys
 - Public key prefix: \`sbox_ns_\`
@@ -1202,7 +1202,7 @@ const ERROR_PATTERNS: ErrorPattern[] = [
     ],
     fixes: [
       "Open Sync Tool and push the endpoint",
-      "Double-check the slug matches your JSON filename",
+      "Double-check the slug matches your YAML source id",
       "Verify endpoint exists on sbox.cool dashboard",
     ],
   },
@@ -1211,7 +1211,7 @@ const ERROR_PATTERNS: ErrorPattern[] = [
     errorCode: "ENDPOINT_DISABLED",
     explanation: "The endpoint exists but has enabled: false.",
     possibleCauses: ["Endpoint was intentionally disabled", "Default enabled state wasn't set"],
-    fixes: ["Set \"enabled\": true in the endpoint JSON file", "Push the updated endpoint via Sync Tool"],
+    fixes: ["Set \"enabled\": true in the endpoint source file", "Push the updated endpoint via Sync Tool"],
   },
   {
     patterns: ["CONDITION_FAILED", /condition.*failed/i],
@@ -1339,6 +1339,97 @@ function tryParseJson(jsonStr: string): { ok: true; data: any } | { ok: false; e
   } catch (e: any) {
     return { ok: false, error: `Invalid JSON: ${e.message}` };
   }
+}
+
+function buildSourceDefinition(kind: string, id: string, definition: Record<string, any>, meta: Record<string, any> = {}): string {
+  const lines = [
+    "sourceVersion: 1",
+    `kind: ${kind}`,
+    `id: ${id}`,
+  ];
+
+  for (const key of ["name", "description", "notes"]) {
+    const value = meta[key];
+    if (value !== undefined && value !== null && String(value) !== "") {
+      lines.push(`${key}: ${yamlScalar(String(value))}`);
+    }
+  }
+
+  lines.push("definition:");
+  appendYaml(lines, definition, 1);
+  lines.push("");
+  return lines.join("\n");
+}
+
+function appendYaml(lines: string[], value: any, indentLevel: number): void {
+  if (Array.isArray(value)) {
+    appendYamlList(lines, value, indentLevel);
+    return;
+  }
+  if (value && typeof value === "object") {
+    appendYamlMap(lines, value, indentLevel);
+    return;
+  }
+  lines.push(`${"  ".repeat(indentLevel)}${yamlScalar(value)}`);
+}
+
+function appendYamlMap(lines: string[], value: Record<string, any>, indentLevel: number): void {
+  const entries = Object.entries(value);
+  if (entries.length === 0) {
+    lines.push(`${"  ".repeat(indentLevel)}{}`);
+    return;
+  }
+  for (const [key, child] of entries) {
+    const prefix = `${"  ".repeat(indentLevel)}${yamlKey(key)}:`;
+    if (Array.isArray(child)) {
+      if (child.length === 0) lines.push(`${prefix} []`);
+      else {
+        lines.push(prefix);
+        appendYamlList(lines, child, indentLevel + 1);
+      }
+    } else if (child && typeof child === "object") {
+      if (Object.keys(child).length === 0) lines.push(`${prefix} {}`);
+      else {
+        lines.push(prefix);
+        appendYamlMap(lines, child, indentLevel + 1);
+      }
+    } else {
+      lines.push(`${prefix} ${yamlScalar(child)}`);
+    }
+  }
+}
+
+function appendYamlList(lines: string[], value: any[], indentLevel: number): void {
+  for (const child of value) {
+    const prefix = `${"  ".repeat(indentLevel)}-`;
+    if (Array.isArray(child)) {
+      if (child.length === 0) lines.push(`${prefix} []`);
+      else {
+        lines.push(prefix);
+        appendYamlList(lines, child, indentLevel + 1);
+      }
+    } else if (child && typeof child === "object") {
+      if (Object.keys(child).length === 0) lines.push(`${prefix} {}`);
+      else {
+        lines.push(prefix);
+        appendYamlMap(lines, child, indentLevel + 1);
+      }
+    } else {
+      lines.push(`${prefix} ${yamlScalar(child)}`);
+    }
+  }
+}
+
+function yamlKey(value: string): string {
+  return /^[A-Za-z0-9_.-]+$/.test(value) ? value : JSON.stringify(value);
+}
+
+function yamlScalar(value: any): string {
+  if (value === null || value === undefined) return "null";
+  if (value === true) return "true";
+  if (value === false) return "false";
+  if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  return JSON.stringify(String(value));
 }
 
 function validateTemplates(value: any, path: string, warnings: string[]): void {
@@ -1831,7 +1922,7 @@ function diagnoseError(error: string, context: string): {
     fixes: [
       "Check the s&box console for [NetworkStorage] prefixed lines",
       "Look for the full error response JSON in the console output",
-      "Try the validate_endpoint or validate_collection tools to check your JSON files",
+      "Try the validate_endpoint or validate_collection tools to check your definitions",
       "Check the sbox.cool dashboard for server-side error logs",
     ],
     consoleMessage: `[Network Storage MCP] I couldn't identify this error automatically.\n\nPlease copy the FULL error output from your s&box console, including:\n  - Any lines starting with [NetworkStorage]\n  - The full JSON response if visible\n  - The HTTP status code if shown\n\nPaste the complete output here so I can help diagnose the issue.`,
@@ -1884,9 +1975,9 @@ server.tool(
 
 server.tool(
   "validate_collection",
-  "Validate a collection JSON file for correct syntax and structure",
+  "Validate a collection definition for correct syntax and structure",
   {
-    json: z.string().describe("The collection JSON content to validate"),
+    json: z.string().describe("The collection definition JSON payload to validate"),
   },
   async ({ json }) => {
     const parsed = tryParseJson(json);
@@ -1902,9 +1993,9 @@ server.tool(
 
 server.tool(
   "validate_endpoint",
-  "Validate an endpoint JSON file for correct syntax, step types, template syntax, and constraints",
+  "Validate an endpoint definition for correct syntax, step types, template syntax, and constraints",
   {
-    json: z.string().describe("The endpoint JSON content to validate"),
+    json: z.string().describe("The endpoint definition JSON payload to validate"),
     collections: z.array(z.string()).optional().describe("Known collection names for cross-reference validation"),
     workflows: z.array(z.string()).optional().describe("Known workflow IDs for cross-reference validation"),
   },
@@ -1922,9 +2013,9 @@ server.tool(
 
 server.tool(
   "validate_workflow",
-  "Validate a workflow JSON file for correct syntax and structure",
+  "Validate a workflow definition for correct syntax and structure",
   {
-    json: z.string().describe("The workflow JSON content to validate"),
+    json: z.string().describe("The workflow definition JSON payload to validate"),
   },
   async ({ json }) => {
     const parsed = tryParseJson(json);
@@ -1940,7 +2031,7 @@ server.tool(
 
 server.tool(
   "scaffold_collection",
-  "Generate a collection JSON template with the correct structure and defaults",
+  "Generate a collection YAML source template with the correct structure and defaults",
   {
     name: z.string().describe("Collection name (lowercase alphanumeric + underscores)"),
     collectionType: z.enum(["per-steamid", "global"]).describe("per-steamid for player data, global for shared data"),
@@ -1992,18 +2083,19 @@ server.tool(
     if (constants && constants.length > 0) collection.constants = constants;
     if (tables && tables.length > 0) collection.tables = tables;
 
-    const jsonStr = JSON.stringify(collection, null, 2);
-    const filePath = `Editor/Network Storage/collections/${name}.json`;
+    const { name: _name, description: _description, ...definition } = collection;
+    const source = buildSourceDefinition("collection", name, definition, { description });
+    const filePath = `Editor/Network Storage/collections/${name}.collection.yml`;
 
     return {
-      content: [{ type: "text" as const, text: JSON.stringify({ json: jsonStr, filePath }, null, 2) }],
+      content: [{ type: "text" as const, text: JSON.stringify({ source, filePath }, null, 2) }],
     };
   }
 );
 
 server.tool(
   "scaffold_endpoint",
-  "Generate an endpoint JSON template with correct structure and step defaults",
+  "Generate an endpoint YAML source template with correct structure and step defaults",
   {
     slug: z.string().describe("Endpoint slug (lowercase alphanumeric + hyphens)"),
     name: z.string().optional().describe("Human-readable name"),
@@ -2041,18 +2133,19 @@ server.tool(
       response: { status: 200, body: { ok: true } },
     };
 
-    const jsonStr = JSON.stringify(endpoint, null, 2);
-    const filePath = `Editor/Network Storage/endpoints/${slug}.json`;
+    const { slug: _slug, name: _name, description: _description, ...definition } = endpoint;
+    const source = buildSourceDefinition("endpoint", slug, definition, { name: displayName, description });
+    const filePath = `Editor/Network Storage/endpoints/${slug}.endpoint.yml`;
 
     return {
-      content: [{ type: "text" as const, text: JSON.stringify({ json: jsonStr, filePath }, null, 2) }],
+      content: [{ type: "text" as const, text: JSON.stringify({ source, filePath }, null, 2) }],
     };
   }
 );
 
 server.tool(
   "scaffold_workflow",
-  "Generate a workflow JSON template with correct structure",
+  "Generate a workflow YAML source template with correct structure",
   {
     id: z.string().describe("Workflow ID (lowercase alphanumeric + hyphens)"),
     name: z.string().optional().describe("Human-readable name"),
@@ -2100,18 +2193,19 @@ server.tool(
       ];
     }
 
-    const jsonStr = JSON.stringify(workflow, null, 2);
-    const filePath = `Editor/Network Storage/workflows/${id}.json`;
+    const { id: _id, name: _name, description: _description, ...definition } = workflow;
+    const source = buildSourceDefinition("workflow", id, definition, { name: displayName, description });
+    const filePath = `Editor/Network Storage/workflows/${id}.workflow.yml`;
 
     return {
-      content: [{ type: "text" as const, text: JSON.stringify({ json: jsonStr, filePath }, null, 2) }],
+      content: [{ type: "text" as const, text: JSON.stringify({ source, filePath }, null, 2) }],
     };
   }
 );
 
 server.tool(
   "get_examples",
-  "Get example JSON files for collections, endpoints, and workflows for common game scenarios",
+  "Get example definitions for collections, endpoints, and workflows for common game scenarios",
   {
     type: z.enum(["collection", "endpoint", "workflow", "all"]).optional().default("all")
       .describe("Which type of example to return"),
@@ -2175,7 +2269,7 @@ const DOC_RESOURCES: { name: string; uri: string; file: string; description: str
   { name: "Setup Guide", uri: "docs://setup", file: "setup-guide.md", description: "Installation and credential configuration" },
   { name: "Getting Started", uri: "docs://getting-started", file: "getting-started.md", description: "Complete setup walkthrough" },
   { name: "Runtime Client API", uri: "docs://runtime-client", file: "runtime-client.md", description: "Game code API reference" },
-  { name: "File Reference", uri: "docs://file-reference", file: "file-reference.md", description: "JSON file format specifications" },
+  { name: "File Reference", uri: "docs://file-reference", file: "file-reference.md", description: "YAML source file format specifications" },
   { name: "Error Handling", uri: "docs://error-handling", file: "error-handling.md", description: "Error codes and rejection flow" },
   { name: "Sync Tool", uri: "docs://sync-tool", file: "sync-tool.md", description: "Editor sync tool usage" },
   { name: "Agent Instructions", uri: "docs://agent-instructions", file: "agent-instructions.md", description: "Guidelines for AI coding agents" },

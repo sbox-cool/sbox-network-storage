@@ -10,7 +10,8 @@ namespace Sandbox;
 public static partial class NetworkStorage
 {
 	private const int MinimumEncryptedRequestRandomLength = 6;
-	private const int DefaultEncryptedRequestRandomLength = 16;
+	private const int DefaultEncryptedRequestRandomLength = 32;
+	private static long _encryptedRequestSequence;
 
 	/// <summary>
 	/// Creates a one-use encrypted request id in "{unixSeconds}_{random}" format.
@@ -65,15 +66,12 @@ public static partial class NetworkStorage
 		if ( randomLength < MinimumEncryptedRequestRandomLength )
 			throw new ArgumentOutOfRangeException( nameof( randomLength ), $"Encrypted request ids need at least {MinimumEncryptedRequestRandomLength} random characters." );
 
-		return $"{now.ToUnixTimeSeconds()}_{CreateRandomAlphaNumeric( randomLength )}";
+		_encryptedRequestSequence++;
+		return $"{now.ToUnixTimeSeconds()}_{CreateRandomAlphaNumeric( randomLength )}{_encryptedRequestSequence:x}{now.ToUnixTimeMilliseconds() % 1000:000}";
 	}
 
 	private static string CreateRandomAlphaNumeric( int length )
 	{
-		var value = Guid.NewGuid().ToString( "N" );
-		if ( length <= value.Length )
-			return value[..length];
-
 		var sb = new StringBuilder( length );
 		while ( sb.Length < length )
 			sb.Append( Guid.NewGuid().ToString( "N" ) );

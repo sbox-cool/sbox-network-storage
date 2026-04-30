@@ -19,6 +19,14 @@ public class SettingsWindow : DockWindow
 	private float _savedTimer;
 	private string _generateStatus = "";
 
+	// Logging config state
+	private bool _logRequests;
+	private bool _logResponses;
+	private bool _logTokens;
+	private bool _logProxy;
+	private bool _logErrors;
+	private bool _logConfig;
+
 	private List<ButtonRect> _buttons = new();
 	private Vector2 _mousePos;
 	private float _scrollY;
@@ -44,13 +52,34 @@ public class SettingsWindow : DockWindow
 	public SettingsWindow()
 	{
 		Title = "Network Storage Settings";
-		Size = new Vector2( 520, 600 );
+		Size = new Vector2( 520, 700 );
 		MinimumSize = new Vector2( 400, 400 );
 
 		SyncToolConfig.Load();
 		_proxyEnabled = SyncToolConfig.ProxyEnabled;
 		_sourceExportMode = SyncToolConfig.SourceExport;
 		RebuildMappingWidgets();
+		LoadLogConfig();
+	}
+
+	private void LoadLogConfig()
+	{
+		_logRequests = NetworkStorageLogConfig.LogRequests;
+		_logResponses = NetworkStorageLogConfig.LogResponses;
+		_logTokens = NetworkStorageLogConfig.LogTokens;
+		_logProxy = NetworkStorageLogConfig.LogProxy;
+		_logErrors = NetworkStorageLogConfig.LogErrors;
+		_logConfig = NetworkStorageLogConfig.LogConfig;
+	}
+
+	private void ApplyLogConfig()
+	{
+		NetworkStorageLogConfig.LogRequests = _logRequests;
+		NetworkStorageLogConfig.LogResponses = _logResponses;
+		NetworkStorageLogConfig.LogTokens = _logTokens;
+		NetworkStorageLogConfig.LogProxy = _logProxy;
+		NetworkStorageLogConfig.LogErrors = _logErrors;
+		NetworkStorageLogConfig.LogConfig = _logConfig;
 	}
 
 	[Menu( "Editor", "Network Storage/Settings" )]
@@ -100,9 +129,9 @@ public class SettingsWindow : DockWindow
 		Paint.SetDefaultFont( size: 9 );
 		Paint.SetPen( Color.White.WithAlpha( 0.45f ) );
 		DrawWrappedText( ref y, pad, w, lineH + 2,
-			"Map C# data files or directories to collection JSON. " +
+			"Map C# data files or directories to collection YAML source. " +
 			"The Sync Tool's Generate button parses C# records and " +
-			"writes the collection JSON automatically." );
+			"writes the collection source automatically." );
 		y += 12;
 
 		// ── Mapping rows with LineEdit widgets ──
@@ -215,23 +244,11 @@ public class SettingsWindow : DockWindow
 		Paint.SetDefaultFont( size: 9 );
 		Paint.SetPen( Color.White.WithAlpha( 0.45f ) );
 		DrawWrappedText( ref y, pad, w, lineH + 2,
-			"Controls what the Sync Tool writes when pulling source-authored resources from the dashboard. " +
-			"YAML source is the default. Legacy JSON export is deprecated and should only be used for compatibility checks." );
+			"The Sync Tool writes YAML source only. Legacy JSON export and local JSON fallback are no longer supported." );
 		y += 8;
 
-		var modeGap = 8f;
-		var modeBtnW = (w - modeGap * 2) / 3f;
-		var modeBtnH = 26f;
-		DrawSourceExportButton( SyncToolConfig.SourceExportMode.SourceAndJson, "Source",
-			new Rect( pad, y, modeBtnW, modeBtnH ),
-			new Rect( pad, y + _scrollY, modeBtnW, modeBtnH ) );
-		DrawSourceExportButton( SyncToolConfig.SourceExportMode.SourceOnly, "Source Only",
-			new Rect( pad + modeBtnW + modeGap, y, modeBtnW, modeBtnH ),
-			new Rect( pad + modeBtnW + modeGap, y + _scrollY, modeBtnW, modeBtnH ) );
-		DrawSourceExportButton( SyncToolConfig.SourceExportMode.JsonOnly, "JSON Only",
-			new Rect( pad + (modeBtnW + modeGap) * 2, y, modeBtnW, modeBtnH ),
-			new Rect( pad + (modeBtnW + modeGap) * 2, y + _scrollY, modeBtnW, modeBtnH ) );
-		y += modeBtnH + 12;
+		DrawReadonlyStatusRow( ref y, pad, w, "Export Format", "YAML Source Only", true );
+		y += 6;
 
 		DrawSeparator( ref y, w, pad );
 
@@ -403,6 +420,91 @@ public class SettingsWindow : DockWindow
 		}
 
 		y += genBtnH + 20;
+
+		// ── Console Logging ──
+		DrawSeparator( ref y, w, pad );
+
+		Paint.SetDefaultFont( size: 11, weight: 700 );
+		Paint.SetPen( Color.White.WithAlpha( 0.9f ) );
+		Paint.DrawText( new Rect( pad, y, w, 20 ), "Console Logging", TextFlag.LeftCenter );
+		y += 26;
+
+		Paint.SetDefaultFont( size: 9 );
+		Paint.SetPen( Color.White.WithAlpha( 0.45f ) );
+		DrawWrappedText( ref y, pad, w, lineH + 2,
+			"Control which [Network Storage] log messages appear in the console. " +
+			"Changes apply immediately at runtime (not persisted across sessions)." );
+		y += 8;
+
+		// Enable All / Disable All buttons
+		var logBtnW = 90f;
+		var logBtnH = 24f;
+		var logBtnGap = 8f;
+
+		var enableAllRect = new Rect( pad, y, logBtnW, logBtnH );
+		var enableAllScreenRect = new Rect( pad, y + _scrollY, logBtnW, logBtnH );
+		var enableAllHovered = enableAllScreenRect.IsInside( _mousePos );
+
+		Paint.SetBrush( Color.Green.WithAlpha( enableAllHovered ? 0.15f : 0.06f ) );
+		Paint.SetPen( Color.Green.WithAlpha( enableAllHovered ? 0.5f : 0.2f ) );
+		Paint.DrawRect( enableAllRect, 4 );
+		Paint.SetDefaultFont( size: 9, weight: 600 );
+		Paint.SetPen( Color.Green.WithAlpha( enableAllHovered ? 0.9f : 0.6f ) );
+		Paint.DrawText( enableAllRect, "Enable All", TextFlag.Center );
+
+		_buttons.Add( new ButtonRect
+		{
+			Rect = enableAllScreenRect,
+			Id = "log_enable_all",
+			OnClick = () =>
+			{
+				_logRequests = _logResponses = _logTokens = _logProxy = _logErrors = _logConfig = true;
+				ApplyLogConfig();
+				Update();
+			}
+		} );
+
+		var disableAllRect = new Rect( pad + logBtnW + logBtnGap, y, logBtnW, logBtnH );
+		var disableAllScreenRect = new Rect( pad + logBtnW + logBtnGap, y + _scrollY, logBtnW, logBtnH );
+		var disableAllHovered = disableAllScreenRect.IsInside( _mousePos );
+
+		Paint.SetBrush( Color.Red.WithAlpha( disableAllHovered ? 0.15f : 0.06f ) );
+		Paint.SetPen( Color.Red.WithAlpha( disableAllHovered ? 0.5f : 0.2f ) );
+		Paint.DrawRect( disableAllRect, 4 );
+		Paint.SetDefaultFont( size: 9, weight: 600 );
+		Paint.SetPen( Color.Red.WithAlpha( disableAllHovered ? 0.9f : 0.6f ) );
+		Paint.DrawText( disableAllRect, "Disable All", TextFlag.Center );
+
+		_buttons.Add( new ButtonRect
+		{
+			Rect = disableAllScreenRect,
+			Id = "log_disable_all",
+			OnClick = () =>
+			{
+				_logRequests = _logResponses = _logTokens = _logProxy = _logErrors = _logConfig = false;
+				ApplyLogConfig();
+				Update();
+			}
+		} );
+
+		y += logBtnH + 12;
+
+		// Log category checkboxes (2 columns)
+		var colW = (w - 10) / 2f;
+		var checkSize = 18f;
+		var checkRowH = 26f;
+
+		DrawLogCheckbox( ref y, pad, colW, checkSize, checkRowH, "Requests", ref _logRequests );
+		DrawLogCheckbox( ref y, pad + colW + 10, colW, checkSize, checkRowH, "Responses", ref _logResponses, sameRow: true );
+		y += checkRowH;
+
+		DrawLogCheckbox( ref y, pad, colW, checkSize, checkRowH, "Tokens", ref _logTokens );
+		DrawLogCheckbox( ref y, pad + colW + 10, colW, checkSize, checkRowH, "Proxy", ref _logProxy, sameRow: true );
+		y += checkRowH;
+
+		DrawLogCheckbox( ref y, pad, colW, checkSize, checkRowH, "Errors", ref _logErrors );
+		DrawLogCheckbox( ref y, pad + colW + 10, colW, checkSize, checkRowH, "Config", ref _logConfig, sameRow: true );
+		y += checkRowH + 8;
 
 		// Bottom padding so content isn't flush against the edge
 		y += 100;
@@ -640,6 +742,55 @@ public class SettingsWindow : DockWindow
 			if ( ( _mappingRows[i].DescriptionInput?.Text ?? "" ) != ( current[i].Description ?? "" ) ) return true;
 		}
 		return false;
+	}
+
+	private void DrawLogCheckbox( ref float y, float x, float colW, float checkSize, float rowH, string label, ref bool value, bool sameRow = false )
+	{
+		var checkRect = new Rect( x, y, checkSize, checkSize );
+		var checkScreenRect = new Rect( x, y + _scrollY, checkSize, checkSize );
+		var checkHovered = checkScreenRect.IsInside( _mousePos );
+
+		var checkColor = value ? Color.Cyan : Color.White;
+		Paint.SetBrush( checkColor.WithAlpha( value ? 0.15f : checkHovered ? 0.08f : 0.04f ) );
+		Paint.SetPen( checkColor.WithAlpha( value ? 0.5f : checkHovered ? 0.25f : 0.15f ) );
+		Paint.DrawRect( checkRect, 3 );
+
+		if ( value )
+		{
+			Paint.SetDefaultFont( size: 12, weight: 700 );
+			Paint.SetPen( Color.Cyan );
+			Paint.DrawText( checkRect, "✓", TextFlag.Center );
+		}
+
+		Paint.SetDefaultFont( size: 9, weight: 500 );
+		Paint.SetPen( Color.White.WithAlpha( 0.8f ) );
+		Paint.DrawText( new Rect( x + checkSize + 8, y, colW - checkSize - 8, checkSize ), label, TextFlag.LeftCenter );
+
+		var fieldName = label;
+		_buttons.Add( new ButtonRect
+		{
+			Rect = checkScreenRect,
+			Id = $"log_{label.ToLower()}",
+			OnClick = () =>
+			{
+				ToggleLogField( fieldName );
+				ApplyLogConfig();
+				Update();
+			}
+		} );
+	}
+
+	private void ToggleLogField( string fieldName )
+	{
+		switch ( fieldName )
+		{
+			case "Requests": _logRequests = !_logRequests; break;
+			case "Responses": _logResponses = !_logResponses; break;
+			case "Tokens": _logTokens = !_logTokens; break;
+			case "Proxy": _logProxy = !_logProxy; break;
+			case "Errors": _logErrors = !_logErrors; break;
+			case "Config": _logConfig = !_logConfig; break;
+		}
 	}
 
 	// ──────────────────────────────────────────────────────

@@ -4,7 +4,7 @@ using System.Linq;
 using System.Text.Json;
 
 /// <summary>
-/// Transforms between local JSON file format and the server's expected format.
+/// Transforms between local YAML source canonical data and the server's expected format.
 /// Handles endpoints and collections (with constants/tables for game config).
 /// </summary>
 public static class SyncToolTransforms
@@ -157,8 +157,6 @@ public static class SyncToolTransforms
 			["slug"] = slugStr,
 			["name"] = source.TryGetProperty( "name", out var name ) ? name.GetString() : slugStr.Replace( "-", " " ),
 			["method"] = source.TryGetProperty( "method", out var method ) ? method.GetString() : "POST",
-			["description"] = source.TryGetProperty( "description", out var desc ) ? desc.GetString() : "",
-			["notes"] = source.TryGetProperty( "notes", out var notes ) ? notes.GetString() : "",
 			["enabled"] = !source.TryGetProperty( "enabled", out var enabled ) || enabled.ValueKind != JsonValueKind.False,
 			["input"] = source.TryGetProperty( "input", out var input ) ? (object)input : new Dictionary<string, object>(),
 			["steps"] = source.TryGetProperty( "steps", out var steps ) ? (object)steps : new List<object>(),
@@ -166,6 +164,11 @@ public static class SyncToolTransforms
 				? (object)response
 				: new Dictionary<string, object> { ["status"] = 200, ["body"] = new Dictionary<string, object> { ["ok"] = true } }
 		};
+
+		if ( source.TryGetProperty( "description", out var desc ) && !string.IsNullOrEmpty( desc.GetString() ) )
+			local["description"] = desc.GetString();
+		if ( source.TryGetProperty( "notes", out var notes ) && !string.IsNullOrEmpty( notes.GetString() ) )
+			local["notes"] = notes.GetString();
 
 		if ( SyncToolConfig.IsEndpointDeprecated( ep ) || SyncToolConfig.IsEndpointDeprecated( source ) )
 			local["deprecated"] = true;
@@ -189,7 +192,6 @@ public static class SyncToolTransforms
 		var local = new Dictionary<string, object>
 		{
 			["name"] = nameStr,
-			["description"] = source.TryGetProperty( "description", out var desc ) ? desc.GetString() : "",
 			["collectionType"] = source.TryGetProperty( "collectionType", out var ct ) ? ct.GetString() : "per-steamid",
 			["accessMode"] = source.TryGetProperty( "accessMode", out var am ) ? am.GetString() : "public",
 			["maxRecords"] = source.TryGetProperty( "maxRecords", out var mr ) ? mr.GetInt32() : 1,
@@ -198,6 +200,11 @@ public static class SyncToolTransforms
 			["webhookOnRateLimit"] = source.TryGetProperty( "webhookOnRateLimit", out var wrl ) && wrl.ValueKind == JsonValueKind.True,
 			["rateLimitAction"] = source.TryGetProperty( "rateLimitAction", out var rla ) ? rla.GetString() : "reject",
 		};
+
+		if ( source.TryGetProperty( "description", out var desc ) && !string.IsNullOrEmpty( desc.GetString() ) )
+			local["description"] = desc.GetString();
+		if ( source.TryGetProperty( "notes", out var notes ) && !string.IsNullOrEmpty( notes.GetString() ) )
+			local["notes"] = notes.GetString();
 
 		if ( source.TryGetProperty( "rateLimits", out var rl ) )
 			local["rateLimits"] = rl;

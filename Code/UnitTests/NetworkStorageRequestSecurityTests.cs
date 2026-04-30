@@ -25,4 +25,13 @@ public class NetworkStorageRequestSecurityTests
 		Assert.IsFalse( NetworkStorage.TryParseEncryptedRequestId( "12345_abcd!", out _, out _ ) );
 		Assert.IsFalse( NetworkStorage.TryParseEncryptedRequestId( "12345_abcdef_extra", out _, out _ ) );
 	}
+
+	[TestMethod]
+	public void IsSecurityConfigMismatchCode_DetectsServerSecurityMismatch()
+	{
+		Assert.IsTrue( NetworkStorage.IsSecurityConfigMismatchCode( "SECURITY_ENCRYPTION_REQUIRED" ) );
+		Assert.IsTrue( NetworkStorage.IsSecurityConfigMismatchCode( "security_session_disabled" ) );
+		Assert.IsFalse( NetworkStorage.IsSecurityConfigMismatchCode( "SBOX_AUTH_FAILED" ) );
+		Assert.IsFalse( NetworkStorage.IsSecurityConfigMismatchCode( "" ) );
+	}
 }

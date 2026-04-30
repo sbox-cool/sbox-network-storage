@@ -16,7 +16,7 @@ using Editor;
 /// After push or pull, re-checks and clears stale state.
 /// </summary>
 [Dock( "Editor", "Network Storage Sync", "cloud" )]
-public class SyncToolWindow : DockWindow
+public partial class SyncToolWindow : DockWindow
 {
 	private static readonly JsonSerializerOptions _readOptions = new()
 	{
@@ -176,15 +176,10 @@ public class SyncToolWindow : DockWindow
 
 	private static string[] FindResourceFiles( string directory, string kind )
 	{
-		var sourceFiles = Directory.GetFiles( directory, $"*.{kind}.yml" )
+		return Directory.GetFiles( directory, $"*.{kind}.yml" )
 			.Concat( Directory.GetFiles( directory, $"*.{kind}.yaml" ) )
 			.OrderBy( f => f, StringComparer.OrdinalIgnoreCase )
 			.ToArray();
-		return sourceFiles.Length > 0
-			? sourceFiles
-			: Directory.GetFiles( directory, "*.json" )
-				.OrderBy( f => f, StringComparer.OrdinalIgnoreCase )
-				.ToArray();
 	}
 
 	private static string ResourceIdFromFile( string filePath, string kind )
@@ -872,10 +867,7 @@ public class SyncToolWindow : DockWindow
 
 		foreach ( var mapping in SyncToolConfig.SyncMappings )
 		{
-			var csPath = SyncToolConfig.GetMappingCsPath( mapping );
-			var colPath = SyncToolConfig.GetMappingCollectionPath( mapping );
-			var csExists = File.Exists( csPath ) || Directory.Exists( csPath );
-			var colExists = File.Exists( colPath );
+			var status = GetDataSourceStatus( mapping );
 
 			var rowH = 28f;
 			var btnW = 68f;
@@ -891,22 +883,19 @@ public class SyncToolWindow : DockWindow
 			}
 
 			// Status icon
-			var statusColor = csExists && colExists ? Color.Green.WithAlpha( 0.6f )
-				: csExists ? Color.Yellow.WithAlpha( 0.7f )
-				: Color.Red.WithAlpha( 0.7f );
 			Paint.SetDefaultFont( size: 9 );
-			Paint.SetPen( statusColor );
-			Paint.DrawText( new Rect( pad + 2, y, 18, rowH ),
-				csExists && colExists ? "✓" : csExists ? "●" : "✗", TextFlag.Center );
+			Paint.SetPen( status.Color );
+			Paint.DrawText( new Rect( pad + 2, y, 18, rowH ), status.Icon, TextFlag.Center );
 
 			// Mapping label
 			Paint.SetDefaultFont( size: 9 );
 			Paint.SetPen( Color.White.WithAlpha( 0.75f ) );
+			var labelSuffix = status.IsStale ? " (stale)" : "";
 			Paint.DrawText( new Rect( pad + 22, y, w - btnW - 30, rowH ),
-				$"{mapping.CsFile} → {mapping.Collection}.collection.yml", TextFlag.LeftCenter );
+				$"{mapping.CsFile} → {mapping.Collection}.collection.yml{labelSuffix}", TextFlag.LeftCenter );
 
 			// Generate button
-			if ( csExists )
+			if ( status.SourceExists )
 			{
 				var btnY = y + ( rowH - btnH ) / 2;
 				var btnRect = new Rect( pad + w - btnW - 4, btnY, btnW, btnH );
@@ -918,17 +907,20 @@ public class SyncToolWindow : DockWindow
 						"Generate Collection Data",
 						$"This will overwrite {capturedCollection}.collection.yml with data parsed from your C# source files.",
 						() => _ = RunGenerate( capturedCollection ),
-						"Local JSON will be regenerated from C# definitions" ) );
+						"Local YAML source will be regenerated from C# definitions" ) );
 			}
 
 			y += rowH + 1;
 
 			// Description
-			if ( !string.IsNullOrEmpty( mapping.Description ) )
+			var detailText = string.IsNullOrEmpty( mapping.Description )
+				? status.Detail
+				: $"{status.Label}: {status.Detail} - {mapping.Description}";
+			if ( !string.IsNullOrEmpty( detailText ) )
 			{
 				Paint.SetDefaultFont( size: 8 );
-				Paint.SetPen( Color.White.WithAlpha( 0.35f ) );
-				Paint.DrawText( new Rect( pad + 22, y, w - 30, 14 ), mapping.Description, TextFlag.LeftCenter );
+				Paint.SetPen( status.IsStale ? Color.Yellow.WithAlpha( 0.75f ) : Color.White.WithAlpha( 0.35f ) );
+				Paint.DrawText( new Rect( pad + 22, y, w - 30, 14 ), detailText, TextFlag.LeftCenter );
 				y += 16;
 			}
 		}
@@ -1239,13 +1231,6 @@ public class SyncToolWindow : DockWindow
 	private bool TryReadLocalResourceFile( string filePath, string kind, out JsonElement resource )
 	{
 		resource = default;
-		var extension = Path.GetExtension( filePath );
-		if ( extension.Equals( ".json", StringComparison.OrdinalIgnoreCase ) )
-		{
-			resource = JsonSerializer.Deserialize<JsonElement>( File.ReadAllText( filePath ), _readOptions );
-			return resource.ValueKind == JsonValueKind.Object;
-		}
-
 		return SyncToolConfig.TryLoadSourceCanonicalResource( kind, filePath, out resource );
 	}
 
@@ -1642,7 +1627,7 @@ public class SyncToolWindow : DockWindow
 						continue;
 					sorted[prop.Name] = SortJsonElement( prop.Value );
 				}
-				return sorted;
+				return sorted.Count == 0 ? null : sorted;
 			case JsonValueKind.Array:
 				var arr = new List<object>();
 				foreach ( var item in el.EnumerateArray() )
@@ -1744,7 +1729,7 @@ public class SyncToolWindow : DockWindow
 		if ( id.StartsWith( "ep_" ) ) return $"{id[3..]}.endpoint.yml (endpoint)";
 		if ( id.StartsWith( "col_" ) ) return $"{id[4..]}.collection.yml (collection)";
 		if ( id.StartsWith( "wf_" ) ) return $"{id[3..]}.workflow.yml (workflow)";
-		if ( id.StartsWith( "test_" ) ) return $"{id[5..]}.json (test)";
+		if ( id.StartsWith( "test_" ) ) return $"{id[5..]}.test.yml (test)";
 		return id;
 	}
 
@@ -2564,7 +2549,7 @@ public class SyncToolWindow : DockWindow
 	// ──────────────────────────────────────────────────────
 
 	/// <summary>
-	/// Compare two endpoint JSON files key-by-key.
+	/// Compare two endpoint resources key-by-key.
 	/// Categorizes changes as cosmetic (name, description, notes) vs structural (steps, input, response, method).
 	/// </summary>
 	private string DiffEndpoint( string localJson, string remoteJson, string slug )
@@ -2648,7 +2633,7 @@ public class SyncToolWindow : DockWindow
 	}
 
 	/// <summary>
-	/// Compare two collection JSON files field-by-field.
+	/// Compare two collection resources field-by-field.
 	/// Distinguishes schema (structural) from metadata (non-structural) changes.
 	/// </summary>
 	private string DiffCollectionSchema( string localJson, string remoteJson )
@@ -2899,7 +2884,9 @@ public class SyncToolWindow : DockWindow
 	{
 		try
 		{
-			var json = PrettyJson( remoteJson );
+			var json = TryGetCurrentLocalJson( id, out var localJson )
+				? MergeRemoteOnlyFields( localJson, remoteJson )
+				: PrettyJson( remoteJson );
 
 			if ( id.StartsWith( "ep_" ) )
 			{
@@ -2922,9 +2909,8 @@ public class SyncToolWindow : DockWindow
 			else if ( id.StartsWith( "test_" ) )
 			{
 				var testId = id[5..];
-				var dir = SyncToolConfig.Abs( SyncToolConfig.TestsPath );
-				if ( !Directory.Exists( dir ) ) Directory.CreateDirectory( dir );
-				File.WriteAllText( Path.Combine( dir, $"{testId}.json" ), json );
+				var data = JsonSerializer.Deserialize<Dictionary<string, object>>( json, _readOptions );
+				SyncToolPullWriter.WriteSource( "test", testId, data );
 			}
 			else
 			{
@@ -2940,6 +2926,98 @@ public class SyncToolWindow : DockWindow
 			error = ex.Message;
 			return false;
 		}
+	}
+
+	private bool TryGetCurrentLocalJson( string id, out string localJson )
+	{
+		localJson = null;
+		JsonElement local;
+
+		if ( id.StartsWith( "ep_" ) )
+		{
+			var slug = id[3..];
+			var localFile = _endpointFiles.FirstOrDefault( f => ResourceIdFromFile( f, "endpoint" ) == slug );
+			if ( localFile == null || !TryReadLocalResourceFile( localFile, "endpoint", out local ) )
+				return false;
+
+			localJson = JsonSerializer.Serialize( SyncToolTransforms.ServerEndpointToLocal( local ), new JsonSerializerOptions { WriteIndented = true } );
+			return true;
+		}
+
+		if ( id.StartsWith( "col_" ) )
+		{
+			var colName = id[4..];
+			var localFile = _collectionFiles.FirstOrDefault( f => ResourceIdFromFile( f, "collection" ) == colName );
+			if ( localFile == null || !TryReadLocalResourceFile( localFile, "collection", out local ) )
+				return false;
+
+			var data = JsonSerializer.Deserialize<Dictionary<string, object>>( local.GetRawText(), _readOptions );
+			localJson = JsonSerializer.Serialize( SyncToolTransforms.StripServerManagedFields( data ), new JsonSerializerOptions { WriteIndented = true } );
+			return true;
+		}
+
+		if ( id.StartsWith( "wf_" ) )
+		{
+			var wfId = id[3..];
+			var localFile = SyncToolConfig.FindWorkflowFileById( wfId );
+			if ( localFile == null || !TryReadLocalResourceFile( localFile, "workflow", out local ) )
+				return false;
+
+			localJson = JsonSerializer.Serialize( SyncToolTransforms.ServerWorkflowToLocal( local ), new JsonSerializerOptions { WriteIndented = true } );
+			return true;
+		}
+
+		return false;
+	}
+
+	private static string MergeRemoteOnlyFields( string localJson, string remoteJson )
+	{
+		var local = JsonSerializer.Deserialize<JsonElement>( localJson );
+		var remote = JsonSerializer.Deserialize<JsonElement>( remoteJson );
+		var merged = MergeRemoteOnlyFields( local, remote );
+		return JsonSerializer.Serialize( merged, new JsonSerializerOptions { WriteIndented = true } );
+	}
+
+	private static object MergeRemoteOnlyFields( JsonElement local, JsonElement remote )
+	{
+		if ( local.ValueKind == JsonValueKind.Object && remote.ValueKind == JsonValueKind.Object )
+		{
+			var result = new Dictionary<string, object>( StringComparer.OrdinalIgnoreCase );
+			var remoteProps = remote.EnumerateObject().ToDictionary( prop => prop.Name, prop => prop.Value, StringComparer.OrdinalIgnoreCase );
+
+			foreach ( var localProp in local.EnumerateObject() )
+			{
+				result[localProp.Name] = remoteProps.TryGetValue( localProp.Name, out var remoteValue )
+					? MergeRemoteOnlyFields( localProp.Value, remoteValue )
+					: JsonElementToPlainObject( localProp.Value );
+			}
+
+			foreach ( var remoteProp in remote.EnumerateObject() )
+			{
+				if ( !result.ContainsKey( remoteProp.Name ) )
+					result[remoteProp.Name] = JsonElementToPlainObject( remoteProp.Value );
+			}
+
+			return result;
+		}
+
+		return JsonElementToPlainObject( local );
+	}
+
+	private static object JsonElementToPlainObject( JsonElement value )
+	{
+		return value.ValueKind switch
+		{
+			JsonValueKind.Object => value.EnumerateObject()
+				.ToDictionary( prop => prop.Name, prop => JsonElementToPlainObject( prop.Value ), StringComparer.OrdinalIgnoreCase ),
+			JsonValueKind.Array => value.EnumerateArray().Select( JsonElementToPlainObject ).ToList(),
+			JsonValueKind.String => value.GetString(),
+			JsonValueKind.Number when value.TryGetInt64( out var integer ) => integer,
+			JsonValueKind.Number when value.TryGetDouble( out var number ) => number,
+			JsonValueKind.True => true,
+			JsonValueKind.False => false,
+			_ => null
+		};
 	}
 
 	private void TryRunCodeGeneration( string context )

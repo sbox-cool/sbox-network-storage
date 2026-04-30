@@ -18,7 +18,7 @@ from source_compiler import (  # noqa: E402
 
 
 class SourceCompilerTests(unittest.TestCase):
-    def test_legacy_json_compiles_to_canonical_plan(self):
+    def test_legacy_json_is_rejected(self):
         endpoint = {
             "slug": "mine-ore",
             "method": "POST",
@@ -30,12 +30,12 @@ class SourceCompilerTests(unittest.TestCase):
 
         compiled = compile_legacy_json(endpoint, "Editor/Network Storage/endpoints/mine-ore.json")
 
-        self.assertTrue(compiled["ok"])
-        self.assertEqual("legacy-json", compiled["authoringMode"])
-        self.assertEqual(["read", "write"], [node["type"] for node in compiled["executionPlan"]["nodes"]])
+        self.assertFalse(compiled["ok"])
+        self.assertEqual("unsupported-json", compiled["authoringMode"])
+        self.assertTrue(any(d["code"] == "JSON_UNSUPPORTED" for d in compiled["diagnostics"]))
         exported, diagnostics = export_legacy_json(compiled)
-        self.assertEqual([], diagnostics)
-        self.assertEqual(endpoint, exported)
+        self.assertIsNone(exported)
+        self.assertEqual("JSON_EXPORT_UNSUPPORTED", diagnostics[0]["code"])
 
     def test_source_yaml_route_walk_uses_native_nodes(self):
         path = ROOT / "Examples" / "SourceAuthoring" / "factory-route-walk.workflow.yml"
@@ -50,7 +50,7 @@ class SourceCompilerTests(unittest.TestCase):
 
         exported, diagnostics = export_legacy_json(compiled)
         self.assertIsNone(exported)
-        self.assertEqual("CANNOT_FLATTEN_NATIVE_SOURCE", diagnostics[0]["code"])
+        self.assertEqual("JSON_EXPORT_UNSUPPORTED", diagnostics[0]["code"])
 
     def test_canonical_control_flow_nodes_and_budget_failure(self):
         source = """
