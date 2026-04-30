@@ -1,0 +1,34 @@
+C:\Program Files (x86)\Steam\steamapps\common\sbox\.vs\output\Base Library.staticwebassets.endpoints.json
+C:\Program Files (x86)\Steam\steamapps\common\sbox\.vs\output\Properties\launchSettings.json
+C:\Program Files (x86)\Steam\steamapps\common\sbox\.vs\output\network-storage.staticwebassets.endpoints.json
+C:\Program Files (x86)\Steam\steamapps\common\sbox\.vs\output\network-storage.xml
+C:\Program Files (x86)\Steam\steamapps\common\sbox\.vs\output\network-storage.deps.json
+C:\Program Files (x86)\Steam\steamapps\common\sbox\.vs\output\network-storage.dll
+C:\Program Files (x86)\Steam\steamapps\common\sbox\.vs\output\network-storage.pdb
+C:\users\user\documents\s&box projects\hooked_inc\Libraries\sboxcool.network-storage\Code\obj\Debug\network-storage.csproj.AssemblyReference.cache
+C:\users\user\documents\s&box projects\hooked_inc\Libraries\sboxcool.network-storage\Code\obj\Debug\rpswa.dswa.cache.json
+C:\users\user\documents\s&box projects\hooked_inc\Libraries\sboxcool.network-storage\Code\obj\Debug\network-storage.GeneratedMSBuildEditorConfig.editorconfig
+C:\users\user\documents\s&box projects\hooked_inc\Libraries\sboxcool.network-storage\Code\obj\Debug\network-storage.AssemblyInfoInputs.cache
+C:\users\user\documents\s&box projects\hooked_inc\Libraries\sboxcool.network-storage\Code\obj\Debug\network-storage.AssemblyInfo.cs
+C:\users\user\documents\s&box projects\hooked_inc\Libraries\sboxcool.network-storage\Code\obj\Debug\network-storage.csproj.CoreCompileInputs.cache
+C:\users\user\documents\s&box projects\hooked_inc\Libraries\sboxcool.network-storage\Code\obj\Debug\network-storage.sourcelink.json
+C:\users\user\documents\s&box projects\hooked_inc\Libraries\sboxcool.network-storage\Code\obj\Debug\rjimswa.dswa.cache.json
+C:\users\user\documents\s&box projects\hooked_inc\Libraries\sboxcool.network-storage\Code\obj\Debug\rjsmrazor.dswa.cache.json
+C:\users\user\documents\s&box projects\hooked_inc\Libraries\sboxcool.network-storage\Code\obj\Debug\rjsmcshtml.dswa.cache.json
+C:\users\user\documents\s&box projects\hooked_inc\Libraries\sboxcool.network-storage\Code\obj\Debug\scopedcss\bundle\network-storage.styles.css
+C:\users\user\documents\s&box projects\hooked_inc\Libraries\sboxcool.network-storage\Code\obj\Debug\staticwebassets.build.json
+C:\users\user\documents\s&box projects\hooked_inc\Libraries\sboxcool.network-storage\Code\obj\Debug\staticwebassets.build.json.cache
+C:\users\user\documents\s&box projects\hooked_inc\Libraries\sboxcool.network-storage\Code\obj\Debug\staticwebassets.development.json
+C:\users\user\documents\s&box projects\hooked_inc\Libraries\sboxcool.network-storage\Code\obj\Debug\staticwebassets.build.endpoints.json
+C:\users\user\documents\s&box projects\hooked_inc\Libraries\sboxcool.network-storage\Code\obj\Debug\swae.build.ex.cache
+C:\users\user\documents\s&box projects\hooked_inc\Libraries\sboxcool.network-storage\Code\obj\Debug\staticwebassets\msbuild.network-storage.Microsoft.AspNetCore.StaticWebAssets.props
+C:\users\user\documents\s&box projects\hooked_inc\Libraries\sboxcool.network-storage\Code\obj\Debug\staticwebassets\msbuild.network-storage.Microsoft.AspNetCore.StaticWebAssetEndpoints.props
+C:\users\user\documents\s&box projects\hooked_inc\Libraries\sboxcool.network-storage\Code\obj\Debug\staticwebassets\msbuild.build.network-storage.props
+C:\users\user\documents\s&box projects\hooked_inc\Libraries\sboxcool.network-storage\Code\obj\Debug\staticwebassets\msbuild.buildMultiTargeting.network-storage.props
+C:\users\user\documents\s&box projects\hooked_inc\Libraries\sboxcool.network-storage\Code\obj\Debug\staticwebassets\msbuild.buildTransitive.network-storage.props
+C:\users\user\documents\s&box projects\hooked_inc\Libraries\sboxcool.network-storage\Code\obj\Debug\staticwebassets.pack.json
+C:\users\user\documents\s&box projects\hooked_inc\Libraries\sboxcool.network-storage\Code\obj\Debug\network-.C052693E.Up2Date
+C:\users\user\documents\s&box projects\hooked_inc\Libraries\sboxcool.network-storage\Code\obj\Debug\network-storage.dll
+C:\users\user\documents\s&box projects\hooked_inc\Libraries\sboxcool.network-storage\Code\obj\Debug\refint\network-storage.dll
+C:\users\user\documents\s&box projects\hooked_inc\Libraries\sboxcool.network-storage\Code\obj\Debug\network-storage.pdb
+C:\users\user\documents\s&box projects\hooked_inc\Libraries\sboxcool.network-storage\Code\obj\Debug\ref\network-storage.dll

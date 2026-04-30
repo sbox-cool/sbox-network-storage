@@ -1,0 +1,9 @@
+{
+  "profiles": {
+    "Editor": {
+      "commandName": "Executable",
+      "executablePath": "../../../../../../../../../Program Files (x86)/Steam/steamapps/common/sbox/sbox-dev.exe",
+      "commandLineArgs": "-project \u0022c:\\users\\user\\documents\\s\u0026box projects\\hooked_inc\\Libraries\\sboxcool.network-storage\\network-storage.sbproj\u0022"
+    }
+  }
+}

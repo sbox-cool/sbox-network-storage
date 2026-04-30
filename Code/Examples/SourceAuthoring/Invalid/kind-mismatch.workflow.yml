@@ -1,6 +1,0 @@
-sourceVersion: 1
-kind: endpoint
-id: kind-mismatch
-definition:
-  method: POST
-  steps: []

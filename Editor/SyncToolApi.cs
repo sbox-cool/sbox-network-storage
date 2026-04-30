@@ -151,6 +151,10 @@ public static class SyncToolApi
 					{
 						Log.Warning( $"[SyncTool] Permission denied: {LastErrorMessage}" );
 					}
+					else if ( LastErrorCode == "COLLECTION_DELETE_WEBSITE_ONLY" )
+					{
+						Log.Warning( "[SyncTool] Collection definitions can only be deleted from the website dashboard after verification. Row/document deletion through the runtime API is still supported." );
+					}
 				}
 				catch
 				{

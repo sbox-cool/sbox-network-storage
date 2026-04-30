@@ -1,5 +1,0 @@
-kind: endpoint
-id: missing-source-version
-definition:
-  method: POST
-  steps: []

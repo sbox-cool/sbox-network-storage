@@ -488,17 +488,19 @@ public class SetupWindow : DockWindow
 			var labels = new Dictionary<string, string>
 			{
 				{ "endpoints", "Endpoints" },
+				{ "queries", "Queries" },
 				{ "collections", "Collections" },
 				{ "workflows", "Workflows" },
 				{ "game_values", "Game Values" },
-				{ "rate_limits", "Rate Limits" }
+				{ "rate_limits", "Rate Limits" },
+				{ "settings", "Settings" }
 			};
 			foreach ( var kv in labels )
 			{
 				if ( perms.TryGetProperty( kv.Key, out var val ) )
 				{
 					var access = val.GetString() ?? "rw";
-					var label = access == "rw" ? "RW" : access == "r" ? "R" : "-";
+					var label = FormatPermissionLabel( access );
 					parts.Add( $"{kv.Value}: {label}" );
 				}
 			}
@@ -525,6 +527,12 @@ public class SetupWindow : DockWindow
 			_statusColor = "red";
 		}
 		Update();
+	}
+
+	private static string FormatPermissionLabel( string access )
+	{
+		if ( string.IsNullOrWhiteSpace( access ) || access == "none" ) return "-";
+		return access.ToUpperInvariant();
 	}
 
 	private static string GetCheckMessage( JsonElement checks, string key )

@@ -488,8 +488,34 @@ def push_sources(config, dry_run=False):
     if dry_run:
         return
 
-    result = api_request(config, "PUT", "sources", {"resources": sources})
-    print(f"  Pushed sources: {json.dumps(result, indent=2)[:200]}")
+    # The management API is kind-scoped. Keep source sync using the same routes as
+    # the editor UI so it works on deployed backends that intentionally do not have
+    # a generic /sources endpoint.
+    route_by_kind = {
+        "collection": "collections",
+        "endpoint": "endpoints",
+        "workflow": "workflows",
+        "test": "tests",
+    }
+    grouped = {}
+    for source in sources:
+        route = route_by_kind.get(source.get("kind"))
+        if not route:
+            print(f"  Skipping unsupported source kind: {source.get('kind')} ({source.get('sourcePath')})")
+            continue
+        grouped.setdefault(route, []).append(source)
+
+    results = {}
+    for route, payload in grouped.items():
+        result = api_request(config, "PUT", route, payload)
+        results[route] = {
+            "count": len(payload),
+            "updatedCount": result.get("updatedCount") if isinstance(result, dict) else None,
+            "createdCount": result.get("createdCount") if isinstance(result, dict) else None,
+        }
+        print(f"  Pushed {route}: {json.dumps(results[route], indent=2)}")
+
+    print(f"  Pushed source groups: {json.dumps(results, indent=2)[:500]}")
 
 
 def validate(config):

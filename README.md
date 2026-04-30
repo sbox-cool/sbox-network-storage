@@ -69,6 +69,16 @@ git submodule add https://github.com/sbox-cool/sbox-network-storage "Libraries/N
 
 Your credentials are saved to `Editor/Network Storage/.env` — this file is in the `Editor/` directory which s&box excludes from publishing. Your secret key never ships with your game.
 
+### Dedicated server endpoint secret (optional)
+
+Dedicated servers can supply a runtime endpoint secret without putting it in the published bundle:
+
+```bash
+sbox-server.exe +game your.org.game your.map +hostname "My Server" +network_storage_secret_key sbox_sk_your_secret_key
+```
+
+The primary dedicated launch key is `+network_storage_secret_key`. The library also accepts aliases (`+network-storage-secret-key`, `+sboxcool_secret_key`, `+networkStorageSecretKey`, `+sboxcoolSecretKey`, `+nsSecretKey`, `+ns_secret_key`) on `Application.IsDedicatedServer` hosts, and validates the supplied key at game startup. Generic names such as `+secret-key`, `+secret_key`, and `+secretKey` are intentionally not supported. When the dedicated key is used, the library does not request or send s&box auth tokens. Endpoint requests use an internal backend flag while the actual launch secret travels in the `x-secret-key` HTTPS header. Storage document row reads/writes/deletes use the secret as the HTTPS `x-api-key` header without a URL secret flag so secret keys with `collections:execute` can access endpoint-only collections. Do not put `sbox_sk_` values in code, public credentials, or client-callable URLs. Collection schema deletion remains website-only.
+
 ## Quick Start
 
 Create a config class in your game project:
@@ -105,6 +115,18 @@ var result = await NetworkStorage.CallEndpoint( "mine-ore", new
     kg = 5.0f
 } );
 
+// Endpoint URLs from the dashboard are also accepted; the slug is extracted.
+var sameResult = await NetworkStorage.CallEndpoint(
+    "https://api.sboxcool.com/v3/endpoints/your_project_id/mine-ore?apiKey=sbox_ns_your_public_key",
+    new { ore_id = "iron", kg = 5.0f } );
+
+// Update collection documents directly (dedicated servers attach +network_storage_secret_key automatically)
+await NetworkStorage.SaveDocument( "player-data", Game.SteamId.ToString(), new { level = 2, xp = 100 } );
+await NetworkStorage.UpdateDocument( "player-data", Game.SteamId.ToString(),
+    NetworkStorageOperation.Increment( "xp", 50, source: "server", reason: "quest" ),
+    NetworkStorageOperation.Set( "lastSeen", DateTimeOffset.UtcNow.ToUnixTimeSeconds() ) );
+await NetworkStorage.DeleteDocument( "player-data", Game.SteamId.ToString() );
+
 // Read the response
 if ( result.HasValue )
 {
@@ -122,9 +144,13 @@ See the [Examples/](Examples/) folder for complete working patterns.
 | Method | Description |
 |————|——————-|
 | `Configure(projectId, apiKey)` | Set credentials. Call once at startup. |
-| `CallEndpoint(slug, input?)` | Call a server endpoint by slug. Returns `JsonElement?`. |
+| `CallEndpoint(slugOrUrl, input?)` | Call a server endpoint by slug or endpoint URL. Returns `JsonElement?`. |
 | `GetGameValues()` | Fetch all game values (constants + tables). Returns `JsonElement?`. |
 | `GetDocument(collectionId, documentId?)` | Read a document from a collection. Defaults to current player's Steam ID. |
+| `SaveDocument(collectionId, documentId, data)` | Save/replace a collection document. Dedicated servers attach the configured secret key automatically. |
+| `UpdateDocument(collectionId, documentId, ops)` | Apply server-side operations (`set`, `inc`, `push`, `pull`, `remove`) to a document. |
+| `DeleteDocument(collectionId, documentId?)` | Delete one collection document/row. Public calls require record deletes to be enabled; dedicated secret keys with collection execute permission can delete rows for diagnostics/backoffice cleanup. Does not delete collection schemas. |
+| `ListRecords/CreateRecord/RenameRecord/DeleteRecord` | Manage multi-record save slots. |
 | `IsConfigured` | `true` after `Configure()` has been called. |
 | `ApiRoot` | The full versioned API URL (e.g. `https://api.sboxcool.com/v3`). |
 

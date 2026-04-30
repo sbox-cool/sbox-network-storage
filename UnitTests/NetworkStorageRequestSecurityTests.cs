@@ -1,4 +1,5 @@
 using Sandbox;
+using System.Text.Json;
 
 [TestClass]
 public class NetworkStorageRequestSecurityTests
@@ -24,6 +25,25 @@ public class NetworkStorageRequestSecurityTests
 		Assert.IsFalse( NetworkStorage.TryParseEncryptedRequestId( "12345_short", out _, out _ ) );
 		Assert.IsFalse( NetworkStorage.TryParseEncryptedRequestId( "12345_abcd!", out _, out _ ) );
 		Assert.IsFalse( NetworkStorage.TryParseEncryptedRequestId( "12345_abcdef_extra", out _, out _ ) );
+	}
+
+	[TestMethod]
+	public void NetworkStorageOperation_SerializesBackendShape()
+	{
+		var json = JsonSerializer.Serialize( new
+		{
+			ops = new[]
+			{
+				NetworkStorageOperation.Increment( "xp", 50, source: "server", reason: "quest" ),
+				NetworkStorageOperation.Set( "name", "Ada" )
+			}
+		} );
+
+		Assert.IsTrue( json.Contains( "\"op\":\"inc\"" ) );
+		Assert.IsTrue( json.Contains( "\"path\":\"xp\"" ) );
+		Assert.IsTrue( json.Contains( "\"value\":50" ) );
+		Assert.IsTrue( json.Contains( "\"source\":\"server\"" ) );
+		Assert.IsFalse( json.Contains( "\"Value\"" ) );
 	}
 
 	[TestMethod]

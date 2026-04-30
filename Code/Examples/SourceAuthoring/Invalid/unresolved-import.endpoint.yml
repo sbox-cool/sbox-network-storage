@@ -1,8 +1,0 @@
-sourceVersion: 1
-kind: endpoint
-id: unresolved-import
-imports:
-  - missing-library
-definition:
-  method: POST
-  steps: []

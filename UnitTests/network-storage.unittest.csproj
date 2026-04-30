@@ -1,0 +1,64 @@
+<Project Sdk="Microsoft.NET.Sdk.Razor">
+
+	<PropertyGroup>
+		<TargetFramework>net10.0</TargetFramework>
+		<GenerateDocumentationFile>true</GenerateDocumentationFile>
+		<AssemblyName>network-storage.unittest</AssemblyName>
+		<PackageId>network-storage.unittest</PackageId>
+		<LangVersion>14</LangVersion>
+		<NoWarn>1701;1702;1591;</NoWarn>
+		<WarningsAsErrors></WarningsAsErrors>
+		<TreatWarningsAsErrors>False</TreatWarningsAsErrors>
+		<AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+		<DefineConstants>SANDBOX</DefineConstants>
+		<AllowUnsafeBlocks>False</AllowUnsafeBlocks>
+		<OutputPath>../../../../../../../../Program Files (x86)/Steam/steamapps/common/sbox/.vs/output/</OutputPath>
+		<DocumentationFile>../../../../../../../../Program Files (x86)/Steam/steamapps/common/sbox/.vs/output/network-storage.unittest.xml</DocumentationFile>
+		<RootNamespace>Sandbox</RootNamespace>
+		<Nullable>disable</Nullable>
+		<IsTestProject>true</IsTestProject>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.7.2" /> 
+		<PackageReference Include="MSTest.TestAdapter" Version="3.1.1" /> 
+		<PackageReference Include="MSTest.TestFramework" Version="3.1.1" /> 
+		<PackageReference Include="coverlet.collector" Version="6.0.0" /> 
+	</ItemGroup>
+
+	<ItemGroup>
+		<Using Include="Sandbox.Internal.GlobalToolsNamespace" Static="true" />
+		<Using Include="Sandbox.Internal.GlobalGameNamespace" Static="true" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<Analyzer Include="../../../../../../../../Program Files (x86)/Steam/steamapps/common/sbox/bin/managed/Sandbox.CodeUpgrader.dll"/> 
+		<Analyzer Include="../../../../../../../../Program Files (x86)/Steam/steamapps/common/sbox/bin/managed/Sandbox.Generator.dll"/> 
+		<Reference Include="../../../../../../../../Program Files (x86)/Steam/steamapps/common/sbox/bin/managed/Sandbox.System.dll"/> 
+		<Reference Include="../../../../../../../../Program Files (x86)/Steam/steamapps/common/sbox/bin/managed/Sandbox.Engine.dll"/> 
+		<Reference Include="../../../../../../../../Program Files (x86)/Steam/steamapps/common/sbox/bin/managed/Sandbox.Filesystem.dll"/> 
+		<Reference Include="../../../../../../../../Program Files (x86)/Steam/steamapps/common/sbox/bin/managed/Sandbox.Reflection.dll"/> 
+		<Reference Include="../../../../../../../../Program Files (x86)/Steam/steamapps/common/sbox/bin/managed/Sandbox.Mounting.dll"/> 
+		<Reference Include="../../../../../../../../Program Files (x86)/Steam/steamapps/common/sbox/bin/managed/Microsoft.AspNetCore.Components.dll"/> 
+		<Reference Include="../../../../../../../../Program Files (x86)/Steam/steamapps/common/sbox/bin/managed/Sandbox.AppSystem.dll"/> 
+		<Reference Include="../../../../../../../../Program Files (x86)/Steam/steamapps/common/sbox/bin/managed/Sandbox.Tools.dll"/> 
+		<Reference Include="../../../../../../../../Program Files (x86)/Steam/steamapps/common/sbox/bin/managed/Sandbox.Compiling.dll"/> 
+		<Reference Include="../../../../../../../../Program Files (x86)/Steam/steamapps/common/sbox/bin/managed/Microsoft.CodeAnalysis.dll"/> 
+		<Reference Include="../../../../../../../../Program Files (x86)/Steam/steamapps/common/sbox/bin/managed/Microsoft.CodeAnalysis.CSharp.dll"/> 
+		<Reference Include="../../../../../../../../Program Files (x86)/Steam/steamapps/common/sbox/bin/managed/Sandbox.Bind.dll"/> 
+		<Reference Include="../../../../../../../../Program Files (x86)/Steam/steamapps/common/sbox/bin/managed/Facepunch.ActionGraphs.dll"/> 
+		<Reference Include="../../../../../../../../Program Files (x86)/Steam/steamapps/common/sbox/bin/managed/SkiaSharp.dll"/> 
+	</ItemGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="../../../../../../../../Program Files (x86)/Steam/steamapps/common/sbox/editor/ActionGraph/Code/actiongraph.csproj" />
+		<ProjectReference Include="../../../../../../../../Program Files (x86)/Steam/steamapps/common/sbox/editor/DooEditor/Code/dooeditor.csproj" />
+		<ProjectReference Include="../../../../../../../../Program Files (x86)/Steam/steamapps/common/sbox/editor/Hammer/Code/hammer.csproj" />
+		<ProjectReference Include="../../../../../../../../Program Files (x86)/Steam/steamapps/common/sbox/addons/tools/Code/Base Editor Library.csproj" />
+		<ProjectReference Include="../../../../../../../../Program Files (x86)/Steam/steamapps/common/sbox/editor/MovieMaker/Code/moviemaker.csproj" />
+		<ProjectReference Include="../Code/network-storage.csproj" />
+		<ProjectReference Include="../Editor/network-storage.editor.csproj" />
+		<ProjectReference Include="../../../../../../../../Program Files (x86)/Steam/steamapps/common/sbox/editor/ShaderGraph/Code/shadergraph.csproj" />
+	</ItemGroup>
+
+</Project>
