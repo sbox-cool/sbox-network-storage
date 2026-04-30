@@ -1,7 +1,7 @@
 ﻿#!/usr/bin/env python3
 """
-sync.py — Push local Network Storage data (collections, endpoints, workflows)
-to the sbox.cool management API, and generate collection JSON from C# data files.
+sync.py — Push local Network Storage source data (collections, endpoints, workflows)
+to the sbox.cool management API, and generate collection YAML source from C# data files.
 
 This script lives inside the network-storage library and is invoked by the
 editor Sync Tool. It requires --project-root to locate the game project.
@@ -32,7 +32,7 @@ from urllib.request import Request, urlopen
 from urllib.error import HTTPError
 
 from sync_api_errors import SyncApiError, print_api_error
-from source_compiler import compile_path, compile_source_text, export_legacy_json
+from source_compiler import compile_path, compile_source_text
 from sync_sources import load_source_definitions
 
 # ── Paths (set in main() from --project-root) ────────────────────
@@ -197,22 +197,8 @@ def is_deprecated_endpoint(item):
     return any(is_truthy_flag(item.get(key)) for key in ("_deprecated", "deprecated", "depreciated", "depricated"))
 
 
-def load_json_dir(directory, skip_deprecated_endpoints=False):
-    """Load all .json files from a directory, returning a list of parsed objects."""
-    if not directory.exists():
-        return []
-    items = []
-    for f in sorted(directory.glob("*.json")):
-        with open(f, encoding='utf-8') as fh:
-            item = json.load(fh)
-        if skip_deprecated_endpoints and is_deprecated_endpoint(item):
-            continue
-        items.append(item)
-    return items
-
-
 def load_source_dir(directory, kind):
-    """Load YAML source files from a directory and export their canonical legacy definition."""
+    """Load YAML source files from a directory and return their canonical definition."""
     if not directory.exists():
         return []
 
@@ -237,21 +223,7 @@ def load_source_dir(directory, kind):
                 print(f"    - {diag['code']}: {diag['message']}{suffix}")
             raise SyncApiError("Source validation failed")
 
-        exported, diagnostics = export_legacy_json(compiled)
-
-        # Log export warnings
-        for diag in diagnostics:
-            severity = diag.get("severity", "info")
-            if severity == "warning":
-                print(f"  WARN [{resource_id}]: {diag['code']}: {diag['message']}")
-
-        if exported is None:
-            print(f"  Source export failed for {kind}:{resource_id} ({f}):")
-            for diag in diagnostics:
-                print(f"    - {diag['code']}: {diag['message']}")
-            raise SyncApiError("Source export failed")
-
-        items.append(exported)
+        items.append(compiled.get("canonicalDefinition") or {})
 
     return items
 
@@ -371,20 +343,16 @@ def indent(indent_level):
 
 
 def load_collections():
-    sources = load_source_dir(COLLECTIONS_DIR, "collection")
-    return sources or load_json_dir(COLLECTIONS_DIR)
+    return load_source_dir(COLLECTIONS_DIR, "collection")
 
 
 def load_endpoints(include_deprecated=False):
     sources = load_source_dir(ENDPOINTS_DIR, "endpoint")
-    if sources:
-        return [item for item in sources if include_deprecated or not is_deprecated_endpoint(item)]
-    return load_json_dir(ENDPOINTS_DIR, skip_deprecated_endpoints=not include_deprecated)
+    return [item for item in sources if include_deprecated or not is_deprecated_endpoint(item)]
 
 
 def load_workflows():
-    sources = load_source_dir(WORKFLOWS_DIR, "workflow")
-    return sources or load_json_dir(WORKFLOWS_DIR)
+    return load_source_dir(WORKFLOWS_DIR, "workflow")
 
 
 # ── Push ─────────────────────────────────────────────────────────
@@ -813,18 +781,14 @@ def generate_collection(mapping):
             print_error(f"Generate failed for '{collection_name}': no data tables found in {mapping['csFile']}")
             return False
 
-        # Load existing collection source/JSON to preserve metadata.
+        # Load existing collection source to preserve metadata.
         collection_path = COLLECTIONS_DIR / f"{collection_name}.collection.yml"
-        legacy_collection_path = COLLECTIONS_DIR / f"{collection_name}.json"
         existing = {}
         if collection_path.exists():
             for item in load_source_dir(COLLECTIONS_DIR, "collection"):
                 if item.get("name") == collection_name or item.get("id") == collection_name:
                     existing = item
                     break
-        elif legacy_collection_path.exists():
-            with open(legacy_collection_path, encoding='utf-8') as f:
-                existing = json.load(f)
 
         output = {
             "name": existing.get("name", collection_name),
@@ -842,8 +806,6 @@ def generate_collection(mapping):
         with open(collection_path, 'w', encoding='utf-8') as f:
             f.write(generated_source_header(mapping, cs_files))
             f.write(source_text_from_definition("collection", collection_name, output))
-        if legacy_collection_path.exists():
-            legacy_collection_path.unlink()
 
         print(f"  Generated {collection_name}.collection.yml — {len(all_tables)} table(s):")
         for t in all_tables:
@@ -903,7 +865,7 @@ def main():
     parser.add_argument("--validate", action="store_true", help="Validate credentials only")
     parser.add_argument("--dry-run", action="store_true", help="Show what would be pushed without pushing")
     parser.add_argument("--replace-all", action="store_true", help="Replace all remote endpoints (deletes existing, use with --endpoints)")
-    parser.add_argument("--generate", action="store_true", help="Generate collection JSON from C# data files")
+    parser.add_argument("--generate", action="store_true", help="Generate collection YAML source from C# data files")
     parser.add_argument("--collection", type=str, help="Filter to a specific collection name (with --generate)")
     args = parser.parse_args()
 

@@ -2,7 +2,7 @@
 """Reference compiler for Network Storage source authoring.
 
 This is the local/tooling mirror of the backend compiler contract. It validates
-strict YAML source files and legacy JSON resources, emits deterministic
+strict YAML source files, emits deterministic
 canonical definitions, builds canonical execution-plan metadata, and records
 fingerprints/hashes used for stale-plan detection.
 """
@@ -134,7 +134,7 @@ def parse_source_yaml(text: str, source_path: str) -> tuple[Any | None, list[dic
 
 def _resource_id_from_path(path: str, kind: str) -> str | None:
     name = Path(path).name
-    for suffix in (f".{kind}.yaml", f".{kind}.yml", ".json"):
+    for suffix in (f".{kind}.yaml", f".{kind}.yml"):
         if name.endswith(suffix):
             return name[: -len(suffix)]
     return None
@@ -406,10 +406,14 @@ def compile_source_text(text: str, source_path: str, budget_limits: dict[str, in
 
 def compile_legacy_json(data: dict[str, Any], source_path: str = "") -> dict[str, Any]:
     kind = infer_legacy_kind(data, source_path)
-    canonical = canonical_definition_from_legacy(data)
-    resource_id = _resource_id(kind, canonical, source_path)
-    plan = build_execution_plan(kind, resource_id, canonical, source_path)
-    return _compiled_resource(kind, resource_id, "legacy-json", "json", None, stable_json(data), [], canonical, plan, [], source_path)
+    resource_id = _resource_id(kind, data, source_path)
+    diags = [diagnostic(
+        "error",
+        "JSON_UNSUPPORTED",
+        "Legacy JSON resources are no longer supported. Migrate this resource to YAML source or pull it from the Network Storage API.",
+        sourcePath=source_path,
+    )]
+    return _compiled_resource(kind, resource_id, "unsupported-json", "json", None, stable_json(data), [], {}, {}, diags, source_path)
 
 
 def _compiled_resource(kind: str, resource_id: str, mode: str, source_format: str, source_version: int | None, source_text: str, dependencies: list[str], canonical: dict[str, Any], plan: dict[str, Any], diags: list[dict[str, Any]], source_path: str) -> dict[str, Any]:
@@ -445,11 +449,13 @@ def _has_native_nodes(nodes: list[dict[str, Any]]) -> bool:
 
 
 def export_legacy_json(compiled: dict[str, Any]) -> tuple[dict[str, Any] | None, list[dict[str, Any]]]:
-    if not compiled.get("ok"):
-        return None, [diagnostic("error", "CANNOT_EXPORT_INVALID_RESOURCE", "Resource must compile before legacy JSON export.")]
-    if _has_native_nodes(compiled.get("executionPlan", {}).get("nodes") or []):
-        return None, [diagnostic("error", "CANNOT_FLATTEN_NATIVE_SOURCE", "Native canonical nodes cannot be automatically flattened to legacy JSON.", kind=compiled.get("kind"), id=compiled.get("id"), suggestion="Keep this resource in source/canonical mode or rewrite it using legacy step types.")]
-    return copy.deepcopy(compiled["canonicalDefinition"]), []
+    return None, [diagnostic(
+        "error",
+        "JSON_EXPORT_UNSUPPORTED",
+        "Legacy JSON export is no longer supported. Use YAML source or the Network Storage API.",
+        kind=compiled.get("kind"),
+        id=compiled.get("id"),
+    )]
 
 
 def json_to_yaml_reverse_conversion() -> None:
@@ -511,14 +517,13 @@ def discover_project_files(project_root: Path) -> list[Path]:
         base = ns / folder
         if not base.exists():
             continue
-        files.extend(sorted(base.glob("*.json")))
         files.extend(sorted(base.glob("*.yaml")))
         files.extend(sorted(base.glob("*.yml")))
     return files
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Validate and compile Network Storage source/legacy resources.")
+    parser = argparse.ArgumentParser(description="Validate and compile Network Storage YAML source resources.")
     parser.add_argument("--project-root", type=Path, help="Project root. When set, scans Editor/Network Storage.")
     parser.add_argument("--file", type=Path, action="append", help="Specific resource file to compile.")
     parser.add_argument("--json", action="store_true", help="Print compiled resources as JSON.")

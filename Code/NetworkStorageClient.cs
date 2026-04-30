@@ -246,7 +246,7 @@ public static partial class NetworkStorage
 			if ( !string.IsNullOrEmpty( projectId ) && !string.IsNullOrEmpty( publicKey ) )
 			{
 				// Read ProxyEnabled from the generated class — this is the authoritative
-				// runtime source since JSON files are editor-only and not mounted in game.
+				// runtime source since editor config files are not mounted in game.
 				var proxyVal = nsConfigType.GetStaticValue( "ProxyEnabled" );
 				if ( proxyVal is bool proxyBool )
 					ProxyEnabled = proxyBool;

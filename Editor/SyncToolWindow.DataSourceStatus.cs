@@ -72,7 +72,7 @@ public partial class SyncToolWindow
 				Icon = "!",
 				Color = Color.Yellow.WithAlpha( 0.85f ),
 				Label = "Needs generate",
-				Detail = $"{mapping.Collection}.collection.yml/json does not exist yet"
+				Detail = $"{mapping.Collection}.collection.yml does not exist yet"
 			};
 		}
 

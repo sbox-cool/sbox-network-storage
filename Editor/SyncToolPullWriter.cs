@@ -7,12 +7,6 @@ using System.Text.Json;
 
 public static class SyncToolPullWriter
 {
-	private static readonly JsonSerializerOptions WriteOptions = new()
-	{
-		WriteIndented = true,
-		PropertyNamingPolicy = JsonNamingPolicy.CamelCase
-	};
-
 	public static bool SaveEndpoint( string slug, JsonElement remoteEndpoint )
 	{
 		var local = SyncToolTransforms.ServerEndpointToLocal( remoteEndpoint );
@@ -20,8 +14,7 @@ public static class SyncToolPullWriter
 			"endpoint",
 			slug,
 			remoteEndpoint,
-			local,
-			() => WriteJson( SyncToolConfig.EndpointsPath, $"{slug}.json", local ) );
+			local );
 	}
 
 	public static bool SaveCollection( string name, JsonElement remoteCollection )
@@ -31,8 +24,7 @@ public static class SyncToolPullWriter
 			"collection",
 			name,
 			remoteCollection,
-			local,
-			() => WriteJson( SyncToolConfig.CollectionsPath, $"{name}.json", local ) );
+			local );
 	}
 
 	public static bool SaveWorkflow( string id, JsonElement remoteWorkflow )
@@ -42,8 +34,7 @@ public static class SyncToolPullWriter
 			"workflow",
 			id,
 			remoteWorkflow,
-			local,
-			() => SyncToolConfig.SaveWorkflow( id, local ) );
+			local );
 	}
 
 	public static int SaveCollections( JsonElement serverResponse )
@@ -69,31 +60,17 @@ public static class SyncToolPullWriter
 		return count;
 	}
 
-	private static bool SaveResource( string kind, string id, JsonElement remote, Dictionary<string, object> local, Action writeJson )
+	private static bool SaveResource( string kind, string id, JsonElement remote, Dictionary<string, object> local )
 	{
 		var hasSource = SyncToolTransforms.TryGetSourceText( remote, out var sourceText );
 		var sourcePath = SyncToolTransforms.GetSourcePath( remote );
-		var mode = SyncToolConfig.SourceExport;
 
-		var wrote = false;
-		if ( hasSource && mode != SyncToolConfig.SourceExportMode.JsonOnly )
-		{
+		if ( hasSource )
 			SyncToolConfig.SaveSourceResource( kind, id, sourceText, sourcePath );
-			wrote = true;
-		}
-		else if ( mode != SyncToolConfig.SourceExportMode.JsonOnly )
-		{
+		else
 			WriteSource( kind, id, local );
-			wrote = true;
-		}
 
-		if ( mode == SyncToolConfig.SourceExportMode.JsonOnly )
-		{
-			writeJson();
-			wrote = true;
-		}
-
-		return wrote;
+		return true;
 	}
 
 	public static void WriteSource( string kind, string id, Dictionary<string, object> data )
@@ -103,6 +80,7 @@ public static class SyncToolPullWriter
 			"collection" => SyncToolConfig.CollectionsPath,
 			"endpoint" => SyncToolConfig.EndpointsPath,
 			"workflow" => SyncToolConfig.WorkflowsPath,
+			"test" => SyncToolConfig.TestsPath,
 			_ => SyncToolConfig.SyncToolsPath
 		};
 		var path = Path.Combine( SyncToolConfig.Abs( folder ), $"{id}.{kind}.yml" );
@@ -111,17 +89,6 @@ public static class SyncToolPullWriter
 			Directory.CreateDirectory( dir );
 
 		File.WriteAllText( path, BuildSourceText( kind, id, data ) );
-	}
-
-	private static void WriteJson( string relativeFolder, string fileName, Dictionary<string, object> data )
-	{
-		var dir = SyncToolConfig.Abs( relativeFolder );
-		if ( !Directory.Exists( dir ) )
-			Directory.CreateDirectory( dir );
-
-		File.WriteAllText(
-			Path.Combine( dir, fileName ),
-			JsonSerializer.Serialize( data, WriteOptions ) );
 	}
 
 	private static string BuildSourceText( string kind, string id, Dictionary<string, object> data )

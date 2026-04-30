@@ -151,7 +151,7 @@ public static class CodeGenerator
 		sb.AppendLine();
 		sb.AppendLine( "       source files: *.collection.yml, *.endpoint.yml, *.workflow.yml" );
 		sb.AppendLine( "       .yml is accepted as an alias and is the preferred local format for this project" );
-		sb.AppendLine( "       legacy resource JSON is deprecated and ignored when matching YAML source exists" );
+		sb.AppendLine( "       legacy resource JSON is unsupported; use YAML source only" );
 		sb.AppendLine( "       config/             — API credentials and project settings" );
 		sb.AppendLine();
 		sb.AppendLine( "  2. Push changes to the backend and regenerate this folder:" );

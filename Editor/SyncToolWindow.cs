@@ -176,15 +176,10 @@ public partial class SyncToolWindow : DockWindow
 
 	private static string[] FindResourceFiles( string directory, string kind )
 	{
-		var sourceFiles = Directory.GetFiles( directory, $"*.{kind}.yml" )
+		return Directory.GetFiles( directory, $"*.{kind}.yml" )
 			.Concat( Directory.GetFiles( directory, $"*.{kind}.yaml" ) )
 			.OrderBy( f => f, StringComparer.OrdinalIgnoreCase )
 			.ToArray();
-		return sourceFiles.Length > 0
-			? sourceFiles
-			: Directory.GetFiles( directory, "*.json" )
-				.OrderBy( f => f, StringComparer.OrdinalIgnoreCase )
-				.ToArray();
 	}
 
 	private static string ResourceIdFromFile( string filePath, string kind )
@@ -912,7 +907,7 @@ public partial class SyncToolWindow : DockWindow
 						"Generate Collection Data",
 						$"This will overwrite {capturedCollection}.collection.yml with data parsed from your C# source files.",
 						() => _ = RunGenerate( capturedCollection ),
-						"Local JSON will be regenerated from C# definitions" ) );
+						"Local YAML source will be regenerated from C# definitions" ) );
 			}
 
 			y += rowH + 1;
@@ -1236,13 +1231,6 @@ public partial class SyncToolWindow : DockWindow
 	private bool TryReadLocalResourceFile( string filePath, string kind, out JsonElement resource )
 	{
 		resource = default;
-		var extension = Path.GetExtension( filePath );
-		if ( extension.Equals( ".json", StringComparison.OrdinalIgnoreCase ) )
-		{
-			resource = JsonSerializer.Deserialize<JsonElement>( File.ReadAllText( filePath ), _readOptions );
-			return resource.ValueKind == JsonValueKind.Object;
-		}
-
 		return SyncToolConfig.TryLoadSourceCanonicalResource( kind, filePath, out resource );
 	}
 
@@ -1741,7 +1729,7 @@ public partial class SyncToolWindow : DockWindow
 		if ( id.StartsWith( "ep_" ) ) return $"{id[3..]}.endpoint.yml (endpoint)";
 		if ( id.StartsWith( "col_" ) ) return $"{id[4..]}.collection.yml (collection)";
 		if ( id.StartsWith( "wf_" ) ) return $"{id[3..]}.workflow.yml (workflow)";
-		if ( id.StartsWith( "test_" ) ) return $"{id[5..]}.json (test)";
+		if ( id.StartsWith( "test_" ) ) return $"{id[5..]}.test.yml (test)";
 		return id;
 	}
 
@@ -2561,7 +2549,7 @@ public partial class SyncToolWindow : DockWindow
 	// ──────────────────────────────────────────────────────
 
 	/// <summary>
-	/// Compare two endpoint JSON files key-by-key.
+	/// Compare two endpoint resources key-by-key.
 	/// Categorizes changes as cosmetic (name, description, notes) vs structural (steps, input, response, method).
 	/// </summary>
 	private string DiffEndpoint( string localJson, string remoteJson, string slug )
@@ -2645,7 +2633,7 @@ public partial class SyncToolWindow : DockWindow
 	}
 
 	/// <summary>
-	/// Compare two collection JSON files field-by-field.
+	/// Compare two collection resources field-by-field.
 	/// Distinguishes schema (structural) from metadata (non-structural) changes.
 	/// </summary>
 	private string DiffCollectionSchema( string localJson, string remoteJson )
@@ -2921,9 +2909,8 @@ public partial class SyncToolWindow : DockWindow
 			else if ( id.StartsWith( "test_" ) )
 			{
 				var testId = id[5..];
-				var dir = SyncToolConfig.Abs( SyncToolConfig.TestsPath );
-				if ( !Directory.Exists( dir ) ) Directory.CreateDirectory( dir );
-				File.WriteAllText( Path.Combine( dir, $"{testId}.json" ), json );
+				var data = JsonSerializer.Deserialize<Dictionary<string, object>>( json, _readOptions );
+				SyncToolPullWriter.WriteSource( "test", testId, data );
 			}
 			else
 			{

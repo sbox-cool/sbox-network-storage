@@ -129,9 +129,9 @@ public class SettingsWindow : DockWindow
 		Paint.SetDefaultFont( size: 9 );
 		Paint.SetPen( Color.White.WithAlpha( 0.45f ) );
 		DrawWrappedText( ref y, pad, w, lineH + 2,
-			"Map C# data files or directories to collection JSON. " +
+			"Map C# data files or directories to collection YAML source. " +
 			"The Sync Tool's Generate button parses C# records and " +
-			"writes the collection JSON automatically." );
+			"writes the collection source automatically." );
 		y += 12;
 
 		// ── Mapping rows with LineEdit widgets ──
@@ -244,23 +244,11 @@ public class SettingsWindow : DockWindow
 		Paint.SetDefaultFont( size: 9 );
 		Paint.SetPen( Color.White.WithAlpha( 0.45f ) );
 		DrawWrappedText( ref y, pad, w, lineH + 2,
-			"Controls what the Sync Tool writes when pulling source-authored resources from the dashboard. " +
-			"YAML source is the default. Legacy JSON export is deprecated and should only be used for compatibility checks." );
+			"The Sync Tool writes YAML source only. Legacy JSON export and local JSON fallback are no longer supported." );
 		y += 8;
 
-		var modeGap = 8f;
-		var modeBtnW = (w - modeGap * 2) / 3f;
-		var modeBtnH = 26f;
-		DrawSourceExportButton( SyncToolConfig.SourceExportMode.SourceAndJson, "Source",
-			new Rect( pad, y, modeBtnW, modeBtnH ),
-			new Rect( pad, y + _scrollY, modeBtnW, modeBtnH ) );
-		DrawSourceExportButton( SyncToolConfig.SourceExportMode.SourceOnly, "Source Only",
-			new Rect( pad + modeBtnW + modeGap, y, modeBtnW, modeBtnH ),
-			new Rect( pad + modeBtnW + modeGap, y + _scrollY, modeBtnW, modeBtnH ) );
-		DrawSourceExportButton( SyncToolConfig.SourceExportMode.JsonOnly, "JSON Only",
-			new Rect( pad + (modeBtnW + modeGap) * 2, y, modeBtnW, modeBtnH ),
-			new Rect( pad + (modeBtnW + modeGap) * 2, y + _scrollY, modeBtnW, modeBtnH ) );
-		y += modeBtnH + 12;
+		DrawReadonlyStatusRow( ref y, pad, w, "Export Format", "YAML Source Only", true );
+		y += 6;
 
 		DrawSeparator( ref y, w, pad );
 

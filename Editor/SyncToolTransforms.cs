@@ -4,7 +4,7 @@ using System.Linq;
 using System.Text.Json;
 
 /// <summary>
-/// Transforms between local JSON file format and the server's expected format.
+/// Transforms between local YAML source canonical data and the server's expected format.
 /// Handles endpoints and collections (with constants/tables for game config).
 /// </summary>
 public static class SyncToolTransforms
