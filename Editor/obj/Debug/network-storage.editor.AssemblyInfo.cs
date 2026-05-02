@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("network-storage.editor")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+6062a9c0bab977c8e2f01d933a4ad30bbc414bc5")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+4b4027d3f93c484e927cdcfae54420b041754227")]
 [assembly: System.Reflection.AssemblyProductAttribute("network-storage.editor")]
 [assembly: System.Reflection.AssemblyTitleAttribute("network-storage.editor")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("network-storage")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+cf13c518a3f588737fc2f7d93cb223e5d95dd997")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+4b4027d3f93c484e927cdcfae54420b041754227")]
 [assembly: System.Reflection.AssemblyProductAttribute("network-storage")]
 [assembly: System.Reflection.AssemblyTitleAttribute("network-storage")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

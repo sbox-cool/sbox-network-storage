@@ -15,7 +15,7 @@ public static partial class NetworkStorage
 	{
 		var steamId = Game.SteamId.ToString();
 		var securityRequest = await BuildEndpointSecurityRequest( slug, input ?? new { }, allowAuthSession: false );
-		string proxySlug = "";
+		string proxySlug = slug;
 		string inputJson = JsonSerializer.Serialize( securityRequest.Body );
 
 		// Get the client's auth token as consent proof (included in HMAC signature)
