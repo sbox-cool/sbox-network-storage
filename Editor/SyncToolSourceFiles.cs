@@ -62,8 +62,14 @@ public static partial class SyncToolConfig
 		if ( !Directory.Exists( absoluteDir ) )
 			return new List<JsonElement>();
 
-		return Directory.GetFiles( absoluteDir, $"*.{kind}.yml" )
-			.Concat( Directory.GetFiles( absoluteDir, $"*.{kind}.yaml" ) )
+		var typed = Directory.GetFiles( absoluteDir, $"*.{kind}.yml" )
+			.Concat( Directory.GetFiles( absoluteDir, $"*.{kind}.yaml" ) );
+		var plain = Directory.GetFiles( absoluteDir, "*.yml" )
+			.Concat( Directory.GetFiles( absoluteDir, "*.yaml" ) )
+			.Where( path => !Path.GetFileName( path ).Contains( $".{kind}.", StringComparison.OrdinalIgnoreCase ) );
+
+		return typed.Concat( plain )
+			.Distinct( StringComparer.OrdinalIgnoreCase )
 			.OrderBy( path => path, StringComparer.OrdinalIgnoreCase )
 			.Select( path => TryLoadSourceCanonicalResource( kind, path, out var resource ) ? resource : default )
 			.Where( resource => resource.ValueKind != JsonValueKind.Undefined )
@@ -132,18 +138,33 @@ public static partial class SyncToolConfig
 
 		if ( !values.TryGetValue( "id", out var id ) || string.IsNullOrWhiteSpace( id ) )
 			id = ResourceIdFromFilePath( sourcePath, kind );
-		if ( string.IsNullOrWhiteSpace( id ) || definitionLine < 0 )
+		if ( string.IsNullOrWhiteSpace( id ) )
 			return false;
 
-		var definitionJson = values.TryGetValue( "definition", out var inlineDefinition )
-			? inlineDefinition
-			: SerializeIndentedDefinitionYamlAsJson( sourcePath, lines, definitionLine + 1 );
-		if ( string.IsNullOrWhiteSpace( definitionJson ) )
-			return false;
+		JsonElement definitionElement;
+		JsonDocument definitionDoc = null;
+		if ( definitionLine >= 0 )
+		{
+			var definitionJson = values.TryGetValue( "definition", out var inlineDefinition )
+				? inlineDefinition
+				: SerializeIndentedDefinitionYamlAsJson( sourcePath, lines, definitionLine + 1 );
+			if ( string.IsNullOrWhiteSpace( definitionJson ) )
+				return false;
+			definitionDoc = JsonDocument.Parse( definitionJson );
+			definitionElement = definitionDoc.RootElement;
+		}
+		else
+		{
+			var index = 0;
+			var parsed = ParseYamlMap( sourcePath, lines, ref index, 0 );
+			definitionDoc = JsonDocument.Parse( JsonSerializer.Serialize( parsed ) );
+			definitionElement = definitionDoc.RootElement;
+		}
 
-		using var definitionDoc = JsonDocument.Parse( definitionJson );
-		if ( definitionDoc.RootElement.ValueKind != JsonValueKind.Object )
-			return false;
+		using ( definitionDoc )
+		{
+			if ( definitionElement.ValueKind != JsonValueKind.Object )
+				return false;
 
 		var canonical = new Dictionary<string, object>( StringComparer.OrdinalIgnoreCase );
 		switch ( kind )
@@ -174,11 +195,43 @@ public static partial class SyncToolConfig
 		if ( values.TryGetValue( "sourceVersion", out var sourceVersion ) && !string.IsNullOrWhiteSpace( sourceVersion ) )
 			canonical["sourceVersion"] = sourceVersion;
 
-		foreach ( var property in definitionDoc.RootElement.EnumerateObject() )
-			canonical[property.Name] = property.Value.Clone();
+			foreach ( var property in definitionElement.EnumerateObject() )
+			{
+				if ( IsSourceOnlyProperty( property.Name ) )
+					continue;
+				canonical[property.Name] = property.Value.Clone();
+			}
 
-		resource = JsonSerializer.Deserialize<JsonElement>( JsonSerializer.Serialize( canonical ) );
+			if ( kind == "endpoint" )
+			{
+				if ( canonical.TryGetValue( "exposure", out var exposure ) )
+					canonical["exposure"] = NormalizeExposure( exposure?.ToString() );
+				else if ( canonical.TryGetValue( "internalOnly", out var internalOnly ) && internalOnly is bool b && b )
+					canonical["exposure"] = "internal";
+				else if ( canonical.TryGetValue( "publiclyCallable", out var callable ) && callable is bool c && c )
+					canonical["exposure"] = "public";
+			}
+
+			resource = JsonSerializer.Deserialize<JsonElement>( JsonSerializer.Serialize( canonical ) );
 		return resource.ValueKind == JsonValueKind.Object;
+		}
+	}
+
+	private static bool IsSourceOnlyProperty( string name ) => name switch
+	{
+		"sourceVersion" or "kind" or "resourceKind" or "imports" or "libraries" or "dslVersion" or "definition" or "resource" => true,
+		_ => false
+	};
+
+	private static string NormalizeExposure( string value )
+	{
+		var text = (value ?? "").Trim().ToLowerInvariant().Replace( '_', '-' ).Replace( ' ', '-' );
+		return text switch
+		{
+			"public" or "publicly-callable" or "game-api" or "external" or "exposed" => "public",
+			"internal" or "private" or "internal-private" or "reusable" or "reusable-logic" or "workflow" => "internal",
+			_ => text
+		};
 	}
 
 	public static bool HasSourceFiles()
@@ -201,17 +254,13 @@ public static partial class SyncToolConfig
 	public static string ResourceIdFromFilePath( string filePath, string kind )
 	{
 		var fileName = Path.GetFileName( filePath );
-		foreach ( var suffix in new[] { $".{kind}.yaml", $".{kind}.yml" } )
+		foreach ( var suffix in new[] { $".{kind}.yaml", $".{kind}.yml", ".yaml", ".yml", ".json" } )
 		{
 			if ( fileName.EndsWith( suffix, StringComparison.OrdinalIgnoreCase ) )
 				return fileName[..^suffix.Length];
 		}
 
-		var withoutExtension = Path.GetFileNameWithoutExtension( fileName );
-		var typedSuffix = $".{kind}";
-		return withoutExtension.EndsWith( typedSuffix, StringComparison.OrdinalIgnoreCase )
-			? withoutExtension[..^typedSuffix.Length]
-			: withoutExtension;
+		return Path.GetFileNameWithoutExtension( fileName );
 	}
 
 	private static SourceSummary TryReadSourceSummary( string expectedKind, string absolutePath )

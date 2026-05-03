@@ -159,7 +159,7 @@ public static class SyncToolTransforms
 			["method"] = source.TryGetProperty( "method", out var method ) ? method.GetString() : "POST",
 			["enabled"] = !source.TryGetProperty( "enabled", out var enabled ) || enabled.ValueKind != JsonValueKind.False,
 			["input"] = source.TryGetProperty( "input", out var input ) ? (object)input : new Dictionary<string, object>(),
-			["steps"] = source.TryGetProperty( "steps", out var steps ) ? (object)steps : new List<object>(),
+			["steps"] = NormalizeStepsField( source ),
 			["response"] = source.TryGetProperty( "response", out var response )
 				? (object)response
 				: new Dictionary<string, object> { ["status"] = 200, ["body"] = new Dictionary<string, object> { ["ok"] = true } }
@@ -333,6 +333,13 @@ public static class SyncToolTransforms
 			if ( IsServerManagedOrCompilerField( prop.Name ) )
 				continue;
 
+			if ( prop.NameEquals( "steps" ) && prop.Value.ValueKind == JsonValueKind.Array )
+			{
+				local[prop.Name] = SyncToolFlowCanonicalizer.NormalizeSteps( prop.Value )
+					?? new List<object>();
+				continue;
+			}
+
 			local[prop.Name] = prop.Value.ValueKind switch
 			{
 				JsonValueKind.String => (object)prop.Value.GetString(),
@@ -344,6 +351,18 @@ public static class SyncToolTransforms
 		}
 
 		return local;
+	}
+
+	/// <summary>
+	/// Read the steps array from a resource and run it through the canonical
+	/// route normalizer so legacy <c>onFail</c> shapes compare equal to the
+	/// canonical <c>routes.true</c> / <c>routes.false</c> form.
+	/// </summary>
+	private static object NormalizeStepsField( JsonElement source )
+	{
+		if ( !source.TryGetProperty( "steps", out var steps ) || steps.ValueKind != JsonValueKind.Array )
+			return new List<object>();
+		return SyncToolFlowCanonicalizer.NormalizeSteps( steps ) ?? new List<object>();
 	}
 
 	private static bool IsServerManagedOrCompilerField( string name )

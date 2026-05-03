@@ -1,4 +1,4 @@
-﻿#nullable disable
+#nullable disable
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -83,6 +83,10 @@ public partial class SyncToolWindow : DockWindow
 		public string DiffSummary;
 		public string LocalJson;
 		public string RemoteJson;
+		// Display-only YAML rendering of LocalJson/RemoteJson, sorted by key.
+		// DiffViewWindow uses these so users see YAML, matching the on-disk format.
+		public string LocalYaml;
+		public string RemoteYaml;
 	}
 
 	public SyncToolWindow()
@@ -1241,8 +1245,16 @@ public partial class SyncToolWindow : DockWindow
 		if ( result != null ) state.SyncResult = result;
 		if ( remoteDiffers.HasValue ) state.RemoteDiffers = remoteDiffers.Value;
 		if ( diffSummary != null ) state.DiffSummary = diffSummary;
-		if ( localJson != null ) state.LocalJson = localJson;
-		if ( remoteJson != null ) state.RemoteJson = remoteJson;
+		if ( localJson != null )
+		{
+			state.LocalJson = localJson;
+			state.LocalYaml = SyncToolYamlRenderer.RenderFromJson( localJson );
+		}
+		if ( remoteJson != null )
+		{
+			state.RemoteJson = remoteJson;
+			state.RemoteYaml = SyncToolYamlRenderer.RenderFromJson( remoteJson );
+		}
 		if ( status.HasValue ) state.Status = status.Value;
 		_items[id] = state;
 	}
@@ -3042,7 +3054,7 @@ public partial class SyncToolWindow : DockWindow
 	private void OpenDiffView( string id, string name )
 	{
 		if ( !_items.TryGetValue( id, out var state ) ) return;
-		var window = new DiffViewWindow( name, state.LocalJson ?? "", state.RemoteJson ?? "" );
+		var window = new DiffViewWindow( name, state.LocalYaml ?? "", state.RemoteYaml ?? "" );
 		window.Show();
 	}
 

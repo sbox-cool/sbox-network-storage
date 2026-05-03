@@ -10,7 +10,7 @@ SOURCE_LOCATIONS = (
 
 
 def source_id_from_filename(path, kind):
-    for suffix in (f".{kind}.yaml", f".{kind}.yml"):
+    for suffix in (f".{kind}.yaml", f".{kind}.yml", ".yaml", ".yml", ".json"):
         if path.name.endswith(suffix):
             return path.name[:-len(suffix)]
     return path.stem
@@ -23,7 +23,9 @@ def load_source_definitions(ns_dir):
         directory = ns_dir / folder_name
         if not directory.exists():
             continue
-        files = sorted(list(directory.glob(f"*.{kind}.yaml")) + list(directory.glob(f"*.{kind}.yml")))
+        typed = list(directory.glob(f"*.{kind}.yaml")) + list(directory.glob(f"*.{kind}.yml"))
+        plain = [p for p in list(directory.glob("*.yaml")) + list(directory.glob("*.yml")) if f".{kind}." not in p.name]
+        files = sorted({*typed, *plain})
         for path in files:
             rel = path.relative_to(ns_dir).as_posix()
             with open(path, encoding="utf-8") as fh:

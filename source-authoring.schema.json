@@ -3,21 +3,21 @@
   "$id": "https://sboxcool.com/schemas/network-storage/source-authoring.schema.json",
   "title": "Network Storage Source Definition",
   "type": "object",
-  "additionalProperties": false,
-  "required": [ "sourceVersion", "kind", "id", "definition" ],
+  "additionalProperties": true,
+  "required": [ "sourceVersion", "kind" ],
   "properties": {
     "sourceVersion": {
-      "type": "integer",
-      "const": 1
+      "oneOf": [
+        { "type": "integer", "const": 1 },
+        { "type": "string", "const": "1" }
+      ]
     },
     "kind": {
       "type": "string",
       "enum": [ "collection", "endpoint", "workflow", "test", "library" ]
     },
-    "id": {
-      "type": "string",
-      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*$"
-    },
+    "id": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*$" },
+    "slug": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*$" },
     "name": { "type": "string" },
     "description": { "type": "string" },
     "notes": { "type": "string" },
@@ -26,14 +26,27 @@
       "items": { "type": "string" },
       "uniqueItems": true
     },
-    "metadata": {
-      "type": "object",
-      "additionalProperties": true
+    "metadata": { "type": "object", "additionalProperties": true },
+    "definition": { "type": "object", "additionalProperties": true },
+    "exposure": {
+      "type": "string",
+      "enum": [ "public", "internal", "Publicly accessible", "Reusable Logic", "reusable-logic", "private" ]
     },
-    "definition": {
-      "type": "object",
-      "additionalProperties": true
-    }
+    "publiclyCallable": { "type": "boolean" },
+    "internalOnly": { "type": "boolean" },
+    "method": { "type": "string", "enum": [ "GET", "POST" ] },
+    "enabled": { "type": "boolean" },
+    "input": { "type": "object", "additionalProperties": true },
+    "params": { "type": "object", "additionalProperties": true },
+    "steps": { "type": "array", "items": { "$ref": "#/$defs/step" } },
+    "response": { "type": "object", "additionalProperties": true },
+    "routes": { "type": "object", "additionalProperties": true },
+    "schema": { "type": "object", "additionalProperties": true },
+    "collectionType": { "type": "string" },
+    "accessMode": { "type": "string" },
+    "constants": {},
+    "tables": {},
+    "blocks": { "type": "object", "additionalProperties": true }
   },
   "$defs": {
     "step": {
@@ -44,30 +57,25 @@
         "type": {
           "type": "string",
           "enum": [
-            "read",
-            "write",
-            "transform",
-            "condition",
-            "lookup",
-            "filter",
-            "workflow",
-            "block",
-            "while",
-            "until",
-            "foreach",
-            "call",
-            "return"
+            "read", "write", "delete", "transform", "condition", "assert", "lookup", "lookup_many", "filter", "workflow",
+            "compute", "random", "random_select", "webhook", "response", "sleep", "object", "array", "merge",
+            "sort", "switch", "block", "while", "until", "foreach", "call", "return", "return_on"
           ]
         },
         "when": { "type": [ "object", "string" ] },
-        "body": {
-          "type": "array",
-          "items": { "$ref": "#/$defs/step" }
-        },
-        "maxIterations": {
-          "type": "integer",
-          "minimum": 1
-        }
+        "body": { "type": "array", "items": { "$ref": "#/$defs/step" } },
+        "then": { "type": "array", "items": { "$ref": "#/$defs/step" } },
+        "else": { "type": "array", "items": { "$ref": "#/$defs/step" } },
+        "routes": { "type": "object", "additionalProperties": true },
+        "maxIterations": { "type": "integer", "minimum": 1 },
+        "maxDepth": { "type": "integer", "minimum": 1 },
+        "maxVisits": { "type": "integer", "minimum": 1 },
+        "ms": { "type": "integer", "minimum": 0 },
+        "durationMs": { "type": "integer", "minimum": 0 },
+        "params": { "type": "object", "additionalProperties": true },
+        "target": { "type": "string" },
+        "workflow": { "type": "string" },
+        "saveAs": { "type": "string" }
       },
       "additionalProperties": true
     }

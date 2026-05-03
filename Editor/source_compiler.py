@@ -36,9 +36,18 @@ else:
 RESOURCE_KINDS = {"collection", "endpoint", "workflow", "test", "library"}
 SOURCE_VERSION = 1
 SOURCE_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
-LEGACY_STEP_TYPES = {"read", "write", "transform", "condition", "lookup", "filter", "workflow", "compute", "random", "random_select"}
-NATIVE_STEP_TYPES = {"block", "while", "until", "foreach", "call", "return"}
+LEGACY_STEP_TYPES = {"read", "write", "delete", "transform", "condition", "assert", "lookup", "lookup_many", "filter", "workflow", "compute", "random", "random_select", "webhook", "response"}
+NATIVE_STEP_TYPES = {"block", "while", "until", "foreach", "call", "return", "return_on", "sleep", "object", "array", "merge", "sort", "switch"}
 CANONICAL_STEP_TYPES = LEGACY_STEP_TYPES | NATIVE_STEP_TYPES
+SOURCE_ONLY_KEYS = {"sourceVersion", "kind", "resourceKind", "imports", "libraries", "dslVersion"}
+COMMON_TOP_LEVEL_KEYS = {"sourceVersion", "kind", "resourceKind", "id", "slug", "name", "description", "notes", "imports", "metadata", "definition", "resource", "authoringMode", "sourceFormat", "sourcePath", "sourcePathSystemGenerated"}
+RESOURCE_BODY_KEYS = {
+    "collection": {"schema", "fields", "collectionType", "accessMode", "visibility", "version", "rateLimits", "rateLimitAction", "webhookOnRateLimit", "maxRecords", "allowRecordDelete", "requireSaveVersion", "constants", "tables"},
+    "endpoint": {"slug", "method", "enabled", "input", "steps", "response", "rateLimits", "skipSboxAuth", "requiresSecretKey", "requireReauth", "exposure", "publiclyCallable", "internalOnly", "visibility", "routes"},
+    "workflow": {"condition", "params", "input", "steps", "response", "enabled", "exposure", "internalOnly", "visibility", "budgets", "routes"},
+    "test": {"method", "input", "inputMode", "mockData", "expect", "endpoint", "workflow"},
+    "library": {"blocks"},
+}
 DEFAULT_BUDGET_LIMITS = {
     "compiledNodes": 500,
     "reads": 50,
@@ -47,6 +56,9 @@ DEFAULT_BUDGET_LIMITS = {
     "writeOps": 250,
     "maxIterations": 1000,
     "nestedCalls": 32,
+    "maxWorkflowDepth": 4,
+    "maxStepVisits": 20,
+    "maxSleepMs": 1000,
     "debugTraceBytes": 65536,
 }
 
@@ -137,7 +149,51 @@ def _resource_id_from_path(path: str, kind: str) -> str | None:
     for suffix in (f".{kind}.yaml", f".{kind}.yml"):
         if name.endswith(suffix):
             return name[: -len(suffix)]
+    for suffix in (".yaml", ".yml", ".json"):
+        if name.endswith(suffix):
+            return name[: -len(suffix)]
     return None
+
+
+def normalize_kind(value: Any) -> str | None:
+    return str(value).strip().lower() if value is not None and str(value).strip() else None
+
+
+def unwrap_source_body(source: dict[str, Any], kind: str) -> dict[str, Any]:
+    if isinstance(source.get(kind), dict):
+        body = copy.deepcopy(source[kind])
+        rest = {k: copy.deepcopy(v) for k, v in source.items() if k not in (kind, "resource")}
+        return {**rest, **body}
+    if isinstance(source.get("resource"), dict):
+        body = copy.deepcopy(source["resource"])
+        rest = {k: copy.deepcopy(v) for k, v in source.items() if k not in ("resource", kind)}
+        return {**rest, **body}
+    if isinstance(source.get("definition"), dict):
+        body = copy.deepcopy(source["definition"])
+        rest = {k: copy.deepcopy(v) for k, v in source.items() if k not in ("definition", "resource", kind)}
+        return {**body, **rest}
+    return copy.deepcopy(source)
+
+
+def has_inline_resource_body(data: dict[str, Any], kind: str) -> bool:
+    body = RESOURCE_BODY_KEYS.get(kind, set())
+    return any(key in data for key in body)
+
+
+def normalize_exposure(value: Any = None, *, publicly_callable: Any = None, internal_only: Any = None, visibility: Any = None) -> str | None:
+    if internal_only is True:
+        return "internal"
+    if publicly_callable is True:
+        return "public"
+    raw = value if value is not None else visibility
+    if raw is None:
+        return None
+    text = str(raw).strip().lower().replace("_", "-").replace(" ", "-")
+    if text in ("public", "publicly-callable", "game-api", "external", "exposed"):
+        return "public"
+    if text in ("internal", "private", "internal-private", "reusable", "reusable-logic", "workflow"):
+        return "internal"
+    return text or None
 
 
 def validate_source_object(data: Any, source_path: str = "") -> list[dict[str, Any]]:
@@ -145,22 +201,23 @@ def validate_source_object(data: Any, source_path: str = "") -> list[dict[str, A
     if not isinstance(data, dict):
         return [diagnostic("error", "INVALID_SOURCE_OBJECT", "Source must be a YAML mapping.", sourcePath=source_path)]
 
-    for key in ("sourceVersion", "kind", "id", "definition"):
+    for key in ("sourceVersion", "kind"):
         if key not in data:
             diags.append(diagnostic("error", "MISSING_FIELD", f"Missing required field: {key}.", sourcePath=source_path, sourcePointer=f"/{key}"))
 
-    extra = set(data) - {"sourceVersion", "kind", "id", "name", "description", "notes", "imports", "metadata", "definition"}
+    kind = normalize_kind(data.get("kind") or data.get("resourceKind"))
+    if kind not in RESOURCE_KINDS:
+        diags.append(diagnostic("error", "INVALID_RESOURCE_KIND", f"kind must be one of: {', '.join(sorted(RESOURCE_KINDS))}.", sourcePath=source_path, sourcePointer="/kind"))
+        return diags
+
+    extra = set(data) - COMMON_TOP_LEVEL_KEYS - RESOURCE_BODY_KEYS.get(kind, set())
     for key in sorted(extra):
         diags.append(diagnostic("warning", "UNKNOWN_TOP_LEVEL_FIELD", f"Unknown top-level source field: {key}.", sourcePath=source_path, sourcePointer=f"/{key}"))
 
-    if data.get("sourceVersion") != SOURCE_VERSION:
+    if str(data.get("sourceVersion", "")).strip() != str(SOURCE_VERSION):
         diags.append(diagnostic("error", "UNSUPPORTED_SOURCE_VERSION", f"sourceVersion must be {SOURCE_VERSION}.", sourcePath=source_path, sourcePointer="/sourceVersion"))
 
-    kind = data.get("kind")
-    if kind not in RESOURCE_KINDS:
-        diags.append(diagnostic("error", "INVALID_RESOURCE_KIND", f"kind must be one of: {', '.join(sorted(RESOURCE_KINDS))}.", sourcePath=source_path, sourcePointer="/kind"))
-
-    resource_id = data.get("id")
+    resource_id = data.get("id") or data.get("slug") or _resource_id_from_path(source_path, kind)
     if not isinstance(resource_id, str) or not SOURCE_ID_PATTERN.match(resource_id):
         diags.append(diagnostic("error", "INVALID_RESOURCE_ID", "id must start with an alphanumeric character and contain only letters, numbers, _, ., or -.", sourcePath=source_path, sourcePointer="/id"))
 
@@ -168,8 +225,11 @@ def validate_source_object(data: Any, source_path: str = "") -> list[dict[str, A
         path_id = _resource_id_from_path(source_path, kind)
         if path_id and resource_id and path_id != resource_id:
             diags.append(diagnostic("warning", "FILE_ID_MISMATCH", f"File name id '{path_id}' differs from source id '{resource_id}'.", sourcePath=source_path))
-        if source_path and f".{kind}." not in Path(source_path).name:
-            diags.append(diagnostic("error", "FILE_KIND_MISMATCH", f"File name must include .{kind}.yaml or .{kind}.yml.", sourcePath=source_path))
+        file_name = Path(source_path).name
+        typed = f".{kind}." in file_name
+        plain_yml = file_name.endswith((".yml", ".yaml")) and "." not in file_name.rsplit("/", 1)[-1].removesuffix(".yml").removesuffix(".yaml")
+        if source_path and not (typed or plain_yml):
+            diags.append(diagnostic("error", "FILE_KIND_MISMATCH", f"File name must include .{kind}.yaml/.{kind}.yml or be a plain .yml/.yaml file inside the {kind}s folder.", sourcePath=source_path))
 
     imports = data.get("imports", [])
     if imports is None:
@@ -179,11 +239,11 @@ def validate_source_object(data: Any, source_path: str = "") -> list[dict[str, A
     elif len(imports) != len(set(imports)):
         diags.append(diagnostic("error", "DUPLICATE_IMPORT", "imports must not contain duplicate entries.", sourcePath=source_path, sourcePointer="/imports"))
 
-    definition = data.get("definition")
-    if not isinstance(definition, dict):
-        diags.append(diagnostic("error", "INVALID_DEFINITION", "definition must be a mapping.", sourcePath=source_path, sourcePointer="/definition"))
+    body = unwrap_source_body(data, kind)
+    if not isinstance(data.get("definition"), dict) and not has_inline_resource_body(data, kind):
+        diags.append(diagnostic("error", "INVALID_DEFINITION", "Source must provide a definition mapping or flat resource fields.", sourcePath=source_path, sourcePointer="/definition"))
     else:
-        diags.extend(validate_definition(kind, definition, source_path))
+        diags.extend(validate_definition(kind, body, source_path))
 
     return diags
 
@@ -192,6 +252,10 @@ def validate_definition(kind: str, definition: dict[str, Any], source_path: str)
     diags: list[dict[str, Any]] = []
     if kind == "endpoint" and definition.get("method", "POST") not in ("GET", "POST"):
         diags.append(diagnostic("error", "INVALID_METHOD", "Endpoint method must be GET or POST.", sourcePath=source_path, sourcePointer="/definition/method"))
+    if kind in ("endpoint", "workflow"):
+        exposure = normalize_exposure(definition.get("exposure"), publicly_callable=definition.get("publiclyCallable"), internal_only=definition.get("internalOnly"), visibility=definition.get("visibility"))
+        if exposure and exposure not in ("public", "internal"):
+            diags.append(diagnostic("error", "INVALID_EXPOSURE", "exposure must be public or internal.", sourcePath=source_path, sourcePointer="/exposure"))
     if kind == "collection" and not any(k in definition for k in ("schema", "fields", "tables", "constants")):
         diags.append(diagnostic("warning", "EMPTY_COLLECTION_DEFINITION", "Collection source has no schema, fields, tables, or constants.", sourcePath=source_path, sourcePointer="/definition"))
     if "steps" in definition:
@@ -239,6 +303,12 @@ def validate_steps(steps: Any, source_path: str, pointer: str) -> list[dict[str,
                     diags.append(diagnostic("error", "MISSING_FOREACH_FIELD", f"foreach requires {key}.", sourcePath=source_path, sourcePointer=f"{step_pointer}/{key}"))
         if step_type == "call" and not step.get("target"):
             diags.append(diagnostic("error", "MISSING_CALL_TARGET", "call requires target.", sourcePath=source_path, sourcePointer=f"{step_pointer}/target"))
+        if step_type == "workflow" and not (step.get("workflow") or step.get("target")):
+            diags.append(diagnostic("error", "MISSING_WORKFLOW_TARGET", "workflow step requires workflow or target.", sourcePath=source_path, sourcePointer=f"{step_pointer}/workflow"))
+        if step_type == "sleep":
+            ms = step.get("ms", step.get("durationMs", step.get("delayMs", 0)))
+            if not isinstance(ms, int) or ms < 0:
+                diags.append(diagnostic("error", "INVALID_SLEEP_MS", "sleep requires a non-negative ms/durationMs value.", sourcePath=source_path, sourcePointer=f"{step_pointer}/ms"))
         for child_key in ("body", "then", "else"):
             if child_key in step and isinstance(step[child_key], list):
                 diags.extend(validate_steps(step[child_key], source_path, f"{step_pointer}/{child_key}"))
@@ -250,22 +320,30 @@ def _copy_known(data: dict[str, Any], keys: list[str]) -> dict[str, Any]:
 
 
 def canonical_definition_from_source(source: dict[str, Any]) -> dict[str, Any]:
-    kind = source["kind"]
-    definition = copy.deepcopy(source["definition"])
+    kind = normalize_kind(source.get("kind") or source.get("resourceKind"))
+    body = unwrap_source_body(source, kind)
+    resource_id = body.get("id") or body.get("slug") or source.get("id") or source.get("slug")
+    canonical = _copy_known(body, ["id", "slug", "name", "description", "notes", "metadata"])
+    if resource_id and "id" not in canonical:
+        canonical["id"] = resource_id
+
+    for key, value in body.items():
+        if key in SOURCE_ONLY_KEYS or key in ("resource", "definition") or key == kind:
+            continue
+        canonical[key] = copy.deepcopy(value)
+
     if kind == "endpoint":
-        canonical = _copy_known(source, ["id", "name", "description", "notes", "metadata"])
-        canonical["slug"] = source["id"]
-        canonical.update(definition)
+        canonical["slug"] = str(canonical.get("slug") or resource_id or canonical.get("id"))
+        exposure = normalize_exposure(canonical.get("exposure"), publicly_callable=canonical.get("publiclyCallable"), internal_only=canonical.get("internalOnly"), visibility=canonical.get("visibility"))
+        if exposure:
+            canonical["exposure"] = exposure
     elif kind == "collection":
-        canonical = _copy_known(source, ["id", "name", "description", "notes", "metadata"])
-        canonical["name"] = source["id"]
-        canonical.update(definition)
+        canonical["name"] = str(canonical.get("name") or resource_id or canonical.get("id"))
     elif kind == "workflow":
-        canonical = _copy_known(source, ["id", "name", "description", "notes", "metadata"])
-        canonical.update(definition)
-    else:
-        canonical = _copy_known(source, ["id", "name", "description", "notes", "metadata"])
-        canonical["definition"] = definition
+        exposure = normalize_exposure(canonical.get("exposure"), internal_only=canonical.get("internalOnly"), visibility=canonical.get("visibility"))
+        if exposure:
+            canonical["exposure"] = exposure
+
     return canonical
 
 
@@ -295,7 +373,8 @@ def _steps_for_resource(kind: str, canonical: dict[str, Any]) -> list[dict[str, 
         return copy.deepcopy(canonical.get("steps") or [])
     if kind == "library":
         steps: list[dict[str, Any]] = []
-        for block_id, block in (canonical.get("definition", {}).get("blocks") or {}).items():
+        blocks = canonical.get("blocks") or canonical.get("definition", {}).get("blocks") or {}
+        for block_id, block in blocks.items():
             if isinstance(block, dict):
                 steps.append({"id": block_id, "type": "block", "body": copy.deepcopy(block.get("steps") or [])})
         return steps
@@ -356,6 +435,9 @@ def estimate_budgets(nodes: list[dict[str, Any]]) -> dict[str, int]:
         "writeOps": sum(len(n.get("ops") or []) for n in flat if n.get("type") == "write"),
         "maxIterations": sum(int(n.get("maxIterations") or 0) for n in flat if n.get("type") in ("while", "until", "foreach")),
         "nestedCalls": sum(1 for n in flat if n.get("type") in ("workflow", "call")),
+        "maxWorkflowDepth": max((int(n.get("maxDepth") or n.get("maxWorkflowDepth") or 0) for n in flat if n.get("type") in ("workflow", "call")), default=0),
+        "maxStepVisits": max((int(n.get("maxVisits") or n.get("maxStepVisits") or 0) for n in flat), default=0),
+        "maxSleepMs": sum(int(n.get("ms") or n.get("durationMs") or n.get("delayMs") or 0) for n in flat if n.get("type") == "sleep"),
         "debugTraceBytes": 0,
     }
 
@@ -396,8 +478,8 @@ def compile_source_text(text: str, source_path: str, budget_limits: dict[str, in
             "ok": False,
         }
     canonical = canonical_definition_from_source(source)
-    kind = source["kind"]
-    resource_id = source["id"]
+    kind = normalize_kind(source.get("kind") or source.get("resourceKind"))
+    resource_id = str(canonical.get("slug") or canonical.get("id") or _resource_id_from_path(source_path, kind) or "unknown")
     plan = build_execution_plan(kind, resource_id, canonical, source_path)
     diags.extend(budget_diagnostics(plan, budget_limits))
     dependencies = sorted(source.get("imports") or [])
@@ -406,14 +488,10 @@ def compile_source_text(text: str, source_path: str, budget_limits: dict[str, in
 
 def compile_legacy_json(data: dict[str, Any], source_path: str = "") -> dict[str, Any]:
     kind = infer_legacy_kind(data, source_path)
-    resource_id = _resource_id(kind, data, source_path)
-    diags = [diagnostic(
-        "error",
-        "JSON_UNSUPPORTED",
-        "Legacy JSON resources are no longer supported. Migrate this resource to YAML source or pull it from the Network Storage API.",
-        sourcePath=source_path,
-    )]
-    return _compiled_resource(kind, resource_id, "unsupported-json", "json", None, stable_json(data), [], {}, {}, diags, source_path)
+    canonical = canonical_definition_from_legacy(data)
+    resource_id = _resource_id(kind, canonical, source_path)
+    plan = build_execution_plan(kind, resource_id, canonical, source_path)
+    return _compiled_resource(kind, resource_id, "legacy-json", "json", None, stable_json(data), [], canonical, plan, [], source_path)
 
 
 def _compiled_resource(kind: str, resource_id: str, mode: str, source_format: str, source_version: int | None, source_text: str, dependencies: list[str], canonical: dict[str, Any], plan: dict[str, Any], diags: list[dict[str, Any]], source_path: str) -> dict[str, Any]:
@@ -449,13 +527,19 @@ def _has_native_nodes(nodes: list[dict[str, Any]]) -> bool:
 
 
 def export_legacy_json(compiled: dict[str, Any]) -> tuple[dict[str, Any] | None, list[dict[str, Any]]]:
-    return None, [diagnostic(
-        "error",
-        "JSON_EXPORT_UNSUPPORTED",
-        "Legacy JSON export is no longer supported. Use YAML source or the Network Storage API.",
-        kind=compiled.get("kind"),
-        id=compiled.get("id"),
-    )]
+    canonical = copy.deepcopy(compiled.get("canonicalDefinition") or {})
+    plan = compiled.get("executionPlan") or {}
+    if compiled.get("sourceFormat") == "json" or compiled.get("authoringMode") == "legacy-json":
+        return canonical, []
+    if compiled.get("kind") in ("endpoint", "workflow") and _has_native_nodes(plan.get("nodes") or []):
+        return None, [diagnostic(
+            "error",
+            "JSON_EXPORT_UNSUPPORTED",
+            "This source uses native control-flow nodes and cannot be flattened to legacy JSON locally. Push it through the backend source-upgrade route.",
+            kind=compiled.get("kind"),
+            id=compiled.get("id"),
+        )]
+    return canonical, list(compiled.get("diagnostics") or [])
 
 
 def json_to_yaml_reverse_conversion() -> None:

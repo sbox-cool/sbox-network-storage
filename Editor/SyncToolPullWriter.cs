@@ -97,14 +97,14 @@ public static class SyncToolPullWriter
 		{
 			"collection" => new HashSet<string>( StringComparer.OrdinalIgnoreCase ) { "id", "name", "description", "notes" },
 			"endpoint" => new HashSet<string>( StringComparer.OrdinalIgnoreCase ) { "id", "slug", "name", "description", "notes" },
-			"workflow" => new HashSet<string>( StringComparer.OrdinalIgnoreCase ) { "id", "name", "description", "notes", "legacyJson" },
+			"workflow" => new HashSet<string>( StringComparer.OrdinalIgnoreCase ) { "id", "name", "description", "notes" },
 			_ => new HashSet<string>( StringComparer.OrdinalIgnoreCase ) { "id", "name", "description", "notes" }
 		};
-		var definition = new Dictionary<string, object>( StringComparer.OrdinalIgnoreCase );
+		var body = new Dictionary<string, object>( StringComparer.OrdinalIgnoreCase );
 		foreach ( var pair in data )
 		{
-			if ( !topLevelKeys.Contains( pair.Key ) )
-				definition[pair.Key] = pair.Value;
+			if ( !topLevelKeys.Contains( pair.Key ) && !pair.Key.StartsWith( "_", StringComparison.Ordinal ) )
+				body[pair.Key] = pair.Value;
 		}
 
 		var header = new List<string>
@@ -120,8 +120,8 @@ public static class SyncToolPullWriter
 		}
 
 		var lines = new List<string>( header );
-		lines.Add( "definition:" );
-		AppendYamlMapping( lines, definition, 1 );
+		if ( body.Count > 0 )
+			AppendYamlMapping( lines, body, 0 );
 		lines.Add( "" );
 		return string.Join( "\n", lines );
 	}

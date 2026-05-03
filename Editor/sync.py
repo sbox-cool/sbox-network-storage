@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 """
 sync.py — Push local Network Storage source data (collections, endpoints, workflows)
 to the sbox.cool management API, and generate collection YAML source from C# data files.
@@ -202,8 +202,9 @@ def load_source_dir(directory, kind):
     if not directory.exists():
         return []
 
-    items = []
-    for f in sorted(list(directory.glob(f"*.{kind}.yaml")) + list(directory.glob(f"*.{kind}.yml"))):
+    typed = list(directory.glob(f"*.{kind}.yaml")) + list(directory.glob(f"*.{kind}.yml"))
+    plain = [p for p in list(directory.glob("*.yaml")) + list(directory.glob("*.yml")) if f".{kind}." not in p.name]
+    for f in sorted({*typed, *plain}):
         compiled = compile_path(f)
         resource_id = compiled.get('id') or f.stem
 
@@ -232,7 +233,7 @@ def source_text_from_definition(kind, resource_id, data):
     top_keys = {
         "collection": {"id", "name", "description", "notes"},
         "endpoint": {"id", "slug", "name", "description", "notes"},
-        "workflow": {"id", "name", "description", "notes", "legacyJson"},
+        "workflow": {"id", "name", "description", "notes"},
     }.get(kind, {"id", "name", "description", "notes"})
     header = [
         "sourceVersion: 1",
@@ -243,10 +244,9 @@ def source_text_from_definition(kind, resource_id, data):
         value = data.get(key)
         if value not in (None, ""):
             header.append(f"{key}: {json.dumps(str(value), ensure_ascii=False)}")
-    definition = {key: value for key, value in data.items() if key not in top_keys}
+    body = {key: value for key, value in data.items() if key not in top_keys and not key.startswith("_")}
     lines = list(header)
-    lines.append("definition:")
-    append_yaml_mapping(lines, definition, 1)
+    append_yaml_mapping(lines, body, 0)
     lines.append("")
     return "\n".join(lines)
 
@@ -461,6 +461,41 @@ def push_workflows(config, dry_run=False):
     print(f"  Pushed workflows: {json.dumps(result, indent=2)[:200]}")
 
 
+def upgrade_source_with_backend(config, source):
+    """Ask the backend compiler to canonicalize and safely upgrade a source file."""
+    payload = {
+        "kind": source.get("kind"),
+        "id": source.get("id"),
+        "sourceFormat": source.get("sourceFormat", "yaml"),
+        "sourcePath": source.get("sourcePath"),
+        "sourceText": source.get("sourceText"),
+    }
+    result = api_request(config, "POST", "source-upgrade", payload)
+    if not isinstance(result, dict) or not result.get("ok", False):
+        raise SyncApiError(f"Backend source upgrade failed for {source.get('kind')}:{source.get('id')}")
+
+    upgraded_text = result.get("upgradedSourceText")
+    safe_auto_write = result.get("safeAutoWrite") is True
+    if safe_auto_write and upgraded_text and upgraded_text != source.get("sourceText") and source.get("sourcePath"):
+        target = NS_DIR / source["sourcePath"]
+        target.write_text(upgraded_text, encoding="utf-8")
+        source["sourceText"] = upgraded_text
+        print(f"  Updated source layout: {source['sourcePath']}")
+    elif upgraded_text and upgraded_text != source.get("sourceText"):
+        print(f"  WARN [{source.get('id')}]: backend suggested a source upgrade but marked it unsafe to auto-write; leaving file unchanged")
+
+    canonical = result.get("canonicalDefinition")
+    if not isinstance(canonical, dict):
+        raise SyncApiError(f"Backend source upgrade did not return a canonicalDefinition for {source.get('kind')}:{source.get('id')}")
+
+    canonical = dict(canonical)
+    canonical.setdefault("authoringMode", "source")
+    canonical.setdefault("sourceFormat", source.get("sourceFormat", "yaml"))
+    canonical.setdefault("sourcePath", source.get("sourcePath"))
+    canonical.setdefault("sourceText", source.get("sourceText"))
+    return canonical
+
+
 def push_sources(config, dry_run=False):
     sources = load_source_definitions(NS_DIR)
     if not sources:
@@ -488,6 +523,16 @@ def push_sources(config, dry_run=False):
     if dry_run:
         return
 
+    upgraded_sources = []
+    for source in sources:
+        if source.get("kind") == "library":
+            print(f"  Skipping library source push: {source.get('sourcePath')} (used locally for imports)")
+            continue
+        upgraded_sources.append({
+            **upgrade_source_with_backend(config, source),
+            "kind": source.get("kind"),
+        })
+
     # The management API is kind-scoped. Keep source sync using the same routes as
     # the editor UI so it works on deployed backends that intentionally do not have
     # a generic /sources endpoint.
@@ -498,7 +543,7 @@ def push_sources(config, dry_run=False):
         "test": "tests",
     }
     grouped = {}
-    for source in sources:
+    for source in upgraded_sources:
         route = route_by_kind.get(source.get("kind"))
         if not route:
             print(f"  Skipping unsupported source kind: {source.get('kind')} ({source.get('sourcePath')})")

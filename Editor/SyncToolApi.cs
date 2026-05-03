@@ -209,6 +209,9 @@ public static class SyncToolApi
 	/// <summary>Push tests to server.</summary>
 	public static Task<JsonElement?> PushTests( JsonElement data ) => Request( "PUT", "tests", data );
 
+ 	/// <summary>Ask backend compiler to canonicalize and safely upgrade one source file.</summary>
+	public static Task<JsonElement?> UpgradeSource( JsonElement data ) => Request( "POST", "source-upgrade", data );
+
 	/// <summary>Run a single test via dry-run.</summary>
 	public static Task<JsonElement?> RunTest( JsonElement data ) => Request( "POST", "test-endpoint", data );
 

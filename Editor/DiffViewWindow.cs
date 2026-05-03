@@ -1,13 +1,14 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text.Json;
 using Sandbox;
 using Editor;
 
 /// <summary>
-/// Side-by-side diff view window. Shows local (left) vs remote (right) JSON
+/// Side-by-side diff view window. Shows local (left) vs remote (right) text
 /// with changed/added/removed lines highlighted. Scrollable via keyboard and drag.
+/// Input is rendered upstream as sorted YAML by <see cref="SyncToolYamlRenderer"/>
+/// so this window only needs to do a line-by-line diff.
 /// </summary>
 public class DiffViewWindow : DockWindow
 {
@@ -43,55 +44,24 @@ public class DiffViewWindow : DockWindow
 	private const float LineH = 16f;
 	private const float HeaderH = 90f;
 
-	public DiffViewWindow( string name, string localJson, string remoteJson )
+	public DiffViewWindow( string name, string localText, string remoteText )
 	{
 		_name = name;
-		Title = $"Diff — {name}";
+		Title = $"Diff \u2014 {name}";
 		Size = new Vector2( 820, 600 );
 		MinimumSize = new Vector2( 600, 300 );
 
-		// Normalize both to sorted keys so key ordering doesn't cause false diffs
-		_localLines = NormalizePretty( localJson ).Split( '\n' );
-		_remoteLines = NormalizePretty( remoteJson ).Split( '\n' );
+		// Input is already normalized (sorted YAML) by SyncToolYamlRenderer,
+		// so we just split on newlines without further parsing.
+		_localLines = SplitLines( localText );
+		_remoteLines = SplitLines( remoteText );
 		_diffLines = BuildDiff( _localLines, _remoteLines );
 	}
 
-	/// <summary>
-	/// Re-serialize JSON with sorted keys and consistent indentation
-	/// so the line-by-line diff only shows actual value changes.
-	/// </summary>
-	private static string NormalizePretty( string json )
+	private static string[] SplitLines( string text )
 	{
-		if ( string.IsNullOrEmpty( json ) ) return "";
-		try
-		{
-			var el = JsonSerializer.Deserialize<JsonElement>( json );
-			var sorted = SortElement( el );
-			return JsonSerializer.Serialize( sorted, new JsonSerializerOptions { WriteIndented = true } );
-		}
-		catch { return json; }
-	}
-
-	private static object SortElement( JsonElement el )
-	{
-		switch ( el.ValueKind )
-		{
-			case JsonValueKind.Object:
-				var dict = new SortedDictionary<string, object>();
-				foreach ( var prop in el.EnumerateObject() )
-					dict[prop.Name] = SortElement( prop.Value );
-				return dict;
-			case JsonValueKind.Array:
-				var arr = new List<object>();
-				foreach ( var item in el.EnumerateArray() )
-					arr.Add( SortElement( item ) );
-				return arr;
-			case JsonValueKind.String: return el.GetString();
-			case JsonValueKind.Number: return el.TryGetInt64( out var l ) ? (object)l : el.GetDouble();
-			case JsonValueKind.True: return true;
-			case JsonValueKind.False: return false;
-			default: return null;
-		}
+		if ( string.IsNullOrEmpty( text ) ) return Array.Empty<string>();
+		return text.Replace( "\r\n", "\n" ).Replace( '\r', '\n' ).Split( '\n' );
 	}
 
 	private float MaxScroll => Math.Max( 0, _diffLines.Length * LineH - ( Height - HeaderH - 20 ) );

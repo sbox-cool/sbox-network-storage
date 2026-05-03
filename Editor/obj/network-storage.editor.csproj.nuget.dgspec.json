@@ -2338,14 +2338,14 @@
         }
       }
     },
-    "C:\\users\\user\\documents\\s&box projects\\hooked_inc\\Libraries\\sboxcool.network-storage\\Code\\network-storage.csproj": {
+    "C:\\Users\\user\\Documents\\s&box projects\\hooked_inc\\Libraries\\sboxcool.network-storage\\Code\\network-storage.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "C:\\users\\user\\documents\\s&box projects\\hooked_inc\\Libraries\\sboxcool.network-storage\\Code\\network-storage.csproj",
+        "projectUniqueName": "C:\\Users\\user\\Documents\\s&box projects\\hooked_inc\\Libraries\\sboxcool.network-storage\\Code\\network-storage.csproj",
         "projectName": "network-storage",
-        "projectPath": "C:\\users\\user\\documents\\s&box projects\\hooked_inc\\Libraries\\sboxcool.network-storage\\Code\\network-storage.csproj",
+        "projectPath": "C:\\Users\\user\\Documents\\s&box projects\\hooked_inc\\Libraries\\sboxcool.network-storage\\Code\\network-storage.csproj",
         "packagesPath": "C:\\Users\\user\\.nuget\\packages\\",
-        "outputPath": "C:\\users\\user\\documents\\s&box projects\\hooked_inc\\Libraries\\sboxcool.network-storage\\Code\\obj\\",
+        "outputPath": "C:\\Users\\user\\Documents\\s&box projects\\hooked_inc\\Libraries\\sboxcool.network-storage\\Code\\obj\\",
         "projectStyle": "PackageReference",
         "configFilePaths": [
           "C:\\Users\\user\\AppData\\Roaming\\NuGet\\NuGet.Config"
@@ -2710,8 +2710,8 @@
               "C:\\Program Files (x86)\\Steam\\steamapps\\common\\sbox\\editor\\ShaderGraph\\Code\\shadergraph.csproj": {
                 "projectPath": "C:\\Program Files (x86)\\Steam\\steamapps\\common\\sbox\\editor\\ShaderGraph\\Code\\shadergraph.csproj"
               },
-              "C:\\users\\user\\documents\\s&box projects\\hooked_inc\\Libraries\\sboxcool.network-storage\\Code\\network-storage.csproj": {
-                "projectPath": "C:\\users\\user\\documents\\s&box projects\\hooked_inc\\Libraries\\sboxcool.network-storage\\Code\\network-storage.csproj"
+              "C:\\Users\\user\\Documents\\s&box projects\\hooked_inc\\Libraries\\sboxcool.network-storage\\Code\\network-storage.csproj": {
+                "projectPath": "C:\\Users\\user\\Documents\\s&box projects\\hooked_inc\\Libraries\\sboxcool.network-storage\\Code\\network-storage.csproj"
               }
             }
           }

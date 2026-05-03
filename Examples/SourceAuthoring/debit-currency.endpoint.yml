@@ -1,0 +1,39 @@
+sourceVersion: 1
+kind: endpoint
+id: debit-currency
+name: Debit Currency
+description: Internal reusable logic called by other endpoints; not exposed to game clients.
+exposure: internal
+params:
+  amount:
+    type: number
+steps:
+  - id: positive_amount
+    type: condition
+    check:
+      field: "{{params.amount}}"
+      op: ">"
+      value: 0
+    routes:
+      false:
+        action: reject
+        status: 400
+        error: INVALID_AMOUNT
+        message: Amount must be positive.
+  - id: player
+    type: read
+    collection: players
+    key: "{{steamId}}"
+  - id: debit
+    type: write
+    collection: players
+    key: "{{steamId}}"
+    ops:
+      - op: inc
+        path: gold
+        value: "{{-params.amount}}"
+response:
+  status: 200
+  body:
+    ok: true
+    debited: "{{params.amount}}"

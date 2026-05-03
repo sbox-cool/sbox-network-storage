@@ -1,6 +1,6 @@
 # Network Storage Source Authoring
 
-Network Storage source authoring treats YAML as source code for resources. Legacy JSON authoring, JSON export, and local JSON fallback are no longer supported.
+Network Storage source authoring treats YAML as source code for collections, endpoints, reusable logic, tests, and libraries. The backend compiler is the source of truth: local tools validate early, then `sync.py --sources` asks the backend to canonicalize and safely upgrade each source before upload.
 
 ## File Names
 
@@ -8,129 +8,135 @@ Local projects store source files in the matching resource folder:
 
 ```text
 Editor/Network Storage/
-  collections/<id>.collection.yml
+  collections/<id>.collection.yml   # preferred typed name
+  collections/<id>.yml              # also accepted inside the folder
   endpoints/<slug>.endpoint.yml
+  endpoints/<slug>.yml
   workflows/<id>.workflow.yml
   tests/<id>.test.yml
   libraries/<id>.library.yml
 ```
 
-`.yaml` is also accepted, but project documentation and generated examples should prefer `.yml`. The resource kind is part of the file name and must match the `kind` field inside the source. Existing `.json` resources are unsupported and should be migrated to YAML before editing.
+Prefer `.yml` for new files. `.yaml` is accepted. Typed names are preferred, but plain names inside the correct folder are supported for backwards compatibility.
 
-## Source Model
+## Endpoint Exposure
 
-Every source file uses the same top-level shape:
+The new model uses one resource kind for callable logic: `kind: endpoint`.
+
+Use `exposure` to choose how it is used:
+
+| Exposure | Meaning | Client call |
+| --- | --- | --- |
+| `public` | Publicly accessible game API endpoint | `NetworkStorage.CallEndpoint("slug")` |
+| `internal` | Reusable Logic, private to backend endpoint/workflow calls | not directly callable by clients |
+
+Public endpoints can still be called internally. Internal endpoints are reusable logic only.
 
 ```yaml
 sourceVersion: 1
 kind: endpoint
 id: mine-ore
 name: Mine Ore
-description: Mine one ore deposit.
-imports: []
-definition:
-  method: POST
-  input: {}
-  steps: []
-  response:
-    status: 200
-    body:
-      ok: true
+exposure: public
+method: POST
+input:
+  type: object
+  properties:
+    amount:
+      type: number
+steps:
+  - id: validate_amount
+    type: condition
+    check:
+      field: "{{input.amount}}"
+      op: ">"
+      value: 0
+    routes:
+      false:
+        action: reject
+        status: 400
+        error: INVALID_AMOUNT
+        message: Amount must be positive.
+        webhook: true
+response:
+  status: 200
+  body:
+    ok: true
 ```
 
-Required fields:
+```yaml
+sourceVersion: 1
+kind: endpoint
+id: debit-currency
+name: Debit Currency
+exposure: internal
+params:
+  amount:
+    type: number
+steps:
+  - id: debit
+    type: write
+    collection: players
+    key: "{{steamId}}"
+    ops:
+      - op: inc
+        path: gold
+        value: "{{-params.amount}}"
+```
 
-- `sourceVersion`: integer source schema version. Start with `1`.
-- `kind`: one of `collection`, `endpoint`, `workflow`, `test`, or `library`.
-- `id`: stable resource id. Endpoint ids are endpoint slugs.
-- `definition`: typed resource body.
+## Flat And Wrapper Layouts
 
-Optional fields:
+New source should be flat: resource fields live at the top level next to `sourceVersion`, `kind`, and `id`.
 
-- `name`
-- `description`
-- `notes`
-- `imports`
-- `metadata`
+The older wrapper layout is still accepted:
+
+```yaml
+sourceVersion: 1
+kind: endpoint
+id: mine-ore
+definition:
+  method: POST
+  steps: []
+```
+
+The backend source-upgrade route can rewrite safe wrapper layouts into the flat layout. If the backend marks an upgrade unsafe, the sync tool prints a warning and leaves the file unchanged.
+
+## Routes, Rejection, And Webhooks
+
+Use canonical `routes` for branching and rejects. Legacy `onFail` is still accepted for backwards compatibility, but new files should use `routes.false`.
+
+A generic condition failure (`CONDITION_FAILED` / `Condition check failed.`) is treated as actionable debugging signal and reports to error webhooks. Domain-specific expected rejections stay quiet unless the route sets `webhook: true`.
+
+## Recursion And Runtime Protection
+
+Recursive calls and reusable logic are bounded by backend limits. Current defaults are:
+
+- max workflow depth: `4`
+- max step visits: `20`
+- max sleep per request: `1000ms`
+- max wall time: `5000ms`
+
+When a limit is hit, the endpoint response includes structured error details and the backend reports it through the error path.
+
+## Legacy JSON
+
+Legacy JSON is still accepted for compatibility and can be compiled into canonical metadata. Keep JSON fixtures/tests around when checking compatibility. Prefer YAML for new authoring.
 
 ## YAML Subset
 
-The supported source syntax is a safe YAML 1.2 subset:
+The supported source syntax is a safe YAML subset:
 
 - Plain maps, arrays, strings, numbers, booleans, and null.
 - Block strings are allowed for notes and long expressions.
 - Custom tags are rejected.
-- Executable parser features are rejected.
-- Anchors and merge keys are not part of the first supported subset.
+- Anchors, aliases, and merge keys are rejected.
 - Duplicate keys are invalid.
-
-The backend compiler stores original source text and compiles it into a typed execution plan. Request-time execution does not parse YAML.
-
-## Legacy JSON
-
-Legacy JSON resources are unsupported:
-
-- YAML source is the only local authoring format.
-- JSON resource files are ignored by local project scans.
-- Explicit `.json` compiler input returns a `JSON_UNSUPPORTED` diagnostic.
-- JSON export mode has been removed.
-
-## Compiler Fingerprints
-
-Compiled resources store:
-
-- compiler fingerprint
-- source hash
-- dependency hash
-- canonical definition hash
-- execution plan hash
-
-When a compiler changes, resources with stale fingerprints are recompiled in a controlled job. A failed recompile keeps the previous known-good plan active and surfaces diagnostics.
-
-## Execution Budgets
-
-Source definitions compile into bounded execution plans. Budgets protect games from slow requests and protect creators from hidden flat-step explosions.
-
-Initial budget categories:
-
-- `maxCompiledNodes`: total canonical nodes after imports and expansion.
-- `maxReads`: direct collection reads and lookup-style reads.
-- `maxFilters`: filter scans over arrays or query results.
-- `maxWrites`: write steps.
-- `maxWriteOps`: individual mutation operations inside write steps.
-- `maxIterations`: total loop and foreach iterations.
-- `maxNestedCalls`: workflow or library call depth.
-- `maxWallTimeMs`: request-time execution wall clock.
-- `maxDebugTraceBytes`: size of returned debug and trace data.
-
-Validation should estimate these where it can. Runtime failures should report the resource id, source path or line, canonical node id, budget category, observed value, limit, and a suggested fix.
-
-Common fixes:
-
-- Add or lower `maxIterations` on `while`, `until`, and `foreach` nodes.
-- Replace repeated flat steps with `foreach`, `call`, or a library block.
-- Move broad scans into a bounded lookup or filter input.
-- Split unrelated writes across separate gameplay moments.
-- Reduce debug trace output when logic is already verified.
 
 ## Local Validation And Canonical Preview
 
-The local reference compiler mirrors the backend source contract for sync tooling, MCP-style helpers, and CI:
-
 ```powershell
 python Libraries/sboxcool.network-storage/Editor/source_compiler.py --project-root .
-python Libraries/sboxcool.network-storage/Editor/source_compiler.py --file "Editor/Network Storage/workflows/factory_route.recompute.workflow.yml" --json
+python Libraries/sboxcool.network-storage/Editor/source_compiler.py --file "Editor/Network Storage/endpoints/mine-ore.endpoint.yml" --json
 ```
 
-The compiler emits:
-
-- source format and authoring mode (`source`; unsupported JSON input reports `unsupported-json`)
-- compiler fingerprint and fingerprint hash
-- source, dependency, canonical, and execution-plan hashes
-- deterministic canonical definition
-- canonical execution plan with source maps
-- diagnostics with source paths, object pointers, node ids, and budget categories where available
-
-`sync.py --sources` runs this validation before upload. Invalid YAML source is rejected locally and prints per-resource diagnostics.
-
-Automatic JSON-to-YAML reverse conversion is not supported by the local tooling. Migrate legacy JSON manually or pull YAML source from the Network Storage API.
+`sync.py --sources` validates locally, calls the backend `source-upgrade` route, writes safe backend upgrades, then uploads canonical definitions through the kind-specific management routes.
