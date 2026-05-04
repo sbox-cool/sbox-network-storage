@@ -24,9 +24,16 @@ public class MergeViewWindow : DockWindow
 	private readonly List<FieldDiff> _addedFields;
 	private readonly List<FieldDiff> _changedFields;
 	private readonly Action _onMerge;
+	// Optional inspect-only callback. When set, the window renders a
+	// "View Diff" button so reviewers can drill into the full local-vs-remote
+	// content before deciding whether to pull. Useful when the additive-fields
+	// summary keeps reappearing after pull/push/sync and the reviewer wants
+	// to confirm what the classifier is actually seeing.
+	private readonly Action _onViewDiff;
 	private Vector2 _mousePos;
 	private float _scroll;
 	private Rect _cancelRect;
+	private Rect _viewDiffRect;
 	private Rect _mergeRect;
 
 	private const float LineH = 16f;
@@ -51,13 +58,15 @@ public class MergeViewWindow : DockWindow
 	};
 
 	public MergeViewWindow( string resourceName, string resourceType,
-		List<FieldDiff> addedFields, List<FieldDiff> changedFields, Action onMerge )
+		List<FieldDiff> addedFields, List<FieldDiff> changedFields,
+		Action onMerge, Action onViewDiff = null )
 	{
 		_resourceName = resourceName;
 		_resourceType = resourceType;
 		_addedFields = addedFields;
 		_changedFields = changedFields;
 		_onMerge = onMerge;
+		_onViewDiff = onViewDiff;
 		Title = $"Pull Remote Semantics - {resourceName}";
 
 		var fieldCount = addedFields.Count + changedFields.Count;
@@ -152,9 +161,18 @@ public class MergeViewWindow : DockWindow
 		y += 12;
 
 		var btnH = 34f;
-		var btnW = ( w - 16 ) / 2;
+		var gapW = 12f;
+		var showViewDiff = _onViewDiff != null;
 
-		_cancelRect = new Rect( pad, y, btnW, btnH );
+		// Layout: Cancel | (View Diff)? | Pull Remote Semantics
+		// View Diff is optional so the inspect-only callback stays opt-in for
+		// callers that don't have YAML strings to hand over.
+		var cancelW = 80f;
+		var viewDiffW = showViewDiff ? 100f : 0f;
+		var viewDiffSlot = showViewDiff ? viewDiffW + gapW : 0f;
+		var mergeW = w - cancelW - viewDiffSlot - gapW;
+
+		_cancelRect = new Rect( pad, y, cancelW, btnH );
 		var cancelHovered = _cancelRect.IsInside( _mousePos );
 		Paint.SetBrush( Color.White.WithAlpha( cancelHovered ? 0.1f : 0.04f ) );
 		Paint.SetPen( Color.White.WithAlpha( cancelHovered ? 0.3f : 0.15f ) );
@@ -163,7 +181,21 @@ public class MergeViewWindow : DockWindow
 		Paint.SetPen( Color.White.WithAlpha( cancelHovered ? 0.9f : 0.6f ) );
 		Paint.DrawText( _cancelRect, "Cancel", TextFlag.Center );
 
-		_mergeRect = new Rect( pad + btnW + 16, y, btnW, btnH );
+		var mergeX = pad + cancelW + gapW;
+		if ( showViewDiff )
+		{
+			_viewDiffRect = new Rect( mergeX, y, viewDiffW, btnH );
+			var diffHovered = _viewDiffRect.IsInside( _mousePos );
+			Paint.SetBrush( Color.Cyan.WithAlpha( diffHovered ? 0.18f : 0.06f ) );
+			Paint.SetPen( Color.Cyan.WithAlpha( diffHovered ? 0.55f : 0.25f ) );
+			Paint.DrawRect( _viewDiffRect, 4 );
+			Paint.SetDefaultFont( size: 11, weight: 600 );
+			Paint.SetPen( Color.Cyan.WithAlpha( diffHovered ? 1f : 0.75f ) );
+			Paint.DrawText( _viewDiffRect, "View Diff", TextFlag.Center );
+			mergeX += viewDiffW + gapW;
+		}
+
+		_mergeRect = new Rect( mergeX, y, mergeW, btnH );
 		var mergeHovered = _mergeRect.IsInside( _mousePos );
 		Paint.SetBrush( Color.Green.WithAlpha( mergeHovered ? 0.25f : 0.12f ) );
 		Paint.SetPen( Color.Green.WithAlpha( mergeHovered ? 0.6f : 0.3f ) );
@@ -237,6 +269,12 @@ public class MergeViewWindow : DockWindow
 		if ( _cancelRect.IsInside( e.LocalPosition ) )
 		{
 			Close();
+		}
+		else if ( _onViewDiff != null && _viewDiffRect.IsInside( e.LocalPosition ) )
+		{
+			// Inspect-only — keep the merge window open so the reviewer can
+			// flip back and forth between the field summary and the full diff.
+			_onViewDiff();
 		}
 		else if ( _mergeRect.IsInside( e.LocalPosition ) )
 		{

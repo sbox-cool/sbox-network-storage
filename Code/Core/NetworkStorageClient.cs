@@ -59,8 +59,9 @@ public static partial class NetworkStorage
 		if ( !string.IsNullOrEmpty( apiVersion ) ) ApiVersion = apiVersion.Trim( '/' );
 		CdnUrl = string.IsNullOrEmpty( cdnUrl ) ? null : cdnUrl.TrimEnd( '/' );
 		_autoConfigAttempted = true;
+		NetworkStorageRevisionHandler.Initialize();
 		if ( NetworkStorageLogConfig.LogConfig )
-			NetLog.Info( "config", $"NetworkStorage ready — {ApiRoot}" );
+			NetLog.Info( "config", $"NetworkStorage ready â€” {ApiRoot}" );
 	}
 
 	/// <summary>Reset the auto-configure guard so AutoConfigure() can retry.</summary>

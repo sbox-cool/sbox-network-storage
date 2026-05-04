@@ -1,0 +1,188 @@
+/* Outdated Revision Warning UI - Dual Mode Support */
+
+.ns-outdated-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    pointer-events: all;
+    background-color: rgba(0, 0, 0, 0.7);
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(4px);
+}
+
+/* ── Base Container ── */
+.ns-outdated-container {
+    background-color: #1a1a2e;
+    border-radius: 12px;
+    padding: 24px 32px;
+    max-width: 420px;
+    min-width: 360px;
+    width: 90%;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+/* ── Force Upgrade Mode: Warning styling ── */
+.ns-outdated-container.force-upgrade {
+    border: 2px solid #f59e0b;
+    box-shadow: 0 8px 32px rgba(245, 158, 11, 0.25);
+}
+
+.ns-outdated-container.force-upgrade .ns-outdated-title {
+    color: #fbbf24;
+}
+
+.ns-outdated-container.force-upgrade .ns-outdated-countdown {
+    background-color: rgba(245, 158, 11, 0.15);
+    border: 1px solid rgba(245, 158, 11, 0.3);
+    color: #fbbf24;
+}
+
+.ns-outdated-container.force-upgrade .ns-outdated-countdown.expired {
+    background-color: rgba(239, 68, 68, 0.15);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    color: #fca5a5;
+}
+
+/* ── Allow Continue Mode: Informational styling ── */
+.ns-outdated-container.allow-continue {
+    border: 2px solid #3b82f6;
+    box-shadow: 0 8px 32px rgba(59, 130, 246, 0.25);
+}
+
+.ns-outdated-container.allow-continue .ns-outdated-title {
+    color: #60a5fa;
+}
+
+/* ── Title ── */
+.ns-outdated-title {
+    font-size: 18px;
+    font-weight: 700;
+    text-align: center;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+/* ── Info Text ── */
+.ns-outdated-info {
+    font-size: 14px;
+    color: #e2e8f0;
+    text-align: center;
+    line-height: 1.5;
+}
+
+/* ── Countdown ── */
+.ns-outdated-countdown {
+    font-size: 13px;
+    text-align: center;
+    padding: 12px 16px;
+    border-radius: 8px;
+    line-height: 1.4;
+    white-space: pre-line;
+}
+
+/* ── Buttons Container ── */
+.ns-outdated-buttons {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 4px;
+}
+
+/* ── Continue Playing Button (Allow Continue primary) ── */
+.ns-outdated-continue-btn {
+    background: linear-gradient(135deg, #3b82f6, #2563eb);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    padding: 14px 24px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    text-align: center;
+    transition: background 0.15s, transform 0.1s;
+}
+
+.ns-outdated-continue-btn:hover {
+    background: linear-gradient(135deg, #2563eb, #1d4ed8);
+    transform: translateY(-1px);
+}
+
+.ns-outdated-continue-btn:active {
+    transform: translateY(0);
+}
+
+/* ── Divider (Or update to latest) ── */
+.ns-outdated-divider {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 4px 0;
+}
+
+.ns-outdated-divider::before,
+.ns-outdated-divider::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: rgba(148, 163, 184, 0.25);
+}
+
+.ns-outdated-divider Label {
+    color: #64748b;
+    font-size: 12px;
+    white-space: nowrap;
+}
+
+/* ── Secondary Buttons (Create/Join) ── */
+.ns-outdated-create-btn,
+.ns-outdated-join-btn {
+    background: rgba(148, 163, 184, 0.15);
+    color: #e2e8f0;
+    border: 1px solid rgba(148, 163, 184, 0.25);
+    border-radius: 8px;
+    padding: 12px 20px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    text-align: center;
+    transition: background 0.15s, transform 0.1s;
+}
+
+.ns-outdated-create-btn:hover,
+.ns-outdated-join-btn:hover {
+    background: rgba(148, 163, 184, 0.25);
+    transform: translateY(-1px);
+}
+
+.ns-outdated-create-btn:active,
+.ns-outdated-join-btn:active {
+    transform: translateY(0);
+}
+
+/* ── Dismiss Button (Force Upgrade only) ── */
+.ns-outdated-dismiss-btn {
+    background-color: transparent;
+    color: #94a3b8;
+    border: none;
+    padding: 8px;
+    font-size: 13px;
+    cursor: pointer;
+    text-align: center;
+    transition: color 0.15s;
+}
+
+.ns-outdated-dismiss-btn:hover {
+    color: #e2e8f0;
+}
+
+/* ── Hidden state ── */
+.hidden {
+    display: none !important;
+}

@@ -86,7 +86,9 @@ public static partial class NetworkStorage
 		["configVersion"] = RuntimeSecurityConfigVersion ?? "",
 		["clientMode"] = mode,
 		["authSessions"] = RuntimeEnableAuthSessions ? "enabled" : "disabled",
-		["encryptedRequests"] = RuntimeEnableEncryptedRequests ? "required" : "disabled"
+		["encryptedRequests"] = RuntimeEnableEncryptedRequests ? "required" : "disabled",
+		["revisionId"] = NetworkStoragePackageInfo.CurrentRevisionId ?? 0,
+		["revisionOutdated"] = NetworkStoragePackageInfo.IsOutdatedRevision,
 	};
 
 	private static async Task<RuntimeAuthSession> TryEnsureRuntimeAuthSessionAsync()
@@ -127,6 +129,10 @@ public static partial class NetworkStorage
 			["x-steam-id"] = steamId,
 			["x-sbox-token"] = token
 		};
+		var revisionId = NetworkStoragePackageInfo.CurrentRevisionId;
+		if ( revisionId.HasValue )
+			headers["x-ns-revision-id"] = revisionId.Value.ToString();
+		headers["x-ns-client-type"] = GetClientType();
 		var body = new Dictionary<string, object> { ["steamId"] = steamId };
 		var raw = await Http.RequestStringAsync( url, "POST", Http.CreateJsonContent( body ), headers );
 		if ( NetworkStorageLogConfig.LogTokens )

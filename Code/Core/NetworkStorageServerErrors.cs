@@ -68,5 +68,4 @@ public static partial class NetworkStorage
 		}
 		RecordEndpointError( slug, code, message );
 	}
-
 }

@@ -1,7 +1,7 @@
 {
   "format": 1,
   "restore": {
-    "C:\\users\\user\\documents\\s&box projects\\hooked_inc\\Libraries\\sboxcool.network-storage\\Editor\\network-storage.editor.csproj": {}
+    "C:\\Users\\user\\Documents\\s&box projects\\hooked_inc\\Libraries\\sboxcool.network-storage\\Editor\\network-storage.editor.csproj": {}
   },
   "projects": {
     "C:\\Program Files (x86)\\Steam\\steamapps\\common\\sbox\\addons\\base\\code\\Base Library.csproj": {
@@ -2670,14 +2670,14 @@
         }
       }
     },
-    "C:\\users\\user\\documents\\s&box projects\\hooked_inc\\Libraries\\sboxcool.network-storage\\Editor\\network-storage.editor.csproj": {
+    "C:\\Users\\user\\Documents\\s&box projects\\hooked_inc\\Libraries\\sboxcool.network-storage\\Editor\\network-storage.editor.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "C:\\users\\user\\documents\\s&box projects\\hooked_inc\\Libraries\\sboxcool.network-storage\\Editor\\network-storage.editor.csproj",
+        "projectUniqueName": "C:\\Users\\user\\Documents\\s&box projects\\hooked_inc\\Libraries\\sboxcool.network-storage\\Editor\\network-storage.editor.csproj",
         "projectName": "network-storage.editor",
-        "projectPath": "C:\\users\\user\\documents\\s&box projects\\hooked_inc\\Libraries\\sboxcool.network-storage\\Editor\\network-storage.editor.csproj",
+        "projectPath": "C:\\Users\\user\\Documents\\s&box projects\\hooked_inc\\Libraries\\sboxcool.network-storage\\Editor\\network-storage.editor.csproj",
         "packagesPath": "C:\\Users\\user\\.nuget\\packages\\",
-        "outputPath": "C:\\users\\user\\documents\\s&box projects\\hooked_inc\\Libraries\\sboxcool.network-storage\\Editor\\obj\\",
+        "outputPath": "C:\\Users\\user\\Documents\\s&box projects\\hooked_inc\\Libraries\\sboxcool.network-storage\\Editor\\obj\\",
         "projectStyle": "PackageReference",
         "configFilePaths": [
           "C:\\Users\\user\\AppData\\Roaming\\NuGet\\NuGet.Config"

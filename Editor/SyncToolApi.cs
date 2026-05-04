@@ -79,7 +79,7 @@ public static class SyncToolApi
 	/// <summary>
 	/// Make an authenticated request to the management API.
 	/// </summary>
-	public static async Task<JsonElement?> Request( string method, string path, JsonElement? body = null )
+	public static async Task<JsonElement?> Request( string method, string path, JsonElement? body = null, Dictionary<string, string> extraHeaders = null )
 	{
 		_lastErrorMessagesByPath.TryRemove( path, out _ );
 		_lastResourceErrorMessagesByPath.TryRemove( path, out _ );
@@ -96,14 +96,18 @@ public static class SyncToolApi
 
 		var sk = SyncToolConfig.SecretKey ?? "";
 		var pk = SyncToolConfig.PublicApiKey ?? "";
-		Log.Info( $"[SyncTool] {method} {url}" );
-		Log.Info( $"[SyncTool]   x-api-key: {( sk.Length > 20 ? sk[..16] + "..." + sk[^4..] : sk.Length > 0 ? "(too short: " + sk.Length + " chars)" : "(empty)" )} ({sk.Length} chars)" );
-		Log.Info( $"[SyncTool]   x-public-key: {( pk.Length > 20 ? pk[..16] + "..." + pk[^4..] : pk.Length > 0 ? pk : "(empty)" )} ({pk.Length} chars)" );
+		Log.Info( $"[SyncTool] {method} {path}" );
 
 		var request = new HttpRequestMessage( new HttpMethod( method ), url );
 		request.Headers.Add( "x-api-key", sk );
 		request.Headers.Add( "x-public-key", pk );
 		request.Headers.Add( "User-Agent", "SyncTool-sbox/2.0" );
+
+		if ( extraHeaders != null )
+		{
+			foreach ( var header in extraHeaders )
+				request.Headers.TryAddWithoutValidation( header.Key, header.Value );
+		}
 
 		if ( body.HasValue )
 		{
@@ -119,7 +123,6 @@ public static class SyncToolApi
 			if ( !response.IsSuccessStatusCode )
 			{
 				Log.Warning( $"[SyncTool] {method} {path}: HTTP {(int)response.StatusCode}" );
-				Log.Warning( $"[SyncTool] {method} {path}: raw error response:\n{TruncateForLog( text, 4000 )}" );
 				try
 				{
 					var errJson = JsonSerializer.Deserialize<JsonElement>( text, _readOptions );
@@ -134,14 +137,15 @@ public static class SyncToolApi
 						: msg;
 					LastErrorMessage = detail;
 					_lastErrorMessagesByPath[path] = detail;
-					Log.Warning( $"[SyncTool] -> {msg}" );
 
 					CaptureStructuredErrors( path, errJson );
-					Log.Warning( $"[SyncTool] Full error payload for {path}:\n{PrettyPrintJson( text )}" );
 					LogStructuredErrors( path );
 
-					if ( errJson.TryGetProperty( "received", out var received ) )
-						Log.Warning( $"[SyncTool] Server received: {received}" );
+					// Skip error window for 404/405 - these are expected "endpoint not available" errors handled by callers
+					var statusCode = (int)response.StatusCode;
+					var isExpectedNotFound = statusCode == 404 || statusCode == 405;
+					if ( !isExpectedNotFound && (!string.IsNullOrEmpty( LastErrorCode ) || !string.IsNullOrEmpty( LastErrorMessage )) )
+						EndpointErrorWindow.Show( path, errJson );
 
 					if ( LastErrorCode == "KEY_UPGRADE_REQUIRED" )
 					{
@@ -164,13 +168,30 @@ public static class SyncToolApi
 						: $"HTTP {(int)response.StatusCode}: {detail}";
 					_lastErrorMessagesByPath[path] = LastErrorMessage;
 					Log.Warning( $"[SyncTool] -> {detail}" );
-					Log.Warning( $"[SyncTool] Raw error payload for {path}:\n{text}" );
+					MessageDialog.Show( $"Sync Error: {path}", LastErrorMessage, text );
 				}
 				return null;
 			}
 
 			var result = JsonSerializer.Deserialize<JsonElement>( text, _readOptions );
 			LogStructuredWarnings( path, result );
+
+			// Check for validation errors in successful HTTP responses (ok: false)
+			if ( result.TryGetProperty( "ok", out var okProp ) && okProp.ValueKind == JsonValueKind.False )
+			{
+				if ( result.TryGetProperty( "error", out var errCode ) )
+					LastErrorCode = errCode.GetString();
+				if ( result.TryGetProperty( "message", out var errMsg ) )
+					LastErrorMessage = errMsg.GetString();
+				_lastErrorMessagesByPath[path] = LastErrorMessage ?? LastErrorCode ?? "Validation failed";
+				CaptureStructuredErrors( path, result );
+				LogStructuredErrors( path );
+
+				// Only show the error window if there's an actual error code or message
+				if ( !string.IsNullOrEmpty( LastErrorCode ) || !string.IsNullOrEmpty( LastErrorMessage ) )
+					EndpointErrorWindow.Show( path, result );
+			}
+
 			return result;
 		}
 		catch ( Exception ex )
@@ -182,17 +203,67 @@ public static class SyncToolApi
 		}
 	}
 
-	/// <summary>Fetch current server endpoints.</summary>
-	public static Task<JsonElement?> GetEndpoints() => Request( "GET", "endpoints" );
+	/// <summary>Fetch current server endpoints (includes staged/next-revision endpoints).</summary>
+	public static Task<JsonElement?> GetEndpoints() => Request( "GET", "endpoints?includeStaged=true" );
 
 	/// <summary>Push endpoints to server.</summary>
 	public static Task<JsonElement?> PushEndpoints( JsonElement data ) => Request( "PUT", "endpoints", data );
 
-	/// <summary>Fetch current server collections.</summary>
-	public static Task<JsonElement?> GetCollections() => Request( "GET", "collections" );
+	/// <summary>Push endpoints to server with publish-target support.</summary>
+	public static Task<JsonElement?> PushEndpoints( JsonElement data, string publishTarget )
+	{
+		var headers = publishTarget != "live" ? new Dictionary<string, string> { ["x-ns-publish-target"] = publishTarget } : null;
+		return Request( "PUT", "endpoints", data, headers );
+	}
+ 
+
+	/// <summary>Upsert a single endpoint. Server handles merge.</summary>
+	public static Task<JsonElement?> PatchEndpoint( JsonElement data, string publishTarget = "live" )
+	{
+		var headers = publishTarget != "live" ? new Dictionary<string, string> { ["x-ns-publish-target"] = publishTarget } : null;
+		return Request( "PATCH", "endpoints", data, headers );
+	}
+
+	/// <summary>Upsert a single collection. Server handles merge.</summary>
+	public static Task<JsonElement?> PatchCollection( JsonElement data, string publishTarget = "live" )
+	{
+		var headers = publishTarget != "live" ? new Dictionary<string, string> { ["x-ns-publish-target"] = publishTarget } : null;
+		return Request( "PATCH", "collections", data, headers );
+	}
+
+	/// <summary>Upsert a single workflow. Server handles merge.</summary>
+	public static Task<JsonElement?> PatchWorkflow( JsonElement data )
+	{
+		return Request( "PATCH", "workflows", data );
+	}
+ 	/// <summary>Push endpoints to server asynchronously. Returns { jobId } immediately, processes in background.</summary>
+ 	public static Task<JsonElement?> PushEndpointsAsync( JsonElement data, string publishTarget = "live" )
+ 	{
+ 		var headers = new Dictionary<string, string>
+ 		{
+ 			["x-ns-publish-target"] = publishTarget ?? "live"
+ 		};
+ 		return Request( "PUT", "endpoints?async=true", data, headers );
+ 	}
+ 
+ 	/// <summary>Poll async sync job status.</summary>
+ 	public static Task<JsonElement?> GetSyncJobStatus( string jobId )
+ 	{
+ 		return Request( "GET", $"sync-jobs/{jobId}" );
+ 	}
+
+	/// <summary>Fetch current server collections (includes staged/next-revision collections).</summary>
+	public static Task<JsonElement?> GetCollections() => Request( "GET", "collections?includeStaged=true" );
 
 	/// <summary>Push collection schemas to server.</summary>
 	public static Task<JsonElement?> PushCollections( JsonElement data ) => Request( "PUT", "collections", data );
+
+	/// <summary>Push collection schemas to server with publish-target support.</summary>
+	public static Task<JsonElement?> PushCollections( JsonElement data, string publishTarget )
+	{
+		var headers = publishTarget != "live" ? new Dictionary<string, string> { ["x-ns-publish-target"] = publishTarget } : null;
+		return Request( "PUT", "collections", data, headers );
+	}
 
 	/// <summary>Fetch current server workflows.</summary>
 	public static Task<JsonElement?> GetWorkflows() => Request( "GET", "workflows" );
@@ -225,6 +296,22 @@ public static class SyncToolApi
 	public static Task<JsonElement?> AutoTest( JsonElement data ) => Request( "POST", "auto-test", data );
 
 	/// <summary>
+	/// Push all resources (endpoints, collections, workflows) in a single batch request.
+	/// Server processes synchronously and returns combined results.
+	/// </summary>
+	public static Task<JsonElement?> PushSync( JsonElement data, string publishTarget = "live" )
+	{
+		var headers = publishTarget != "live" ? new Dictionary<string, string> { ["x-ns-publish-target"] = publishTarget } : null;
+		return Request( "PUT", "sync", data, headers );
+	}
+
+	/// <summary>Sync package/revision info with backend.</summary>
+	public static Task<JsonElement?> SyncPackageInfo( JsonElement data ) => Request( "POST", "package-sync", data );
+
+	/// <summary>Fetch stored game-package/revision state from backend.</summary>
+	public static Task<JsonElement?> GetGamePackage() => Request( "GET", "game-package" );
+
+	/// <summary>
 	/// Validate credentials against the server.
 	/// Sends secret key via x-api-key header and optionally public key via x-public-key header.
 	/// Returns { ok, project, checks, permissions? }
@@ -244,9 +331,7 @@ public static class SyncToolApi
 		var sk = SyncToolConfig.SecretKey ?? "";
 		var pk = publicKey ?? "";
 
-		Log.Info( $"[SyncTool] Validate: GET {url}" );
-		Log.Info( $"[SyncTool]   x-api-key: {( sk.Length > 20 ? sk[..16] + "..." + sk[^4..] : sk.Length > 0 ? "(short: " + sk.Length + " chars)" : "(empty)" )}" );
-		Log.Info( $"[SyncTool]   x-public-key: {( pk.Length > 0 ? pk : "(not sent)" )}" );
+		Log.Info( $"[SyncTool] Validating credentials..." );
 
 		var request = new HttpRequestMessage( HttpMethod.Get, url );
 		request.Headers.Add( "x-api-key", sk );
@@ -260,14 +345,11 @@ public static class SyncToolApi
 			var response = await _http.SendAsync( request );
 			var text = await response.Content.ReadAsStringAsync();
 
-			Log.Info( $"[SyncTool] Validate: HTTP {(int)response.StatusCode} - {text[..Math.Min( text.Length, 500 )]}" );
-
 			if ( !response.IsSuccessStatusCode )
 			{
 				LastErrorCode = $"HTTP_{(int)response.StatusCode}";
-				LastErrorMessage = $"Server returned HTTP {(int)response.StatusCode}. Response: {TruncateForLog( text, 300 )}";
+				LastErrorMessage = $"Server returned HTTP {(int)response.StatusCode}";
 				Log.Warning( $"[SyncTool] Validate failed: HTTP {(int)response.StatusCode}" );
-				Log.Warning( $"[SyncTool]   Response: {TruncateForLog( text, 4000 )}" );
 				return null;
 			}
 
@@ -352,10 +434,9 @@ public static class SyncToolApi
 				if ( string.IsNullOrWhiteSpace( formatted ) )
 					continue;
 
-				if ( string.Equals( severity, "info", StringComparison.OrdinalIgnoreCase ) )
-					Log.Info( $"[SyncTool] {path}:{resourceId} info -> {formatted}" );
-				else
-					Log.Warning( $"[SyncTool] {path}:{resourceId} warning -> {formatted}" );
+				// Only log warnings, skip info-level messages
+				if ( !string.Equals( severity, "info", StringComparison.OrdinalIgnoreCase ) )
+					Log.Warning( $"[SyncTool] {path}:{resourceId} {severity} -> {formatted}" );
 			}
 		}
 	}

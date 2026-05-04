@@ -204,6 +204,7 @@ def load_source_dir(directory, kind):
 
     typed = list(directory.glob(f"*.{kind}.yaml")) + list(directory.glob(f"*.{kind}.yml"))
     plain = [p for p in list(directory.glob("*.yaml")) + list(directory.glob("*.yml")) if f".{kind}." not in p.name]
+    items = []
     for f in sorted({*typed, *plain}):
         compiled = compile_path(f)
         resource_id = compiled.get('id') or f.stem

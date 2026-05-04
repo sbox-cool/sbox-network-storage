@@ -49,6 +49,11 @@ public static partial class NetworkStorage
 			headers["x-ns-security-mode"] = clientMode;
 		if ( !string.IsNullOrWhiteSpace( RuntimeSecurityConfigVersion ) )
 			headers["x-ns-security-config-version"] = RuntimeSecurityConfigVersion;
+
+		var revisionId = NetworkStoragePackageInfo.CurrentRevisionId;
+		if ( revisionId.HasValue )
+			headers["x-ns-revision-id"] = revisionId.Value.ToString();
+		headers["x-ns-client-type"] = GetClientType();
 		return headers;
 	}
 
@@ -86,7 +91,29 @@ public static partial class NetworkStorage
 			headers["x-ns-security-mode"] = clientMode;
 		if ( !string.IsNullOrWhiteSpace( RuntimeSecurityConfigVersion ) )
 			headers["x-ns-security-config-version"] = RuntimeSecurityConfigVersion;
+
+		var revisionId = NetworkStoragePackageInfo.CurrentRevisionId;
+		if ( revisionId.HasValue )
+			headers["x-ns-revision-id"] = revisionId.Value.ToString();
+
+		var clientType = GetClientType();
+		if ( !string.IsNullOrEmpty( clientType ) )
+			headers["x-ns-client-type"] = clientType;
+
 		return headers;
+	}
+
+	/// <summary>
+	/// Determines the client type based on the current runtime context.
+	/// Returns "editor" in the s&amp;box editor, "dedicated" on dedicated servers, or "game" otherwise.
+	/// </summary>
+	private static string GetClientType()
+	{
+		if ( IsDedicatedServerProcess )
+			return "dedicated";
+		if ( Game.IsEditor )
+			return "editor";
+		return "game";
 	}
 
 }

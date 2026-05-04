@@ -7,7 +7,6 @@ namespace Sandbox;
 public static partial class NetworkStorage
 {
 	private static readonly Dictionary<string, EndpointErrorInfo> _lastEndpointErrors = new();
-
 	public static bool TryGetLastEndpointError( string slug, out string code, out string message )
 	{
 		if ( _lastEndpointErrors.TryGetValue( slug, out var error ) )
@@ -105,7 +104,16 @@ public static partial class NetworkStorage
 			}
 		}
 
-		// ── Success — extract response body ──
+		// ── Success — update revision status from top-level response ──
+		NetworkStoragePackageInfo.UpdateFromServerResponse( json );
+	
+		// Check for load-profile revision block and fire outdated event
+		if ( json.TryGetProperty( "revision", out var revisionProp ) && revisionProp.ValueKind == JsonValueKind.Object )
+		{
+			var data = RevisionOutdatedData.FromJson( revisionProp );
+			if ( data.HasValue && data.Value.RevisionOutdated )
+				NetworkStorage.FireRevisionOutdated( data.Value );
+		}
 
 		// Server wraps endpoint responses in { ok, body, timing } — unwrap body if present
 		if ( json.TryGetProperty( "body", out var body ) && body.ValueKind == JsonValueKind.Object )

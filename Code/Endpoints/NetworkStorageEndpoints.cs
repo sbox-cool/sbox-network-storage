@@ -52,7 +52,7 @@ public static partial class NetworkStorage
 				if ( NetworkStorageLogConfig.LogRequests )
 				{
 					NetLog.Request( slug, $"POST {securityRequest.Mode} {bodyJson}" );
-					Log.Info( $"[NetworkStorage] {slug} request: POST {ApiRoot}{securityRequest.RouteLabel} mode={securityRequest.Mode} body={bodyJson}" );
+					Log.Info( $"[NetworkStorage] {slug} request: POST {ApiRoot}{securityRequest.RouteLabel} mode={securityRequest.Mode} revision={NetworkStoragePackageInfo.CurrentRevisionId?.ToString() ?? "unknown"} body={bodyJson}" );
 				}
 				var content = Http.CreateJsonContent( securityRequest.Body );
 				result = await Http.RequestStringAsync( url, "POST", content, headers );

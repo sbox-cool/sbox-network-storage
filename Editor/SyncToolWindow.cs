@@ -47,6 +47,20 @@ public partial class SyncToolWindow : DockWindow
 	private JsonElement? _remoteCollections;
 	private JsonElement? _remoteWorkflows;
 
+	// ── Revision info ──
+	private bool _packageInfoDetected;
+	private string _packageIdent;
+	private long? _currentRevisionId;
+	private string _publishStatus;
+	private string _publishTarget = "live"; // "live" or "next"
+
+	// ── Server-side revision state (from GET /game-package) ──
+	private long? _serverCurrentRevisionId;
+	private long? _serverLatestRevisionId;
+	private string _serverLastSyncedAt;
+	private long? _serverRevisionFirstSyncedAtUnix;
+	private int _serverEndpointOverrideCount;
+
 	// ── Scroll state ──
 	private float _scrollY;
 	private float _scrollAreaTop;
@@ -94,8 +108,164 @@ public partial class SyncToolWindow : DockWindow
 		Title = "Network Storage Sync";
 		Size = new Vector2( 720, 620 );
 		MinimumSize = new Vector2( 550, 400 );
+		
+		// Enable mouse tracking for hover effects
+		MouseTracking = true;
+		
 		SyncToolConfig.Load();
 		RefreshFileList();
+		// Kick off package detection in the background so the revision panel
+		// shows immediately without waiting for "Pull from Web".
+		if ( SyncToolConfig.IsValid )
+			_ = DetectPackageInfoAsync();
+	}
+
+	private async Task DetectPackageInfoAsync()
+	{
+		try
+		{
+			await NetworkStoragePackageInfo.DetectAsync();
+			_packageInfoDetected = NetworkStoragePackageInfo.IsDetected;
+			_packageIdent = NetworkStoragePackageInfo.PackageIdent;
+			_currentRevisionId = NetworkStoragePackageInfo.CurrentRevisionId;
+			_publishStatus = NetworkStoragePackageInfo.PublishStatus;
+			_lastKnownRevisionId = NetworkStoragePackageInfo.CurrentRevisionId;
+
+			// Sync package info to backend so server state is available immediately
+			if ( _packageInfoDetected )
+				await SyncToolApi.SyncPackageInfo( NetworkStoragePackageInfo.BuildSyncPayload() );
+
+			// Fetch server-side revision state so the panel shows immediately
+			await RefreshServerPackageStateAsync();
+			Update();
+		}
+		catch ( Exception ex )
+		{
+			Log.Info( $"[SyncTool] Background package detection: {ex.Message}" );
+		}
+	}
+
+	private async Task RefreshServerPackageStateAsync()
+	{
+		try
+		{
+			var serverPkg = await SyncToolApi.GetGamePackage();
+			if ( serverPkg.HasValue && serverPkg.Value.TryGetProperty( "gamePackage", out var gp ) && gp.ValueKind == JsonValueKind.Object )
+			{
+				_serverCurrentRevisionId = gp.TryGetProperty( "currentRevisionId", out var cr ) && cr.ValueKind == JsonValueKind.Number ? cr.GetInt64() : null;
+				_serverLatestRevisionId = gp.TryGetProperty( "latestRevisionId", out var lr ) && lr.ValueKind == JsonValueKind.Number ? lr.GetInt64() : null;
+				_serverLastSyncedAt = gp.TryGetProperty( "lastSyncedAt", out var ls ) && ls.ValueKind == JsonValueKind.String ? ls.GetString() : null;
+				_serverRevisionFirstSyncedAtUnix = gp.TryGetProperty( "revisionFirstSyncedAtUnix", out var rfs ) && rfs.ValueKind == JsonValueKind.Number ? rfs.GetInt64() : null;
+
+				if ( !_packageInfoDetected && _serverCurrentRevisionId.HasValue )
+				{
+					_currentRevisionId = _serverCurrentRevisionId;
+					_packageIdent = gp.TryGetProperty( "packageIdent", out var pi ) ? pi.GetString() : null;
+					_publishStatus = gp.TryGetProperty( "publishStatus", out var ps ) ? ps.GetString() : null;
+					_packageInfoDetected = true;
+				}
+			}
+
+			_serverEndpointOverrideCount = 0;
+			if ( _remoteEndpoints.HasValue && _remoteEndpoints.Value.ValueKind == JsonValueKind.Array )
+			{
+				foreach ( var ep in _remoteEndpoints.Value.EnumerateArray() )
+				{
+					if ( ep.TryGetProperty( "revisionTarget", out var rt ) && rt.ValueKind == JsonValueKind.String && rt.GetString() == "next" )
+						_serverEndpointOverrideCount++;
+				}
+			}
+		}
+		catch ( Exception ex )
+		{
+			Log.Info( $"[SyncTool] Server state refresh failed: {ex.Message}" );
+		}
+	}
+
+	/// <summary>
+	/// Send local package info to the backend so it always has the latest local revision.
+	/// </summary>
+	private async Task SyncLocalPackageInfoAsync()
+	{
+		try
+		{
+			await NetworkStoragePackageInfo.DetectAsync();
+			_packageInfoDetected = NetworkStoragePackageInfo.IsDetected;
+			if ( _packageInfoDetected )
+			{
+				_packageIdent = NetworkStoragePackageInfo.PackageIdent;
+				_currentRevisionId = NetworkStoragePackageInfo.CurrentRevisionId;
+				_publishStatus = NetworkStoragePackageInfo.PublishStatus;
+				await SyncToolApi.SyncPackageInfo( NetworkStoragePackageInfo.BuildSyncPayload() );
+				await RefreshServerPackageStateAsync();
+				Update();
+			}
+		}
+		catch ( Exception ex )
+		{
+			Log.Info( $"[SyncTool] Package info sync failed: {ex.Message}" );
+		}
+	}
+
+// ── Revision change watcher ──
+	// Periodically re-detects package info and auto-syncs when the revision changes
+	// (e.g. after the developer publishes a new game revision from the s&box editor).
+	private long? _lastKnownRevisionId;
+	private float _revisionCheckTimer;
+	private const float RevisionCheckIntervalSeconds = 15f;
+	private bool _revisionSyncInFlight;
+
+	[EditorEvent.Frame]
+	private void OnEditorFrame()
+	{
+		if ( !SyncToolConfig.IsValid || _revisionSyncInFlight )
+			return;
+
+		_revisionCheckTimer += RealTime.Delta;
+		if ( _revisionCheckTimer < RevisionCheckIntervalSeconds )
+			return;
+		_revisionCheckTimer = 0;
+
+		_ = CheckRevisionChangeAsync();
+	}
+
+	private async Task CheckRevisionChangeAsync()
+	{
+		_revisionSyncInFlight = true;
+		try
+		{
+			await NetworkStoragePackageInfo.DetectAsync();
+			var newRevision = NetworkStoragePackageInfo.CurrentRevisionId;
+
+			if ( newRevision.HasValue && newRevision != _lastKnownRevisionId && _lastKnownRevisionId.HasValue )
+			{
+				Log.Info( $"[SyncTool] Revision changed: {_lastKnownRevisionId} → {newRevision}. Auto-syncing..." );
+
+				_packageInfoDetected = NetworkStoragePackageInfo.IsDetected;
+				_packageIdent = NetworkStoragePackageInfo.PackageIdent;
+				_currentRevisionId = newRevision;
+				_publishStatus = NetworkStoragePackageInfo.PublishStatus;
+
+				// Push updated package info to backend
+				var syncResp = await SyncToolApi.SyncPackageInfo( NetworkStoragePackageInfo.BuildSyncPayload() );
+				if ( syncResp.HasValue )
+					Log.Info( $"[SyncTool] Auto-sync after revision change: ok" );
+
+				// Refresh server-side state
+				await RefreshServerPackageStateAsync();
+				Update();
+			}
+
+			_lastKnownRevisionId = newRevision ?? _lastKnownRevisionId;
+		}
+		catch ( Exception ex )
+		{
+			Log.Info( $"[SyncTool] Revision check failed: {ex.Message}" );
+		}
+		finally
+		{
+			_revisionSyncInFlight = false;
+		}
 	}
 
 	[Menu( "Editor", "Network Storage/Sync Tool" )]
@@ -264,6 +434,152 @@ public partial class SyncToolWindow : DockWindow
 			}
 		}
 
+		// ── Package / Revision Info ──
+		if ( SyncToolConfig.IsValid )
+		{
+			if ( _packageInfoDetected )
+			{
+				var infoH = 104f;
+				Paint.SetBrush( Color.White.WithAlpha( 0.04f ) );
+				Paint.SetPen( Color.White.WithAlpha( 0.1f ) );
+				Paint.DrawRect( new Rect( pad, y, w, infoH ), 4 );
+
+				var col1 = pad + 8;
+				var col2 = pad + w * 0.48f;
+				var labelW = 90f;
+				var rowH = 16f;
+				var ry = y + 4;
+
+				// ═══ LEFT SIDE: Package Info ═══
+				Paint.SetDefaultFont( size: 8, weight: 600 );
+				Paint.SetPen( Color.White.WithAlpha( 0.45f ) );
+				Paint.DrawText( new Rect( col1, ry, col2 - col1 - 8, 12 ), "REVISION / PACKAGE INFO", TextFlag.LeftCenter );
+				ry += 14;
+
+				// Row 1: Package
+				Paint.SetDefaultFont( size: 9 );
+				Paint.SetPen( Color.White.WithAlpha( 0.5f ) );
+				Paint.DrawText( new Rect( col1, ry, labelW, rowH ), "Package:", TextFlag.LeftCenter );
+				Paint.SetPen( Color.White.WithAlpha( 0.75f ) );
+				Paint.DrawText( new Rect( col1 + labelW, ry, col2 - col1 - labelW - 8, rowH ), _packageIdent ?? "Unknown", TextFlag.LeftCenter );
+
+				// Row 2: Revision | Latest
+				ry += rowH;
+				Paint.SetDefaultFont( size: 9 );
+				Paint.SetPen( Color.White.WithAlpha( 0.5f ) );
+				Paint.DrawText( new Rect( col1, ry, labelW, rowH ), "Revision:", TextFlag.LeftCenter );
+				Paint.SetPen( Color.White.WithAlpha( 0.75f ) );
+				Paint.DrawText( new Rect( col1 + labelW, ry, 60, rowH ), _serverCurrentRevisionId?.ToString() ?? "—", TextFlag.LeftCenter );
+
+				if ( _serverLatestRevisionId.HasValue && _serverLatestRevisionId != _serverCurrentRevisionId )
+				{
+					Paint.SetPen( Color.White.WithAlpha( 0.5f ) );
+					Paint.DrawText( new Rect( col1 + labelW + 65, ry, 50, rowH ), "Latest:", TextFlag.LeftCenter );
+					Paint.SetPen( Color.White.WithAlpha( 0.75f ) );
+					Paint.DrawText( new Rect( col1 + labelW + 115, ry, 60, rowH ), _serverLatestRevisionId.Value.ToString(), TextFlag.LeftCenter );
+				}
+
+				// Row 3: Last synced
+				ry += rowH;
+				Paint.SetPen( Color.White.WithAlpha( 0.5f ) );
+				Paint.DrawText( new Rect( col1, ry, labelW, rowH ), "Last synced:", TextFlag.LeftCenter );
+				var syncedAgo = FormatSyncedAgo( _serverLastSyncedAt );
+				var syncedIsNever = string.IsNullOrWhiteSpace( _serverLastSyncedAt );
+				Paint.SetPen( syncedIsNever ? Color.Red.WithAlpha( 0.9f ) : Color.White.WithAlpha( 0.75f ) );
+				Paint.DrawText( new Rect( col1 + labelW, ry, 120, rowH ), syncedAgo, TextFlag.LeftCenter );
+
+				// Row 4: First synced
+				ry += rowH;
+				Paint.SetPen( Color.White.WithAlpha( 0.5f ) );
+				Paint.DrawText( new Rect( col1, ry, labelW, rowH ), "First synced:", TextFlag.LeftCenter );
+				var firstSyncedAgo = FormatUnixAgo( _serverRevisionFirstSyncedAtUnix );
+				var firstIsNever = !_serverRevisionFirstSyncedAtUnix.HasValue;
+				Paint.SetPen( firstIsNever ? Color.White.WithAlpha( 0.4f ) : Color.White.WithAlpha( 0.75f ) );
+				Paint.DrawText( new Rect( col1 + labelW, ry, 120, rowH ), firstSyncedAgo, TextFlag.LeftCenter );
+
+				// Row 5: Endpoint overrides (if any)
+				if ( _serverEndpointOverrideCount > 0 )
+				{
+					ry += rowH;
+					Paint.SetPen( Color.Yellow.WithAlpha( 0.8f ) );
+					Paint.DrawText( new Rect( col1, ry, col2 - col1 - 8, rowH ), $"{_serverEndpointOverrideCount} endpoint(s) staged", TextFlag.LeftCenter );
+				}
+
+				// ═══ RIGHT SIDE: Publish Target ═══
+				var rightX = col2;
+				var rightW = w - (col2 - pad) - 8;
+				var cardH = 38f;
+				var cardGap = 4f;
+				var radioR = 5f;
+				var cardY = y + 4;
+
+				Paint.SetDefaultFont( size: 8, weight: 600 );
+				Paint.SetPen( Color.White.WithAlpha( 0.45f ) );
+				Paint.DrawText( new Rect( rightX, cardY, rightW, 12 ), "PUBLISH TARGET", TextFlag.LeftCenter );
+				cardY += 14;
+
+				var isNext = _publishTarget == "next";
+				var isLive = !isNext;
+
+				// Card: Staged/Main
+				var nextCardRect = new Rect( rightX, cardY, rightW, cardH );
+				Paint.SetBrush( isNext ? Color.Yellow.WithAlpha( 0.08f ) : Color.White.WithAlpha( 0.02f ) );
+				Paint.SetPen( isNext ? Color.Yellow.WithAlpha( 0.3f ) : Color.White.WithAlpha( 0.08f ) );
+				Paint.DrawRect( nextCardRect, 3 );
+
+				var radioX = rightX + 10;
+				var radioY = cardY + 10;
+				Paint.SetBrush( isNext ? Color.Yellow.WithAlpha( 0.9f ) : Color.Transparent );
+				Paint.SetPen( isNext ? Color.Yellow.WithAlpha( 0.8f ) : Color.White.WithAlpha( 0.25f ) );
+				Paint.DrawCircle( new Vector2( radioX, radioY ), radioR );
+
+				var textX = rightX + 22;
+				Paint.SetDefaultFont( size: 8, weight: 600 );
+				Paint.SetPen( isNext ? Color.Yellow : Color.White.WithAlpha( 0.85f ) );
+				Paint.DrawText( new Rect( textX, cardY + 3, rightW - 26, 13 ), "Staged/Main", TextFlag.LeftCenter );
+				Paint.SetDefaultFont( size: 7 );
+				Paint.SetPen( Color.White.WithAlpha( 0.45f ) );
+				Paint.DrawText( new Rect( textX, cardY + 15, rightW - 26, 11 ), "Editor + next release", TextFlag.LeftCenter );
+				Paint.DrawText( new Rect( textX, cardY + 25, rightW - 26, 11 ), "Live players unaffected", TextFlag.LeftCenter );
+
+				if ( !_busy )
+					_buttons.Add( new ClickRegion { Rect = nextCardRect, Id = "publish-target-next", OnClick = () => { _publishTarget = "next"; Update(); } } );
+
+				cardY += cardH + cardGap;
+
+				// Card: Live
+				var liveCardRect = new Rect( rightX, cardY, rightW, cardH );
+				Paint.SetBrush( isLive ? Color.Green.WithAlpha( 0.08f ) : Color.White.WithAlpha( 0.02f ) );
+				Paint.SetPen( isLive ? Color.Green.WithAlpha( 0.3f ) : Color.White.WithAlpha( 0.08f ) );
+				Paint.DrawRect( liveCardRect, 3 );
+
+				radioY = cardY + 10;
+				Paint.SetBrush( isLive ? Color.Green.WithAlpha( 0.9f ) : Color.Transparent );
+				Paint.SetPen( isLive ? Color.Green.WithAlpha( 0.8f ) : Color.White.WithAlpha( 0.25f ) );
+				Paint.DrawCircle( new Vector2( radioX, radioY ), radioR );
+
+				Paint.SetDefaultFont( size: 8, weight: 600 );
+				Paint.SetPen( isLive ? Color.Green : Color.White.WithAlpha( 0.85f ) );
+				Paint.DrawText( new Rect( textX, cardY + 3, rightW - 26, 13 ), "Live", TextFlag.LeftCenter );
+				Paint.SetDefaultFont( size: 7 );
+				Paint.SetPen( Color.White.WithAlpha( 0.45f ) );
+				Paint.DrawText( new Rect( textX, cardY + 15, rightW - 26, 11 ), "Production / existing live", TextFlag.LeftCenter );
+				Paint.DrawText( new Rect( textX, cardY + 25, rightW - 26, 11 ), "Deployed immediately", TextFlag.LeftCenter );
+
+				if ( !_busy )
+					_buttons.Add( new ClickRegion { Rect = liveCardRect, Id = "publish-target-live", OnClick = () => { _publishTarget = "live"; Update(); } } );
+
+				y += infoH + 6;
+			}
+			else
+			{
+				Paint.SetDefaultFont( size: 9 );
+				Paint.SetPen( Color.Yellow.WithAlpha( 0.75f ) );
+				Paint.DrawText( new Rect( pad, y + 4, w, 16 ), "No package revision detected — publishing will use default live behavior.", TextFlag.LeftCenter );
+				y += 26;
+			}
+		}
+
 		DrawSeparator( ref y, w, pad );
 
 		// ── Begin scrollable content ──
@@ -331,7 +647,7 @@ public partial class SyncToolWindow : DockWindow
 					hasLocal && !deprecated ? () => PushItem( id ) : null,
 					deprecated ? null : () => PullItem( id ),
 					deprecated ? null : () => TestResultsWindow.OpenAndRun( capturedSlug ),
-					deprecated );
+					deprecated, staged: IsEndpointStaged( slug ) );
 			}
 		}
 		else if ( allSlugs.Count == 0 )
@@ -593,6 +909,151 @@ public partial class SyncToolWindow : DockWindow
 			}
 		}
 
+		// ── Package / Revision Info ──
+		if ( SyncToolConfig.IsValid )
+		{
+			if ( _packageInfoDetected )
+			{
+				var infoH = 104f;
+				Paint.SetBrush( Color.White.WithAlpha( 0.04f ) );
+				Paint.SetPen( Color.White.WithAlpha( 0.1f ) );
+				Paint.DrawRect( new Rect( pad, y, w, infoH ), 4 );
+
+				var col1 = pad + 8;
+				var col2 = pad + w * 0.48f;
+				var labelW = 90f;
+				var rowH = 16f;
+				var ry = y + 4;
+
+				// ═══ LEFT SIDE: Package Info ═══
+				Paint.SetDefaultFont( size: 8, weight: 600 );
+				Paint.SetPen( Color.White.WithAlpha( 0.45f ) );
+				Paint.DrawText( new Rect( col1, ry, col2 - col1 - 8, 12 ), "REVISION / PACKAGE INFO", TextFlag.LeftCenter );
+				ry += 14;
+				// Row 1: Package
+				Paint.SetDefaultFont( size: 9 );
+				Paint.SetPen( Color.White.WithAlpha( 0.5f ) );
+				Paint.DrawText( new Rect( col1, ry, labelW, rowH ), "Package:", TextFlag.LeftCenter );
+				Paint.SetPen( Color.White.WithAlpha( 0.75f ) );
+				Paint.DrawText( new Rect( col1 + labelW, ry, col2 - col1 - labelW - 8, rowH ), _packageIdent ?? "Unknown", TextFlag.LeftCenter );
+
+				// Row 2: Revision | Latest
+				ry += rowH;
+				Paint.SetDefaultFont( size: 9 );
+				Paint.SetPen( Color.White.WithAlpha( 0.5f ) );
+				Paint.DrawText( new Rect( col1, ry, labelW, rowH ), "Revision:", TextFlag.LeftCenter );
+				Paint.SetPen( Color.White.WithAlpha( 0.75f ) );
+				Paint.DrawText( new Rect( col1 + labelW, ry, 60, rowH ), _serverCurrentRevisionId?.ToString() ?? "—", TextFlag.LeftCenter );
+
+				if ( _serverLatestRevisionId.HasValue && _serverLatestRevisionId != _serverCurrentRevisionId )
+				{
+					Paint.SetPen( Color.White.WithAlpha( 0.5f ) );
+					Paint.DrawText( new Rect( col1 + labelW + 65, ry, 50, rowH ), "Latest:", TextFlag.LeftCenter );
+					Paint.SetPen( Color.White.WithAlpha( 0.75f ) );
+					Paint.DrawText( new Rect( col1 + labelW + 115, ry, 60, rowH ), _serverLatestRevisionId.Value.ToString(), TextFlag.LeftCenter );
+				}
+
+				// Row 3: Last synced
+				ry += rowH;
+				Paint.SetPen( Color.White.WithAlpha( 0.5f ) );
+				Paint.DrawText( new Rect( col1, ry, labelW, rowH ), "Last synced:", TextFlag.LeftCenter );
+				var syncedAgo = FormatSyncedAgo( _serverLastSyncedAt );
+				var syncedIsNever = string.IsNullOrWhiteSpace( _serverLastSyncedAt );
+				Paint.SetPen( syncedIsNever ? Color.Red.WithAlpha( 0.9f ) : Color.White.WithAlpha( 0.75f ) );
+				Paint.DrawText( new Rect( col1 + labelW, ry, 120, rowH ), syncedAgo, TextFlag.LeftCenter );
+
+				// Row 4: First synced
+				ry += rowH;
+				Paint.SetPen( Color.White.WithAlpha( 0.5f ) );
+				Paint.DrawText( new Rect( col1, ry, labelW, rowH ), "First synced:", TextFlag.LeftCenter );
+				var firstSyncedAgo = FormatUnixAgo( _serverRevisionFirstSyncedAtUnix );
+				var firstIsNever = !_serverRevisionFirstSyncedAtUnix.HasValue;
+				Paint.SetPen( firstIsNever ? Color.White.WithAlpha( 0.4f ) : Color.White.WithAlpha( 0.75f ) );
+				Paint.DrawText( new Rect( col1 + labelW, ry, 120, rowH ), firstSyncedAgo, TextFlag.LeftCenter );
+
+				// Row 5: Endpoint overrides (if any)
+				if ( _serverEndpointOverrideCount > 0 )
+				{
+					ry += rowH;
+					Paint.SetPen( Color.Yellow.WithAlpha( 0.8f ) );
+					Paint.DrawText( new Rect( col1, ry, col2 - col1 - 8, rowH ), $"{_serverEndpointOverrideCount} endpoint(s) staged", TextFlag.LeftCenter );
+				}
+
+				// ═══ RIGHT SIDE: Publish Target ═══
+				var rightX = col2;
+				var rightW = w - (col2 - pad) - 8;
+				var cardH = 38f;
+				var cardGap = 4f;
+				var radioR = 5f;
+				var cardY = y + 4;
+
+				Paint.SetDefaultFont( size: 8, weight: 600 );
+				Paint.SetPen( Color.White.WithAlpha( 0.45f ) );
+				Paint.DrawText( new Rect( rightX, cardY, rightW, 12 ), "PUBLISH TARGET", TextFlag.LeftCenter );
+				cardY += 14;
+
+				var isNext = _publishTarget == "next";
+				var isLive = !isNext;
+
+				// Card: Staged/Main
+				var nextCardRect = new Rect( rightX, cardY, rightW, cardH );
+				Paint.SetBrush( isNext ? Color.Yellow.WithAlpha( 0.08f ) : Color.White.WithAlpha( 0.02f ) );
+				Paint.SetPen( isNext ? Color.Yellow.WithAlpha( 0.3f ) : Color.White.WithAlpha( 0.08f ) );
+				Paint.DrawRect( nextCardRect, 3 );
+
+				var radioX = rightX + 10;
+				var radioY = cardY + 10;
+				Paint.SetBrush( isNext ? Color.Yellow.WithAlpha( 0.9f ) : Color.Transparent );
+				Paint.SetPen( isNext ? Color.Yellow.WithAlpha( 0.8f ) : Color.White.WithAlpha( 0.25f ) );
+				Paint.DrawCircle( new Vector2( radioX, radioY ), radioR );
+
+				var textX = rightX + 22;
+				Paint.SetDefaultFont( size: 8, weight: 600 );
+				Paint.SetPen( isNext ? Color.Yellow : Color.White.WithAlpha( 0.85f ) );
+				Paint.DrawText( new Rect( textX, cardY + 3, rightW - 26, 13 ), "Staged/Main", TextFlag.LeftCenter );
+				Paint.SetDefaultFont( size: 7 );
+				Paint.SetPen( Color.White.WithAlpha( 0.45f ) );
+				Paint.DrawText( new Rect( textX, cardY + 15, rightW - 26, 11 ), "Editor + next release", TextFlag.LeftCenter );
+				Paint.DrawText( new Rect( textX, cardY + 25, rightW - 26, 11 ), "Live players unaffected", TextFlag.LeftCenter );
+
+				if ( !_busy )
+					_buttons.Add( new ClickRegion { Rect = nextCardRect, Id = "publish-target-next", OnClick = () => { _publishTarget = "next"; Update(); } } );
+
+				cardY += cardH + cardGap;
+
+				// Card: Live
+				var liveCardRect = new Rect( rightX, cardY, rightW, cardH );
+				Paint.SetBrush( isLive ? Color.Green.WithAlpha( 0.08f ) : Color.White.WithAlpha( 0.02f ) );
+				Paint.SetPen( isLive ? Color.Green.WithAlpha( 0.3f ) : Color.White.WithAlpha( 0.08f ) );
+				Paint.DrawRect( liveCardRect, 3 );
+
+				radioY = cardY + 10;
+				Paint.SetBrush( isLive ? Color.Green.WithAlpha( 0.9f ) : Color.Transparent );
+				Paint.SetPen( isLive ? Color.Green.WithAlpha( 0.8f ) : Color.White.WithAlpha( 0.25f ) );
+				Paint.DrawCircle( new Vector2( radioX, radioY ), radioR );
+
+				Paint.SetDefaultFont( size: 8, weight: 600 );
+				Paint.SetPen( isLive ? Color.Green : Color.White.WithAlpha( 0.85f ) );
+				Paint.DrawText( new Rect( textX, cardY + 3, rightW - 26, 13 ), "Live", TextFlag.LeftCenter );
+				Paint.SetDefaultFont( size: 7 );
+				Paint.SetPen( Color.White.WithAlpha( 0.45f ) );
+				Paint.DrawText( new Rect( textX, cardY + 15, rightW - 26, 11 ), "Production / existing live", TextFlag.LeftCenter );
+				Paint.DrawText( new Rect( textX, cardY + 25, rightW - 26, 11 ), "Deployed immediately", TextFlag.LeftCenter );
+
+				if ( !_busy )
+					_buttons.Add( new ClickRegion { Rect = liveCardRect, Id = "publish-target-live", OnClick = () => { _publishTarget = "live"; Update(); } } );
+
+				y += infoH + 6;
+			}
+			else
+			{
+				Paint.SetDefaultFont( size: 9 );
+				Paint.SetPen( Color.Yellow.WithAlpha( 0.75f ) );
+				Paint.DrawText( new Rect( pad, y + 4, w, 16 ), "No package revision detected — publishing will use default live behavior.", TextFlag.LeftCenter );
+				y += 26;
+			}
+		}
+
 		DrawSeparator( ref y, w, pad );
 	}
 
@@ -606,6 +1067,49 @@ public partial class SyncToolWindow : DockWindow
 		Paint.SetPen( Color.White.WithAlpha( 0.7f ) );
 		Paint.DrawText( new Rect( pad, y, w, 18 ), title, TextFlag.LeftCenter );
 		y += 24;
+	}
+
+	private static string FormatSyncedAgo( string isoTimestamp )
+	{
+		if ( string.IsNullOrWhiteSpace( isoTimestamp ) )
+			return "Never";
+
+		if ( !DateTimeOffset.TryParse( isoTimestamp, out var ts ) )
+			return isoTimestamp;
+
+		var ago = DateTimeOffset.UtcNow - ts;
+		if ( ago.TotalSeconds < 60 ) return "Just now";
+		if ( ago.TotalMinutes < 60 ) return $"{(int)ago.TotalMinutes}m ago";
+		if ( ago.TotalHours < 24 ) return $"{(int)ago.TotalHours}h ago";
+		if ( ago.TotalDays < 7 ) return $"{(int)ago.TotalDays}d ago";
+		return ts.ToString( "yyyy-MM-dd HH:mm" );
+	}
+
+	private static string FormatUnixAgo( long? unixSeconds )
+	{
+		if ( !unixSeconds.HasValue || unixSeconds.Value <= 0 )
+			return "Never";
+
+		var ts = DateTimeOffset.FromUnixTimeSeconds( unixSeconds.Value );
+		var ago = DateTimeOffset.UtcNow - ts;
+		if ( ago.TotalSeconds < 60 ) return "Just now";
+		if ( ago.TotalMinutes < 60 ) return $"{(int)ago.TotalMinutes}m ago";
+		if ( ago.TotalHours < 24 ) return $"{(int)ago.TotalHours}h ago";
+		if ( ago.TotalDays < 7 ) return $"{(int)ago.TotalDays}d ago";
+		return ts.ToString( "yyyy-MM-dd HH:mm" );
+	}
+
+	private bool IsEndpointStaged( string slug )
+	{
+		if ( !_remoteEndpoints.HasValue || _remoteEndpoints.Value.ValueKind != JsonValueKind.Array )
+			return false;
+		foreach ( var ep in _remoteEndpoints.Value.EnumerateArray() )
+		{
+			if ( ep.TryGetProperty( "slug", out var s ) && s.GetString() == slug &&
+				 ep.TryGetProperty( "revisionTarget", out var rt ) && rt.GetString() == "next" )
+				return true;
+		}
+		return false;
 	}
 
 	private void DrawSeparator( ref float y, float w, float pad )
@@ -648,7 +1152,7 @@ public partial class SyncToolWindow : DockWindow
 	}
 
 	private void DrawResourceRow( ref float y, float pad, float w, string name, string info, string id,
-		Action pushAction, Action pullAction, Action testAction = null, bool deprecated = false )
+		Action pushAction, Action pullAction, Action testAction = null, bool deprecated = false, bool staged = false )
 	{
 		var rowH = 28f;
 		var btnW = 48f;
@@ -741,15 +1245,33 @@ public partial class SyncToolWindow : DockWindow
 		var nameW = w - ( contentX - pad ) - rightBtnsW - badgeReserve;
 		Paint.DrawText( new Rect( contentX, y, nameW, rowH ), name, TextFlag.LeftCenter );
 
+		// Deployment target indicator (only for endpoints with remote data)
+		var afterNameX = contentX + Paint.MeasureText( name ).x + 4;
+		if ( id.StartsWith( "ep_" ) && _hasCheckedRemote && state.Status != SyncStatus.LocalOnly )
+		{
+			Paint.SetDefaultFont( size: 7 );
+			var targetText = staged ? "Staged" : "Live";
+			var targetColor = staged ? Color.Yellow : Color.Green;
+			var targetW = Paint.MeasureText( targetText ).x + 6;
+			var targetRect = new Rect( afterNameX, y + ( rowH - 12 ) / 2, targetW, 12 );
+
+			Paint.SetBrush( targetColor.WithAlpha( 0.1f ) );
+			Paint.SetPen( targetColor.WithAlpha( 0.25f ) );
+			Paint.DrawRect( targetRect, 2 );
+			Paint.SetPen( targetColor.WithAlpha( 0.7f ) );
+			Paint.DrawText( targetRect, targetText, TextFlag.Center );
+
+			afterNameX += targetW + 4;
+		}
+
 		// Deprecated badge
 		if ( deprecated )
 		{
-			var depBadgeX = contentX + Paint.MeasureText( name ).x + 6;
 			Paint.SetDefaultFont( size: 7 );
 
 			var depText = "deprecated";
 			var depTextW = Paint.MeasureText( depText ).x + 8;
-			var depBadgeRect = new Rect( depBadgeX, y + ( rowH - 14 ) / 2, depTextW, 14 );
+			var depBadgeRect = new Rect( afterNameX, y + ( rowH - 14 ) / 2, depTextW, 14 );
 
 			Paint.SetBrush( new Color( 0.96f, 0.62f, 0.04f, 0.12f ) );
 			Paint.SetPen( new Color( 0.96f, 0.62f, 0.04f, 0.25f ) );
@@ -760,11 +1282,15 @@ public partial class SyncToolWindow : DockWindow
 		}
 
 		// Status badge (right of name, before buttons)
+		float statusBadgeEndX = contentX + nameW + 4;
 		if ( hasStatusBadge && !hasResult )
 		{
+			// Skip the simple "Synced" badge if we'll show "Synced: live" or "Synced: revision" below
+			var skipSyncedBadge = state.Status == SyncStatus.InSync && ( staged || _packageInfoDetected );
+
 			var (badgeText, badgeColor) = state.Status switch
 			{
-				SyncStatus.InSync => ("Synced", Color.Green.WithAlpha( 0.5f )),
+				SyncStatus.InSync => skipSyncedBadge ? ("", Color.Transparent) : ("Synced", Color.Green.WithAlpha( 0.5f )),
 				SyncStatus.LocalOnly => ("Local", Color.Yellow.WithAlpha( 0.7f )),
 				SyncStatus.RemoteOnly => ("Remote", Color.Cyan.WithAlpha( 0.7f )),
 				SyncStatus.Differs => ("Changed", Color.Orange.WithAlpha( 0.7f )),
@@ -779,6 +1305,37 @@ public partial class SyncToolWindow : DockWindow
 				var badgeX = contentX + nameW + 4;
 				var badgeW = Math.Max( 50f, Paint.MeasureText( badgeText ).x + 8 );
 				Paint.DrawText( new Rect( badgeX, y, badgeW, rowH ), badgeText, TextFlag.LeftCenter );
+				statusBadgeEndX = badgeX + badgeW + 4;
+			}
+		}
+
+		// Deployment status badge (only show when actually in sync)
+		if ( state.Status == SyncStatus.InSync )
+		{
+			if ( staged )
+			{
+				var nextRev = ((_serverCurrentRevisionId ?? _currentRevisionId) ?? 0) + 1;
+				var revText = $"Synced: rev {nextRev}";
+				Paint.SetDefaultFont( size: 7 );
+				var revW = Paint.MeasureText( revText ).x + 10;
+				var revRect = new Rect( statusBadgeEndX, y + ( rowH - 14 ) / 2, revW, 14 );
+				Paint.SetBrush( Color.Yellow.WithAlpha( 0.1f ) );
+				Paint.SetPen( Color.Yellow.WithAlpha( 0.3f ) );
+				Paint.DrawRect( revRect, 3 );
+				Paint.SetPen( Color.Yellow.WithAlpha( 0.7f ) );
+				Paint.DrawText( revRect, revText, TextFlag.Center );
+			}
+			else if ( _packageInfoDetected )
+			{
+				var revText = "Synced: live";
+				Paint.SetDefaultFont( size: 7 );
+				var revW = Paint.MeasureText( revText ).x + 10;
+				var revRect = new Rect( statusBadgeEndX, y + ( rowH - 14 ) / 2, revW, 14 );
+				Paint.SetBrush( Color.Green.WithAlpha( 0.1f ) );
+				Paint.SetPen( Color.Green.WithAlpha( 0.3f ) );
+				Paint.DrawRect( revRect, 3 );
+				Paint.SetPen( Color.Green.WithAlpha( 0.7f ) );
+				Paint.DrawText( revRect, revText, TextFlag.Center );
 			}
 		}
 
@@ -1139,7 +1696,8 @@ public partial class SyncToolWindow : DockWindow
 		}
 		else return;
 
-		DrawResourceRow( ref y, pad, w, name, info, id, pushAction, pullAction, testAction, deprecated );
+		DrawResourceRow( ref y, pad, w, name, info, id, pushAction, pullAction, testAction, deprecated,
+			staged: id.StartsWith( "ep_" ) && IsEndpointStaged( id.Substring( 3 ) ) );
 	}
 
 	private List<string> GetRemoteEndpointSlugs()
@@ -1312,6 +1870,7 @@ public partial class SyncToolWindow : DockWindow
 		{
 			_busy = false;
 			_busyItem = null;
+			_ = SyncLocalPackageInfoAsync();
 			Update();
 		}
 	}
@@ -1381,6 +1940,28 @@ public partial class SyncToolWindow : DockWindow
 			SyncToolConfig.TryApplyProjectSecuritySettings( _remoteCollections.Value );
 		if ( _remoteWorkflows.HasValue )
 			SyncToolConfig.TryApplyProjectSecuritySettings( _remoteWorkflows.Value );
+
+		// ── Detect package/revision info ──
+		try
+		{
+			await NetworkStoragePackageInfo.DetectAsync();
+			_packageInfoDetected = NetworkStoragePackageInfo.IsDetected;
+			_packageIdent = NetworkStoragePackageInfo.PackageIdent;
+			_currentRevisionId = NetworkStoragePackageInfo.CurrentRevisionId;
+			_publishStatus = NetworkStoragePackageInfo.PublishStatus;
+
+			if ( _packageInfoDetected )
+			{
+				var syncResp = await SyncToolApi.SyncPackageInfo( NetworkStoragePackageInfo.BuildSyncPayload() );
+			}
+
+			await RefreshServerPackageStateAsync();
+		}
+		catch ( Exception ex )
+		{
+			Log.Warning( $"[SyncTool] Package detection failed: {ex.Message}" );
+			_packageInfoDetected = false;
+		}
 
 		if ( !_remoteEndpoints.HasValue )
 		{
@@ -1560,19 +2141,15 @@ public partial class SyncToolWindow : DockWindow
 					var normRemote = NormalizeJson( remoteJson );
 					var normLocal = NormalizeJson( localJson );
 					var differs = normRemote != normLocal;
+					(SyncStatus Status, string Summary, JsonDiffUtilities.ComparisonResult Analysis) classification = default;
 
-					Log.Info( $"[SyncTool] ── Workflow {wfId} ──" );
-					Log.Info( $"[SyncTool] LOCAL:  {localJson}" );
-					Log.Info( $"[SyncTool] REMOTE: {remoteJson}" );
-					Log.Info( $"[SyncTool] NORM LOCAL:  {normLocal}" );
-					Log.Info( $"[SyncTool] NORM REMOTE: {normRemote}" );
-					Log.Info( $"[SyncTool] DIFFERS: {differs}" );
+					LogDiffResult( wfId, "workflow", localJson, remoteJson, differs, classification );
 
 					if ( differs )
 					{
 						var localPretty = PrettyJson( localJson );
 						var remotePretty = PrettyJson( remoteJson );
-						var classification = ClassifyRemoteDifference( id, localPretty, remotePretty );
+						classification = ClassifyRemoteDifference( id, localPretty, remotePretty );
 
 						SetItemState( id, remoteDiffers: true, status: classification.Status,
 							diffSummary: classification.Summary,
@@ -1776,20 +2353,12 @@ public partial class SyncToolWindow : DockWindow
 			}
 		}
 
-		// ── Push all resources in parallel ──
+		// ── Push all resources in single batch (falls back to individual if batch not supported) ──
 		_busyItem = "push_all";
 		_status = "Pushing all resources...";
 		Update();
 
-		var pushEpTask = activeEndpointFiles.Length > 0 ? DoPushAllEndpoints() : Task.FromResult( false );
-		var pushColTask = _collectionFiles.Length > 0 ? DoPushCollections() : Task.FromResult( false );
-		var pushWfTask = _workflowFiles.Length > 0 ? DoPushAllWorkflows() : Task.FromResult( false );
-
-		await Task.WhenAll( pushEpTask, pushColTask, pushWfTask );
-
-		var epOk = activeEndpointFiles.Length > 0 ? await pushEpTask : false;
-		var colOk = _collectionFiles.Length > 0 ? await pushColTask : false;
-		var wfOk = _workflowFiles.Length > 0 ? await pushWfTask : false;
+		var (epOk, colOk, wfOk) = await DoPushAllBatched();
 
 		// ── Log push results ──
 		if ( activeEndpointFiles.Length > 0 )
@@ -1798,7 +2367,7 @@ public partial class SyncToolWindow : DockWindow
 			{
 				var slug = ResourceIdFromFile( f, "endpoint" );
 				var failDetail = GetPushFailDetail( "endpoints", slug );
-				var detail = epOk ? "Pushed" : failDetail;
+				var detail = epOk ? ( _publishTarget == "next" ? "Pushed (next release)" : "Pushed (production)" ) : failDetail;
 				SetItemState( $"ep_{slug}", result: epOk ? "OK" : "FAIL",
 					remoteDiffers: false, diffSummary: "", status: epOk ? SyncStatus.InSync : null );
 				_syncLog.Add( new SyncLogEntry { Name = $"{slug}.endpoint.yml", Type = "Endpoint", Ok = epOk, Detail = detail } );
@@ -1811,7 +2380,7 @@ public partial class SyncToolWindow : DockWindow
 			{
 				var name = ResourceIdFromFile( f, "collection" );
 				var failDetail = GetPushFailDetail( "collections", name );
-				var detail = colOk ? "Pushed" : failDetail;
+				var detail = colOk ? ( _publishTarget == "next" ? "Pushed (next release)" : "Pushed (production)" ) : failDetail;
 				SetItemState( $"col_{name}", result: colOk ? "OK" : "FAIL",
 					remoteDiffers: false, diffSummary: "", status: colOk ? SyncStatus.InSync : null );
 				_syncLog.Add( new SyncLogEntry { Name = $"{name}.collection.yml", Type = "Collection", Ok = colOk, Detail = detail } );
@@ -1824,7 +2393,7 @@ public partial class SyncToolWindow : DockWindow
 			{
 				var name = ResourceIdFromFile( f, "workflow" );
 				var failDetail = GetPushFailDetail( "workflows", name );
-				var detail = wfOk ? "Pushed" : failDetail;
+				var detail = wfOk ? ( _publishTarget == "next" ? "Pushed (next release)" : "Pushed (production)" ) : failDetail;
 				SetItemState( $"wf_{name}", result: wfOk ? "OK" : "FAIL",
 					remoteDiffers: false, diffSummary: "", status: wfOk ? SyncStatus.InSync : null );
 				_syncLog.Add( new SyncLogEntry { Name = $"{name}.workflow.yml", Type = "Workflow", Ok = wfOk, Detail = detail } );
@@ -1856,6 +2425,9 @@ public partial class SyncToolWindow : DockWindow
 		}
 
 		// Invalidate cached remote data — next check will fetch fresh
+		// Sync local package info after push so backend has latest revision
+		await SyncLocalPackageInfoAsync();
+
 		ClearAllRemoteDiffs();
 		_remoteEndpoints = null;
 		_remoteCollections = null;
@@ -1879,6 +2451,10 @@ public partial class SyncToolWindow : DockWindow
 
 		_busy = false;
 		_busyItem = null;
+
+		// Sync local package info so backend has the latest revision
+		_ = SyncLocalPackageInfoAsync();
+
 		ScrollToBottom();
 	}
 
@@ -2096,14 +2672,16 @@ public partial class SyncToolWindow : DockWindow
 			}
 			else if ( id.StartsWith( "col_" ) )
 			{
-				ok = await DoPushCollections();
-				itemName = $"{id[4..]}.collection.yml";
+				var colName = id[4..];
+				ok = await DoPushSingleCollection( colName );
+				itemName = $"{colName}.collection.yml";
 				itemType = "Collection";
 			}
 			else if ( id.StartsWith( "wf_" ) )
 			{
-				ok = await DoPushAllWorkflows();
-				itemName = $"{id[3..]}.workflow.yml";
+				var wfId = id[3..];
+				ok = await DoPushSingleWorkflow( wfId );
+				itemName = $"{wfId}.workflow.yml";
 				itemType = "Workflow";
 			}
 			else
@@ -2118,7 +2696,7 @@ public partial class SyncToolWindow : DockWindow
 				status: ok ? SyncStatus.InSync : null );
 
 			// Add to sync log
-			_syncLog.Add( new SyncLogEntry { Name = itemName, Type = itemType, Ok = ok, Detail = ok ? "Pushed" : GetPushFailDetailForItem( id ) } );
+			_syncLog.Add( new SyncLogEntry { Name = itemName, Type = itemType, Ok = ok, Detail = ok ? ( _publishTarget == "next" ? "Pushed (next release)" : "Pushed (production)" ) : GetPushFailDetailForItem( id ) } );
 
 			// Regenerate typed C# files so Code/Data/NetworkStorage/ stays in sync
 			if ( ok )
@@ -2153,6 +2731,7 @@ public partial class SyncToolWindow : DockWindow
 		{
 			_busy = false;
 			_busyItem = null;
+			_ = SyncLocalPackageInfoAsync();
 			Update();
 		}
 	}
@@ -2249,6 +2828,7 @@ public partial class SyncToolWindow : DockWindow
 		{
 			_busy = false;
 			_busyItem = null;
+			_ = SyncLocalPackageInfoAsync();
 			Update();
 		}
 	}
@@ -2295,9 +2875,7 @@ public partial class SyncToolWindow : DockWindow
 	{
 		try
 		{
-			Log.Info( "[SyncTool] Preparing endpoint push..." );
 			var localEps = SyncToolConfig.LoadEndpoints();
-			Log.Info( $"[SyncTool] Loaded {localEps.Count} local endpoint(s) for push." );
 			if ( localEps.Count == 0 )
 			{
 				SyncToolApi.ReportLocalError( "endpoints", "No readable local endpoint source files were loaded for push." );
@@ -2305,7 +2883,7 @@ public partial class SyncToolWindow : DockWindow
 			}
 			var existing = await SyncToolApi.GetEndpoints();
 			var serverFmt = SyncToolTransforms.EndpointsToServer( localEps, existing );
-			var resp = await SyncToolApi.PushEndpoints( serverFmt );
+			var resp = await SyncToolApi.PushEndpoints( serverFmt, _publishTarget );
 			return resp.HasValue;
 		}
 		catch ( Exception ex )
@@ -2313,6 +2891,114 @@ public partial class SyncToolWindow : DockWindow
 			SyncToolApi.ReportLocalError( "endpoints", $"Local endpoint push preparation failed: {ex.Message}", ex );
 			return false;
 		}
+	}
+
+	/// <summary>
+	/// Push all resources (endpoints, collections, workflows) in a single batch request.
+	/// Returns a tuple of (endpointsOk, collectionsOk, workflowsOk).
+	/// Falls back to individual pushes if the batch endpoint is not available (HTTP 404).
+	/// </summary>
+	private async Task<(bool epOk, bool colOk, bool wfOk)> DoPushAllBatched()
+	{
+		try
+		{
+			// Load all local resources
+			var localEps = SyncToolConfig.LoadEndpoints();
+			var localCols = SyncToolConfig.LoadCollections();
+			var localWfs = SyncToolConfig.LoadWorkflows();
+
+			var hasEndpoints = localEps.Count > 0;
+			var hasCollections = localCols.Count > 0;
+			var hasWorkflows = localWfs.Count > 0;
+
+			if ( !hasEndpoints && !hasCollections && !hasWorkflows )
+				return (false, false, false);
+
+			// Fetch existing server state for ID preservation (parallel)
+			var existingEpTask = hasEndpoints ? SyncToolApi.GetEndpoints() : Task.FromResult<JsonElement?>( null );
+			var existingWfTask = hasWorkflows ? SyncToolApi.GetWorkflows() : Task.FromResult<JsonElement?>( null );
+			await Task.WhenAll( existingEpTask, existingWfTask );
+
+			var existingEp = await existingEpTask;
+			var existingWf = await existingWfTask;
+
+			// Transform to server format
+			var batchPayload = new Dictionary<string, object>();
+
+			if ( hasEndpoints )
+			{
+				var epServerFmt = SyncToolTransforms.EndpointsToServer( localEps, existingEp );
+				batchPayload["endpoints"] = JsonSerializer.Deserialize<object>( epServerFmt.GetRawText() );
+			}
+
+			if ( hasCollections )
+			{
+				var colServerFmt = SyncToolTransforms.CollectionsToServer( localCols.Select( c => c.Data ).ToList() );
+				batchPayload["collections"] = JsonSerializer.Deserialize<object>( colServerFmt.GetRawText() );
+			}
+
+			if ( hasWorkflows )
+			{
+				var wfServerFmt = SyncToolTransforms.WorkflowsToServer( localWfs, existingWf );
+				batchPayload["workflows"] = JsonSerializer.Deserialize<object>( wfServerFmt.GetRawText() );
+			}
+
+			var payload = JsonSerializer.Deserialize<JsonElement>( JsonSerializer.Serialize( batchPayload ) );
+			var resp = await SyncToolApi.PushSync( payload, _publishTarget );
+
+			// Check if batch endpoint is not available (404/405) — fall back to individual pushes
+			var errCode = SyncToolApi.LastErrorCode ?? "";
+			var errMsg = SyncToolApi.LastErrorMessage ?? "";
+			if ( !resp.HasValue && (errCode.Contains( "404" ) || errCode == "NOT_FOUND" || errMsg.Contains( "404" ) || errMsg.Contains( "405" )) )
+			{
+				// Batch sync endpoint not available, falling back to individual pushes
+				return await DoPushAllIndividual( hasEndpoints, hasCollections, hasWorkflows );
+			}
+
+			if ( !resp.HasValue )
+			{
+				var finalErrMsg = string.IsNullOrEmpty( errMsg ) ? "Unknown error" : errMsg;
+				SyncToolApi.ReportLocalError( "sync", $"Batch sync failed: {finalErrMsg}" );
+				return (false, false, false);
+			}
+
+			// Parse per-resource results from batch response
+			var epOk = !hasEndpoints || (resp.Value.TryGetProperty( "endpoints", out var epResult ) &&
+				epResult.TryGetProperty( "ok", out var epOkProp ) && epOkProp.GetBoolean());
+			var colOk = !hasCollections || (resp.Value.TryGetProperty( "collections", out var colResult ) &&
+				colResult.TryGetProperty( "ok", out var colOkProp ) && colOkProp.GetBoolean());
+			var wfOk = !hasWorkflows || (resp.Value.TryGetProperty( "workflows", out var wfResult ) &&
+				wfResult.TryGetProperty( "ok", out var wfOkProp ) && wfOkProp.GetBoolean());
+
+			// Also accept top-level ok as success for all
+			if ( resp.Value.TryGetProperty( "ok", out var topOk ) && topOk.GetBoolean() )
+			{
+				epOk = !hasEndpoints || epOk || true;
+				colOk = !hasCollections || colOk || true;
+				wfOk = !hasWorkflows || wfOk || true;
+			}
+
+			return (hasEndpoints && epOk, hasCollections && colOk, hasWorkflows && wfOk);
+		}
+		catch ( Exception ex )
+		{
+			SyncToolApi.ReportLocalError( "sync", $"Batch sync preparation failed: {ex.Message}", ex );
+			return (false, false, false);
+		}
+	}
+
+	/// <summary>
+	/// Fallback: push endpoints, collections, workflows in parallel individual requests.
+	/// </summary>
+	private async Task<(bool epOk, bool colOk, bool wfOk)> DoPushAllIndividual( bool hasEndpoints, bool hasCollections, bool hasWorkflows )
+	{
+		var pushEpTask = hasEndpoints ? DoPushAllEndpoints() : Task.FromResult( false );
+		var pushColTask = hasCollections ? DoPushCollections() : Task.FromResult( false );
+		var pushWfTask = hasWorkflows ? DoPushAllWorkflows() : Task.FromResult( false );
+
+		await Task.WhenAll( pushEpTask, pushColTask, pushWfTask );
+
+		return (await pushEpTask, await pushColTask, await pushWfTask);
 	}
 
 	private static bool IsIgnoredComparisonField( string name )
@@ -2342,7 +3028,6 @@ public partial class SyncToolWindow : DockWindow
 	{
 		try
 		{
-			Log.Info( $"[SyncTool] Preparing single endpoint push for {slug}..." );
 			var localFile = _endpointFiles.FirstOrDefault( f => ResourceIdFromFile( f, "endpoint" ) == slug );
 			if ( localFile == null )
 			{
@@ -2356,6 +3041,26 @@ public partial class SyncToolWindow : DockWindow
 				return false;
 			}
 			if ( SyncToolConfig.IsEndpointDeprecated( localEp ) ) return false;
+
+			// Transform to server format
+			var localDict = SyncToolTransforms.ServerEndpointToLocal( localEp );
+			var payload = JsonSerializer.Deserialize<JsonElement>( JsonSerializer.Serialize( new { endpoint = localDict } ) );
+
+			// Try PATCH first (server handles upsert)
+			var resp = await SyncToolApi.PatchEndpoint( payload, _publishTarget );
+			if ( resp.HasValue )
+				return true;
+
+			// Fall back to GET-merge-PUT if PATCH not supported (404/405)
+			var errCode = SyncToolApi.LastErrorCode ?? "";
+			var errMsg = SyncToolApi.LastErrorMessage ?? "";
+			var isNotSupported = errCode.Contains( "404" ) || errCode.Contains( "405" ) || errCode == "NOT_FOUND" || errMsg.Contains( "404" ) || errMsg.Contains( "405" );
+			if ( !isNotSupported )
+			{
+				// Real error, not "endpoint not found"
+				return false;
+			}
+
 
 			var remoteResp = await SyncToolApi.GetEndpoints();
 			if ( !remoteResp.HasValue ) return false;
@@ -2375,7 +3080,6 @@ public partial class SyncToolWindow : DockWindow
 				var epSlug = ep.TryGetProperty( "slug", out var s ) ? s.GetString() : "";
 				if ( epSlug == slug )
 				{
-					var localDict = SyncToolTransforms.ServerEndpointToLocal( localEp );
 					if ( ep.TryGetProperty( "id", out var idEl ) )
 						localDict["id"] = idEl.GetString();
 					if ( ep.TryGetProperty( "createdAt", out var caEl ) )
@@ -2391,13 +3095,12 @@ public partial class SyncToolWindow : DockWindow
 
 			if ( !replaced )
 			{
-				var localDict = SyncToolTransforms.ServerEndpointToLocal( localEp );
 				localDict["id"] = Guid.NewGuid().ToString( "N" )[..16];
 				merged.Add( localDict );
 			}
 
 			var mergedJson = JsonSerializer.Deserialize<JsonElement>( JsonSerializer.Serialize( merged ) );
-			var resp = await SyncToolApi.PushEndpoints( mergedJson );
+			resp = await SyncToolApi.PushEndpoints( mergedJson, _publishTarget );
 			return resp.HasValue;
 		}
 		catch ( Exception ex )
@@ -2407,20 +3110,93 @@ public partial class SyncToolWindow : DockWindow
 		}
 	}
 
+	private async Task<bool> DoPushSingleCollection( string colName )
+	{
+		try
+		{
+			var collections = SyncToolConfig.LoadCollections();
+			var col = collections.FirstOrDefault( c => c.Name == colName );
+			if ( col.Data == null )
+			{
+				SyncToolApi.ReportLocalError( "collections", $"Local collection file for {colName} was not found." );
+				return false;
+			}
+
+			// Try PATCH first (server handles upsert)
+			var payload = JsonSerializer.Deserialize<JsonElement>( JsonSerializer.Serialize( new { collection = col.Data } ) );
+			var resp = await SyncToolApi.PatchCollection( payload, _publishTarget );
+			if ( resp.HasValue )
+				return true;
+
+			// Fall back to PUT if PATCH not supported
+			var errCode = SyncToolApi.LastErrorCode ?? "";
+			var errMsg = SyncToolApi.LastErrorMessage ?? "";
+			var isNotSupported = errCode.Contains( "404" ) || errCode.Contains( "405" ) || errCode == "NOT_FOUND" || errMsg.Contains( "404" ) || errMsg.Contains( "405" );
+			if ( !isNotSupported )
+				return false;
+
+			var serverFmt = SyncToolTransforms.CollectionsToServer( new List<Dictionary<string, object>> { col.Data } );
+			resp = await SyncToolApi.PushCollections( serverFmt, _publishTarget );
+			return resp.HasValue;
+		}
+		catch ( Exception ex )
+		{
+			SyncToolApi.ReportLocalError( "collections", $"Single collection push failed for {colName}: {ex.Message}", ex );
+			return false;
+		}
+	}
+
+	private async Task<bool> DoPushSingleWorkflow( string wfId )
+	{
+		try
+		{
+			var localWfs = SyncToolConfig.LoadWorkflows();
+			var localWf = localWfs.FirstOrDefault( wf =>
+				(wf.TryGetProperty( "id", out var i ) ? i.GetString() : "") == wfId );
+
+			if ( localWf.ValueKind == JsonValueKind.Undefined )
+			{
+				SyncToolApi.ReportLocalError( "workflows", $"Local workflow file for {wfId} was not found." );
+				return false;
+			}
+
+			// Try PATCH first (server handles upsert)
+			var payload = JsonSerializer.Deserialize<JsonElement>( JsonSerializer.Serialize( new { workflow = localWf } ) );
+			var resp = await SyncToolApi.PatchWorkflow( payload );
+			if ( resp.HasValue )
+				return true;
+
+			// Fall back to GET-merge-PUT if PATCH not supported
+			var errCode = SyncToolApi.LastErrorCode ?? "";
+			var errMsg = SyncToolApi.LastErrorMessage ?? "";
+			var isNotSupported = errCode.Contains( "404" ) || errCode.Contains( "405" ) || errCode == "NOT_FOUND" || errMsg.Contains( "404" ) || errMsg.Contains( "405" );
+			if ( !isNotSupported )
+				return false;
+
+			var existing = await SyncToolApi.GetWorkflows();
+			var serverFmt = SyncToolTransforms.WorkflowsToServer( new List<JsonElement> { localWf }, existing );
+			resp = await SyncToolApi.PushWorkflows( serverFmt );
+			return resp.HasValue;
+		}
+		catch ( Exception ex )
+		{
+			SyncToolApi.ReportLocalError( "workflows", $"Single workflow push failed for {wfId}: {ex.Message}", ex );
+			return false;
+		}
+	}
+
 	private async Task<bool> DoPushCollections()
 	{
 		try
 		{
-			Log.Info( "[SyncTool] Preparing collection push..." );
 			var collections = SyncToolConfig.LoadCollections();
-			Log.Info( $"[SyncTool] Loaded {collections.Count} local collection(s) for push." );
 			if ( collections.Count == 0 )
 			{
 				SyncToolApi.ReportLocalError( "collections", "No readable local collection source files were loaded for push." );
 				return false;
 			}
 			var serverFmt = SyncToolTransforms.CollectionsToServer( collections.Select( c => c.Data ).ToList() );
-			var resp = await SyncToolApi.PushCollections( serverFmt );
+			var resp = await SyncToolApi.PushCollections( serverFmt, _publishTarget );
 			return resp.HasValue;
 		}
 		catch ( Exception ex )
@@ -2434,9 +3210,7 @@ public partial class SyncToolWindow : DockWindow
 	{
 		try
 		{
-			Log.Info( "[SyncTool] Preparing workflow push..." );
 			var localWfs = SyncToolConfig.LoadWorkflows();
-			Log.Info( $"[SyncTool] Loaded {localWfs.Count} local workflow(s) for push." );
 			if ( localWfs.Count == 0 )
 			{
 				SyncToolApi.ReportLocalError( "workflows", "No readable local workflow source files were loaded for push." );
@@ -2844,6 +3618,7 @@ public partial class SyncToolWindow : DockWindow
 		{
 			_busy = false;
 			_busyItem = null;
+			_ = SyncLocalPackageInfoAsync();
 			Update();
 		}
 
@@ -2864,7 +3639,10 @@ public partial class SyncToolWindow : DockWindow
 			: "workflow";
 
 		var capturedId = id;
-		var window = new MergeViewWindow( name, resourceType, added, changed, () => DoMergeItem( capturedId ) );
+		var capturedName = name;
+		var window = new MergeViewWindow( name, resourceType, added, changed,
+			onMerge: () => DoMergeItem( capturedId ),
+			onViewDiff: () => OpenDiffView( capturedId, capturedName ) );
 		window.Show();
 	}
 
@@ -3090,5 +3868,20 @@ public partial class SyncToolWindow : DockWindow
 		_remoteWorkflows = null;
 		_status = SyncToolConfig.IsValid ? "Refreshed" : "Config invalid — check .env";
 		Update();
+		_status = SyncToolConfig.IsValid ? "Refreshed" : "Config invalid — check .env";
+		Update();
 	}
-}
+
+	private static void LogDiffResult( string id, string kind, string localJson, string remoteJson, bool differs, (SyncStatus Status, string Summary, JsonDiffUtilities.ComparisonResult Analysis) classification )
+	{
+		// Diff details available in classification.Analysis if needed for debugging
+	}
+
+	private static string TruncateVal( string v, int maxLen = 120 )
+	{
+		if ( string.IsNullOrEmpty( v ) ) return "(empty)";
+		return v.Length <= maxLen ? v : v[..maxLen] + $"… ({v.Length} chars)";
+	}
+
+
+} // end class
