@@ -157,6 +157,41 @@ if ( NetworkStoragePackageInfo.IsOutdatedRevision )
 }
 ```
 
+### Disabling the Default UI
+
+To completely disable the built-in popup and handle revision outdated detection yourself:
+
+```csharp
+// Disable the built-in popup (this is the default, but be explicit)
+NetworkStorage.RevisionSettings.ShowDefaultMessage = false;
+
+// The revision system is still enabled - events still fire
+// Subscribe to know when player is on an outdated revision
+NetworkStorage.OnRevisionOutdated += ( data ) =>
+{
+    // data contains all revision info from the server
+    Log.Info( $"Player on revision {data.CurrentRevisionId}, server has {data.LatestRevisionId}" );
+    
+    // Show your own UI, play a sound, whatever you want
+    MyCustomUI.ShowOutdatedWarning( data );
+};
+
+// You can also check status anytime without events
+if ( NetworkStoragePackageInfo.IsOutdatedRevision )
+{
+    var mode = NetworkStoragePackageInfo.EnforcementMode;
+    var expired = NetworkStoragePackageInfo.GraceExpired;
+    // ...
+}
+```
+
+To completely disable all revision detection (no events, no tracking):
+
+```csharp
+// Disable the entire revision system
+NetworkStorage.RevisionSettings.Enabled = false;
+```
+
 ### Built-in UI Events
 
 When using the built-in popup (`ShowDefaultMessage = true`), subscribe to these events to handle player actions:
@@ -204,6 +239,10 @@ if ( NetworkStorageOutdatedUI.IsOpen )
 {
     // ...
 }
+
+// Reset popup state - allows popup to show again even with ShowPopupOnce
+// Useful when starting a new game session or after player reconnects
+NetworkStorageOutdatedUI.ResetState();
 ```
 
 ### Available Status Properties
@@ -342,3 +381,56 @@ public partial class MyGame : GameManager
 - `block_all` can lock players out entirely — use `block_writes` if you want graceful degradation
 - The sync tool must push package info before revision detection works
 - All client-side features are opt-in; nothing is enabled by default
+
+---
+
+## Quick Reference
+
+### Settings (`NetworkStorage.RevisionSettings`)
+
+| Setting | Type | Default | Description |
+|---------|------|---------|-------------|
+| `Enabled` | bool | `true` | Enable/disable all revision detection |
+| `ShowDefaultMessage` | bool | `false` | Show built-in popup UI |
+| `ShowOnlyOnce` | bool | `true` | Show popup once per session |
+| `AutoOpenOnOutdated` | bool | `true` | Auto-open popup when outdated detected |
+| `AllowSpaceToClose` | bool | `true` | SPACE key closes popup |
+| `GracePeriod` | TimeSpan | Zero | Client-side grace before showing UI |
+| `AutoRefreshLobbies` | bool | `false` | Auto-refresh lobby list when outdated |
+| `LobbyRefreshInterval` | float | `10` | Seconds between lobby refreshes |
+
+### Events
+
+| Event | Fires When |
+|-------|------------|
+| `NetworkStorage.OnRevisionOutdated` | Server reports player is on outdated revision |
+| `NetworkStorageOutdatedUI.OnContinuePlaying` | Player clicks "Continue Playing" (Allow Continue mode) |
+| `NetworkStorageOutdatedUI.OnCreateNewGame` | Player clicks "Create New Session" |
+| `NetworkStorageOutdatedUI.OnJoinNewLobby` | Player clicks "Join New Lobby" |
+| `NetworkStorageOutdatedUI.OnDismiss` | Player dismisses popup (Force Upgrade mode) |
+| `NetworkStoragePackageInfo.OnRevisionStatusChanged` | Revision status updated from server |
+
+### UI Control (`NetworkStorageOutdatedUI`)
+
+| Method/Property | Description |
+|-----------------|-------------|
+| `RootPanel` | Set the parent panel for auto-created popup |
+| `IsOpen` | Check if popup is currently visible |
+| `Open(parent)` | Show popup manually |
+| `Close()` | Hide popup |
+| `ResetState()` | Reset popup state (allows re-showing with ShowOnlyOnce) |
+
+### Status Properties (`NetworkStoragePackageInfo`)
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `IsOutdatedRevision` | bool | Running an older revision |
+| `EnforcementMode` | RevisionEnforcementMode | `ForceUpgrade` or `AllowContinue` |
+| `GraceRemainingMinutes` | int? | Minutes left in grace |
+| `GraceExpired` | bool | Grace period ended |
+| `RevisionAction` | string | `"warn"`, `"block_writes"`, `"block_all"` |
+| `RevisionMessage` | string | Server's message for players |
+| `CurrentRevisionId` | long? | Running revision |
+| `ServerCurrentRevision` | long? | Latest revision |
+| `PolicyShowUpdateOptions` | bool | Server wants update buttons shown |
+| `PolicyShowPopupOnce` | bool | Server wants popup once per session |
