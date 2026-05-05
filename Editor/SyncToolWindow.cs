@@ -28,6 +28,8 @@ public partial class SyncToolWindow : DockWindow
 	private string _status = "Ready";
 	private bool _statusIsError;
 	private bool _busy;
+	private static int _openWindowCount;
+	public static bool IsWindowOpen => _openWindowCount > 0;
 	private string _busyItem;
 	private Dictionary<string, ItemState> _items = new();
 	private List<ClickRegion> _buttons = new();
@@ -60,6 +62,23 @@ public partial class SyncToolWindow : DockWindow
 	private string _serverLastSyncedAt;
 	private long? _serverRevisionFirstSyncedAtUnix;
 	private int _serverEndpointOverrideCount;
+
+	private void SetPublishTarget( string target )
+	{
+		var normalized = string.Equals( target, "next", StringComparison.OrdinalIgnoreCase )
+			? "next"
+			: "live";
+
+		if ( string.Equals( _publishTarget, normalized, StringComparison.OrdinalIgnoreCase ) )
+			return;
+
+		_publishTarget = normalized;
+		SyncToolConfig.SetPublishTarget( normalized );
+		_remoteEndpoints = null;
+		_remoteCollections = null;
+		_hasCheckedRemote = false;
+		Update();
+	}
 
 	// ── Scroll state ──
 	private float _scrollY;
@@ -105,6 +124,7 @@ public partial class SyncToolWindow : DockWindow
 
 	public SyncToolWindow()
 	{
+		_openWindowCount++;
 		Title = "Network Storage Sync";
 		Size = new Vector2( 720, 620 );
 		MinimumSize = new Vector2( 550, 400 );
@@ -113,6 +133,7 @@ public partial class SyncToolWindow : DockWindow
 		MouseTracking = true;
 		
 		SyncToolConfig.Load();
+		_publishTarget = SyncToolConfig.PublishTarget;
 		RefreshFileList();
 		// Kick off package detection in the background so the revision panel
 		// shows immediately without waiting for "Pull from Web".
@@ -273,6 +294,12 @@ public partial class SyncToolWindow : DockWindow
 	{
 		var window = new SyncToolWindow();
 		window.Show();
+	}
+
+	protected override bool OnClose()
+	{
+		_openWindowCount = Math.Max( 0, _openWindowCount - 1 );
+		return base.OnClose();
 	}
 
 	private void SetStatus( string message, bool isError = false )
@@ -543,7 +570,7 @@ public partial class SyncToolWindow : DockWindow
 				Paint.DrawText( new Rect( textX, cardY + 25, rightW - 26, 11 ), "Live players unaffected", TextFlag.LeftCenter );
 
 				if ( !_busy )
-					_buttons.Add( new ClickRegion { Rect = nextCardRect, Id = "publish-target-next", OnClick = () => { _publishTarget = "next"; Update(); } } );
+					_buttons.Add( new ClickRegion { Rect = nextCardRect, Id = "publish-target-next", OnClick = () => { SetPublishTarget( "next" ); } } );
 
 				cardY += cardH + cardGap;
 
@@ -567,7 +594,7 @@ public partial class SyncToolWindow : DockWindow
 				Paint.DrawText( new Rect( textX, cardY + 25, rightW - 26, 11 ), "Deployed immediately", TextFlag.LeftCenter );
 
 				if ( !_busy )
-					_buttons.Add( new ClickRegion { Rect = liveCardRect, Id = "publish-target-live", OnClick = () => { _publishTarget = "live"; Update(); } } );
+					_buttons.Add( new ClickRegion { Rect = liveCardRect, Id = "publish-target-live", OnClick = () => { SetPublishTarget( "live" ); } } );
 
 				y += infoH + 6;
 			}
@@ -1017,7 +1044,7 @@ public partial class SyncToolWindow : DockWindow
 				Paint.DrawText( new Rect( textX, cardY + 25, rightW - 26, 11 ), "Live players unaffected", TextFlag.LeftCenter );
 
 				if ( !_busy )
-					_buttons.Add( new ClickRegion { Rect = nextCardRect, Id = "publish-target-next", OnClick = () => { _publishTarget = "next"; Update(); } } );
+					_buttons.Add( new ClickRegion { Rect = nextCardRect, Id = "publish-target-next", OnClick = () => { SetPublishTarget( "next" ); } } );
 
 				cardY += cardH + cardGap;
 
@@ -1041,7 +1068,7 @@ public partial class SyncToolWindow : DockWindow
 				Paint.DrawText( new Rect( textX, cardY + 25, rightW - 26, 11 ), "Deployed immediately", TextFlag.LeftCenter );
 
 				if ( !_busy )
-					_buttons.Add( new ClickRegion { Rect = liveCardRect, Id = "publish-target-live", OnClick = () => { _publishTarget = "live"; Update(); } } );
+					_buttons.Add( new ClickRegion { Rect = liveCardRect, Id = "publish-target-live", OnClick = () => { SetPublishTarget( "live" ); } } );
 
 				y += infoH + 6;
 			}
@@ -1921,8 +1948,12 @@ public partial class SyncToolWindow : DockWindow
 		}
 
 		// ── Fetch endpoints, collections, workflows in parallel ──
-		var remoteEpsTask = SyncToolApi.GetEndpoints();
-		var remoteColsTask = SyncToolApi.GetCollections();
+		var remoteEpsTask = _publishTarget == "next"
+			? SyncToolApi.GetEndpointsForPublishTarget( _publishTarget )
+			: SyncToolApi.GetEndpoints();
+		var remoteColsTask = _publishTarget == "next"
+			? SyncToolApi.GetCollectionsForPublishTarget( _publishTarget )
+			: SyncToolApi.GetCollections();
 		var remoteWfsTask = SyncToolApi.GetWorkflows();
 		var projectSettingsTask = SyncToolApi.GetProjectSettings();
 
@@ -2407,7 +2438,7 @@ public partial class SyncToolWindow : DockWindow
 		_status = "Verifying remote matches local...";
 		Update();
 
-		await VerifyPushResults( localEpBySlug );
+		await VerifyPushResults( localEpBySlug, _publishTarget );
 
 		// ── Auto-generate typed C# files from the pushed schemas ──
 		_busyItem = "codegen";
@@ -2440,6 +2471,9 @@ public partial class SyncToolWindow : DockWindow
 		var verifiedCount = _syncLog.Count( e => e.Detail != null && e.Detail.Contains( "Verified" ) );
 		var mergeCount = _syncLog.Count( e => e.Detail != null && e.Detail.Contains( "Remote semantics available" ) );
 
+		if ( mismatchCount > 0 )
+			ShowVerificationMismatchWindow( mismatchCount );
+
 		if ( mergeCount > 0 && mismatchCount == 0 && failCount == 0 )
 			_status = $"Pushed OK - {mergeCount} item(s) can pull remote semantics";
 		else if ( mismatchCount > 0 )
@@ -2462,7 +2496,7 @@ public partial class SyncToolWindow : DockWindow
 	/// After pushing, re-fetch remote data and compare each resource to local.
 	/// Updates sync log entries with "Verified ✓" or "Mismatch — see diff".
 	/// </summary>
-	private async Task VerifyPushResults( Dictionary<string, string> localEpBySlug )
+	private async Task VerifyPushResults( Dictionary<string, string> localEpBySlug, string publishTarget )
 	{
 		try
 		{
@@ -2488,8 +2522,8 @@ public partial class SyncToolWindow : DockWindow
 			}
 
 			// Fetch all 3 resource types in parallel
-			var remoteEpsTask = SyncToolApi.GetEndpoints();
-			var remoteColsTask = SyncToolApi.GetCollections();
+			var remoteEpsTask = SyncToolApi.GetEndpointsForPublishTarget( publishTarget );
+			var remoteColsTask = SyncToolApi.GetCollectionsForPublishTarget( publishTarget );
 			var remoteWfsTask = SyncToolApi.GetWorkflows();
 
 			await Task.WhenAll( remoteEpsTask, remoteColsTask, remoteWfsTask );
@@ -2622,6 +2656,75 @@ public partial class SyncToolWindow : DockWindow
 			Log.Warning( $"[SyncTool] Post-push verification failed: {ex.Message}" );
 			_status = $"Push done, verification failed: {ex.Message}";
 		}
+	}
+
+	private void ShowVerificationMismatchWindow( int mismatchCount )
+	{
+		if ( !IsWindowOpen || mismatchCount <= 0 )
+			return;
+
+		var mismatchEntries = _syncLog
+			.Where( e => e.Detail != null && e.Detail.Contains( "Mismatch" ) )
+			.Select( e => new Dictionary<string, object>
+			{
+				["type"] = e.Type,
+				["name"] = e.Name,
+				["detail"] = e.Detail,
+			} )
+			.ToList();
+
+		var payload = new Dictionary<string, object>
+		{
+			["error"] = "SYNC_VERIFICATION_MISMATCH",
+			["message"] = mismatchEntries.Count == 1
+				? "1 pushed resource mismatches remote after verification."
+				: $"{mismatchEntries.Count} pushed resources mismatch remote after verification.",
+			["publishTarget"] = _publishTarget,
+			["mismatches"] = mismatchEntries,
+		};
+
+		var payloadElement = JsonSerializer.Deserialize<JsonElement>( JsonSerializer.Serialize( payload ) );
+		EndpointErrorWindow.Show( "sync", "SYNC_VERIFICATION_MISMATCH", payloadElement.TryGetProperty( "message", out var message ) ? message.GetString() : "Sync verification mismatch", payloadElement );
+	}
+
+	private static bool IsBatchSyncEndpointUnavailable( string errorCode, string errorMessage )
+	{
+		if ( string.IsNullOrWhiteSpace( errorCode ) && string.IsNullOrWhiteSpace( errorMessage ) )
+			return false;
+
+		var normalizedCode = (errorCode ?? "").ToUpperInvariant();
+		if ( normalizedCode == "NOT_FOUND" || normalizedCode == "ENDPOINT_NOT_FOUND" || normalizedCode == "METHOD_NOT_ALLOWED"
+			|| normalizedCode == "HTTP_404" || normalizedCode == "HTTP_405"
+			|| normalizedCode.Contains( "404" ) || normalizedCode.Contains( "405" ) )
+			return true;
+
+		var lowerMessage = (errorMessage ?? "").ToLowerInvariant();
+		return lowerMessage.Contains( "404" )
+			|| lowerMessage.Contains( "405" )
+			|| lowerMessage.Contains( "not found" )
+			|| lowerMessage.Contains( "does not exist" )
+			|| lowerMessage.Contains( "not available" )
+			|| lowerMessage.Contains( "method not allowed" )
+			|| lowerMessage.Contains( "sync endpoint" );
+	}
+
+	private static void ShowSyncBatchFailureWindow( string errorMessage, string errorCode = null )
+	{
+		if ( !SyncToolWindow.IsWindowOpen )
+			return;
+
+		var payload = new Dictionary<string, object>
+		{
+			["error"] = string.IsNullOrWhiteSpace( errorCode ) ? "SYNC_BATCH_FAILED" : errorCode,
+			["message"] = string.IsNullOrWhiteSpace( errorMessage ) ? "Batch sync failed" : errorMessage,
+			["source"] = "sync",
+			["action"] = "PushAll"
+		};
+
+		var payloadElement = JsonSerializer.Deserialize<JsonElement>( JsonSerializer.Serialize( payload ) );
+		EndpointErrorWindow.Show( "sync", string.IsNullOrWhiteSpace( errorCode ) ? "SYNC_BATCH_FAILED" : errorCode,
+			payloadElement.TryGetProperty( "message", out var message ) ? message.GetString() : "Batch sync failed",
+			payloadElement );
 	}
 
 	private void PushItem( string id )
@@ -2881,7 +2984,7 @@ public partial class SyncToolWindow : DockWindow
 				SyncToolApi.ReportLocalError( "endpoints", "No readable local endpoint source files were loaded for push." );
 				return false;
 			}
-			var existing = await SyncToolApi.GetEndpoints();
+			var existing = await SyncToolApi.GetEndpointsForPublishTarget( _publishTarget );
 			var serverFmt = SyncToolTransforms.EndpointsToServer( localEps, existing );
 			var resp = await SyncToolApi.PushEndpoints( serverFmt, _publishTarget );
 			return resp.HasValue;
@@ -2915,7 +3018,7 @@ public partial class SyncToolWindow : DockWindow
 				return (false, false, false);
 
 			// Fetch existing server state for ID preservation (parallel)
-			var existingEpTask = hasEndpoints ? SyncToolApi.GetEndpoints() : Task.FromResult<JsonElement?>( null );
+			var existingEpTask = hasEndpoints ? SyncToolApi.GetEndpointsForPublishTarget( _publishTarget ) : Task.FromResult<JsonElement?>( null );
 			var existingWfTask = hasWorkflows ? SyncToolApi.GetWorkflows() : Task.FromResult<JsonElement?>( null );
 			await Task.WhenAll( existingEpTask, existingWfTask );
 
@@ -2949,16 +3052,18 @@ public partial class SyncToolWindow : DockWindow
 			// Check if batch endpoint is not available (404/405) — fall back to individual pushes
 			var errCode = SyncToolApi.LastErrorCode ?? "";
 			var errMsg = SyncToolApi.LastErrorMessage ?? "";
-			if ( !resp.HasValue && (errCode.Contains( "404" ) || errCode == "NOT_FOUND" || errMsg.Contains( "404" ) || errMsg.Contains( "405" )) )
-			{
-				// Batch sync endpoint not available, falling back to individual pushes
-				return await DoPushAllIndividual( hasEndpoints, hasCollections, hasWorkflows );
-			}
-
 			if ( !resp.HasValue )
 			{
+				var isBatchSyncUnavailable = IsBatchSyncEndpointUnavailable( errCode, errMsg );
+				if ( isBatchSyncUnavailable )
+				{
+					// Batch sync endpoint not available, falling back to individual pushes
+					return await DoPushAllIndividual( hasEndpoints, hasCollections, hasWorkflows );
+				}
+
 				var finalErrMsg = string.IsNullOrEmpty( errMsg ) ? "Unknown error" : errMsg;
 				SyncToolApi.ReportLocalError( "sync", $"Batch sync failed: {finalErrMsg}" );
+				ShowSyncBatchFailureWindow( finalErrMsg, errCode );
 				return (false, false, false);
 			}
 
@@ -3062,7 +3167,7 @@ public partial class SyncToolWindow : DockWindow
 			}
 
 
-			var remoteResp = await SyncToolApi.GetEndpoints();
+			var remoteResp = await SyncToolApi.GetEndpointsForPublishTarget( _publishTarget );
 			if ( !remoteResp.HasValue ) return false;
 
 			var data = remoteResp.Value;
@@ -3234,8 +3339,10 @@ public partial class SyncToolWindow : DockWindow
 
 	private async Task<bool> DoPullSingleEndpoint( string slug )
 	{
-		// Use cached remote data if available, otherwise fetch
-		var resp = _remoteEndpoints ?? await SyncToolApi.GetEndpoints();
+		// Use cached live remote data if available, otherwise fetch for current publish target.
+		var resp = _publishTarget == "next"
+			? await SyncToolApi.GetEndpointsForPublishTarget( _publishTarget )
+			: _remoteEndpoints ?? await SyncToolApi.GetEndpoints();
 		if ( !resp.HasValue ) return false;
 
 		try
@@ -3263,7 +3370,9 @@ public partial class SyncToolWindow : DockWindow
 
 	private async Task<bool> DoPullCollections()
 	{
-		var resp = _remoteCollections ?? await SyncToolApi.GetCollections();
+		var resp = _publishTarget == "next"
+			? await SyncToolApi.GetCollectionsForPublishTarget( _publishTarget )
+			: _remoteCollections ?? await SyncToolApi.GetCollections();
 		if ( !resp.HasValue ) return false;
 		try
 		{
@@ -3278,7 +3387,9 @@ public partial class SyncToolWindow : DockWindow
 
 	private async Task<bool> DoPullSingleCollection( string colName )
 	{
-		var resp = _remoteCollections ?? await SyncToolApi.GetCollections();
+		var resp = _publishTarget == "next"
+			? await SyncToolApi.GetCollectionsForPublishTarget( _publishTarget )
+			: _remoteCollections ?? await SyncToolApi.GetCollections();
 		if ( !resp.HasValue ) return false;
 		try
 		{
@@ -3857,6 +3968,7 @@ public partial class SyncToolWindow : DockWindow
 	public void Refresh()
 	{
 		SyncToolConfig.Load();
+		_publishTarget = SyncToolConfig.PublishTarget;
 		RefreshFileList();
 		_items.Clear();
 		_syncLog.Clear();

@@ -63,6 +63,7 @@ public static class NetworkStoragePackageInfo
 	public static string PolicyNotifyMessage { get; private set; }
 	public static bool PolicyShowUpdateOptions { get; private set; } = true;
 	public static bool PolicyShowPopupOnce { get; private set; } = true;
+	public static bool PolicyShowDefaultMessage { get; private set; } = true;
 
 	/// <summary>Enforcement mode from server: ForceUpgrade (default) or AllowContinue.</summary>
 	public static RevisionEnforcementMode EnforcementMode { get; private set; } = RevisionEnforcementMode.ForceUpgrade;
@@ -245,6 +246,7 @@ public static class NetworkStoragePackageInfo
 		PolicyNotifyMessage = null;
 		PolicyShowUpdateOptions = true;
 		PolicyShowPopupOnce = true;
+		PolicyShowDefaultMessage = true;
 		EnforcementMode = RevisionEnforcementMode.ForceUpgrade;
 	}
 
@@ -288,6 +290,7 @@ public static class NetworkStoragePackageInfo
 			PolicyNotifyMessage = policy.TryGetProperty( "notifyMessage", out var nm ) ? nm.GetString() : null;
 			PolicyShowUpdateOptions = !policy.TryGetProperty( "showUpdateOptions", out var suo ) || suo.ValueKind != JsonValueKind.False;
 			PolicyShowPopupOnce = !policy.TryGetProperty( "showPopupOnce", out var spo ) || spo.ValueKind != JsonValueKind.False;
+			PolicyShowDefaultMessage = !policy.TryGetProperty( "showDefaultMessage", out var sdm ) || sdm.ValueKind != JsonValueKind.False;
 
 			// Also check enforcement mode in policy (fallback)
 			if ( EnforcementMode == RevisionEnforcementMode.ForceUpgrade && 
@@ -298,7 +301,11 @@ public static class NetworkStoragePackageInfo
 			}
 		}
 	
-		if ( IsOutdatedRevision )
+		if ( !IsOutdatedRevision )
+		{
+			RevisionMessage = null;
+		}
+		else
 		{
 			if ( GraceExpired )
 				Log.Warning( $"[NetworkStorage] REVISION EXPIRED: {RevisionMessage}" );
@@ -326,6 +333,7 @@ public static class NetworkStoragePackageInfo
 				PolicyNotifyMessage = PolicyNotifyMessage,
 				PolicyShowUpdateOptions = PolicyShowUpdateOptions,
 				PolicyShowPopupOnce = PolicyShowPopupOnce,
+				PolicyShowDefaultMessage = PolicyShowDefaultMessage,
 				EnforcementMode = EnforcementMode
 			} );
 		}
@@ -387,5 +395,6 @@ public struct RevisionStatusInfo
 	public string PolicyNotifyMessage;
 	public bool PolicyShowUpdateOptions;
 	public bool PolicyShowPopupOnce;
+	public bool PolicyShowDefaultMessage;
 	public RevisionEnforcementMode EnforcementMode;
 }

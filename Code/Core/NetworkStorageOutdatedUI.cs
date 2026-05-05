@@ -343,8 +343,11 @@ public class NetworkStorageOutdatedUI : Panel
 
 	private void OnRevisionOutdatedEvent( RevisionOutdatedData data )
 	{
-		if ( !NetworkStorage.RevisionSettings.ShowDefaultMessage )
+		if ( !NetworkStorage.RevisionSettings.ShowDefaultMessage || !NetworkStoragePackageInfo.PolicyShowDefaultMessage )
+		{
+			Close();
 			return;
+		}
 
 		if ( !NetworkStorage.RevisionSettings.AutoOpenOnOutdated )
 			return;

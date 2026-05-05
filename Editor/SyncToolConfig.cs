@@ -35,6 +35,7 @@ public static partial class SyncToolConfig
 	public static SourceExportMode SourceExport { get; private set; } = SourceExportMode.SourceOnly;
 	public static bool EnableAuthSessions { get; private set; }
 	public static bool EnableEncryptedRequests { get; private set; }
+	public static string PublishTarget { get; private set; } = "live";
 
 	/// <summary>
 	/// When true, the game host proxies Network Storage API calls on behalf of non-host clients.
@@ -154,6 +155,13 @@ public static partial class SyncToolConfig
 		ReadCommentHandling = JsonCommentHandling.Skip
 	};
 
+	private static string NormalizePublishTarget( string target )
+	{
+		return string.Equals( target, "next", StringComparison.OrdinalIgnoreCase )
+			? "next"
+			: "live";
+	}
+
 	// ── Filesystem helpers (System.IO with absolute paths) ──
 
 	private static string[] FindFiles( string relativeDir, string pattern )
@@ -190,6 +198,7 @@ public static partial class SyncToolConfig
 		SourceExport = SourceExportMode.SourceOnly;
 		EnableAuthSessions = false;
 		EnableEncryptedRequests = false;
+		PublishTarget = "live";
 		DataFolder = "Network Storage";
 		ProxyEnabled = true;
 
@@ -255,6 +264,8 @@ public static partial class SyncToolConfig
 			EnableAuthSessions = eas.ValueKind == JsonValueKind.True;
 		if ( json.TryGetProperty( "enableEncryptedRequests", out var eer ) )
 			EnableEncryptedRequests = eer.ValueKind == JsonValueKind.True;
+		if ( json.TryGetProperty( "publishTarget", out var pt ) )
+			PublishTarget = NormalizePublishTarget( pt.GetString() );
 
 		// Sync mappings
 		SyncMappings.Clear();
@@ -343,6 +354,7 @@ public static partial class SyncToolConfig
 			["sourceExportMode"] = "source_only",
 			["enableAuthSessions"] = EnableAuthSessions,
 			["enableEncryptedRequests"] = EnableEncryptedRequests,
+			["publishTarget"] = PublishTarget,
 			["proxyEnabled"] = ProxyEnabled
 		};
 
@@ -424,6 +436,16 @@ public static partial class SyncToolConfig
 		DataSource = DataSourceMode.ApiOnly;
 		if ( File.Exists( Abs( ProjectConfigFile ) ) )
 			Save( SecretKey, PublicApiKey, ProjectId, BaseUrl, DataSource );
+	}
+
+	/// <summary>
+	/// Persist the selected publish target ("live" or "next") so next launch uses it.
+	/// </summary>
+	public static void SetPublishTarget( string target )
+	{
+		PublishTarget = NormalizePublishTarget( target );
+		if ( File.Exists( Abs( ProjectConfigFile ) ) )
+			Save( SecretKey, PublicApiKey, ProjectId, BaseUrl, DataSource, DataFolder, CdnUrl );
 	}
 
 	/// <summary>
@@ -746,6 +768,7 @@ public static partial class SyncToolConfig
 			["sourceExportMode"] = "source_only",
 			["enableAuthSessions"] = false,
 			["enableEncryptedRequests"] = false,
+			["publishTarget"] = "live",
 			["proxyEnabled"] = true
 		};
 		File.WriteAllText( Abs( ProjectConfigFile ), JsonSerializer.Serialize( publicConfig, _jsonOptions ) );

@@ -384,7 +384,9 @@ public static class SyncToolTransforms
 			or "dependencies"
 			or "canonicalDefinition"
 			or "executionPlan"
-			or "diagnostics";
+			or "diagnostics"
+			or "revisionTarget"
+			or "hasStaged";
 	}
 
 	private static bool IsSourceEnvelopeField( string name )

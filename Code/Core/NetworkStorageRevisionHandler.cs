@@ -41,21 +41,28 @@ public static class NetworkStorageRevisionHandler
 	{
 		if ( !info.IsOutdated )
 		{
-			// Revision is current — clear the write block.
+			// Revision is current — clear any stale test/outdated state.
 			BlockWrites = false;
+			NetworkStorageOutdatedUI.Close();
 			return;
 		}
 
 		var settings = NetworkStorage.RevisionSettings;
+		var showDefaultMessage = settings.ShowDefaultMessage && NetworkStoragePackageInfo.PolicyShowDefaultMessage;
 
-		if ( settings.Enabled && settings.ShowDefaultMessage )
+		if ( !showDefaultMessage )
+		{
+			NetworkStorageOutdatedUI.Close();
+		}
+
+		if ( settings.Enabled && showDefaultMessage )
 		{
 			ShowWarningUI( info );
 			OnShowRevisionWarning?.Invoke( info );
 		}
 
 		// Show the built-in default UI panel when configured
-		if ( settings.Enabled && settings.AutoOpenOnOutdated && settings.ShowDefaultMessage )
+		if ( settings.Enabled && settings.AutoOpenOnOutdated && showDefaultMessage )
 		{
 			NetworkStorageOutdatedUI.Open();
 		}
