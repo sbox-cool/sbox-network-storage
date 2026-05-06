@@ -10,7 +10,7 @@ namespace Sandbox;
 /// use to discover lobbies running the latest game version.
 ///
 /// Key schema (short names for efficient network transfer):
-///   ns_rev      — CurrentRevisionId
+///   ns_rev      — RuntimeRevisionId (0 for editor/local sessions)
 ///   ns_stale    — 1 if outdated, 0 if current
 ///   ns_grace_end — Grace period end unix timestamp, or 0
 ///   ns_mig      — 1 if this lobby supports migration, 0 otherwise
@@ -31,7 +31,7 @@ public static partial class NetworkStorage
 	{
 		var meta = new Dictionary<string, string>
 		{
-			["ns_rev"] = (NetworkStoragePackageInfo.CurrentRevisionId ?? 0).ToString(),
+			["ns_rev"] = (NetworkStoragePackageInfo.RuntimeRevisionId ?? 0).ToString(),
 			["ns_stale"] = "0",
 			["ns_grace_end"] = "0",
 			["ns_mig"] = migrationRevision.HasValue ? "1" : "0",
@@ -67,7 +67,7 @@ public static partial class NetworkStorage
 		if ( !metadata.TryGetValue( "ns_rev", out var revStr ) || !long.TryParse( revStr, out var rev ) )
 			return true;
 
-		var current = NetworkStoragePackageInfo.CurrentRevisionId;
+		var current = NetworkStoragePackageInfo.RuntimeRevisionId;
 		if ( !current.HasValue )
 			return true;
 

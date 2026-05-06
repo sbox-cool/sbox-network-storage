@@ -12,8 +12,14 @@ namespace Sandbox;
 /// </summary>
 public static class NetworkStoragePackageInfo
 {
-	/// <summary>The revision ID of the currently running build.</summary>
+	/// <summary>The revision ID detected for the package ident, if available.</summary>
 	public static long? CurrentRevisionId { get; private set; }
+
+	/// <summary>
+	/// The revision ID to send with runtime requests. This is only set for published
+	/// game bundles; editor/local projects do not masquerade as the live revision.
+	/// </summary>
+	public static long? RuntimeRevisionId => IsPublishedGameBundle ? CurrentRevisionId : null;
 
 	/// <summary>The latest published revision ID for the package.</summary>
 	public static long? LatestRevisionId { get; private set; }
@@ -32,6 +38,15 @@ public static class NetworkStoragePackageInfo
 
 	/// <summary>The package type (e.g. "game", "addon", "map").</summary>
 	public static string PackageType { get; private set; }
+
+	/// <summary>True when running from the editor, an editor local instance, or an active local project.</summary>
+	public static bool IsEditorContext { get; private set; }
+
+	/// <summary>True only when the engine is running an actual published game bundle.</summary>
+	public static bool IsPublishedGameBundle { get; private set; }
+
+	/// <summary>The client type sent to Network Storage: "editor", "dedicated", or "game".</summary>
+	public static string RuntimeClientType { get; private set; }
 
 	/// <summary>True if detection has run and found package info.</summary>
 	public static bool IsDetected { get; private set; }
@@ -82,6 +97,10 @@ public static class NetworkStoragePackageInfo
 	{
 		Reset();
 
+		RuntimeClientType = NetworkStorage.GetClientType();
+		IsEditorContext = string.Equals( RuntimeClientType, "editor", StringComparison.OrdinalIgnoreCase );
+
+		var runtimePackage = NetworkStorage.GetRuntimeGamePackage();
 		string ident = null;
 
 		try
@@ -92,6 +111,12 @@ public static class NetworkStoragePackageInfo
 		{
 			Log.Info( $"[NetworkStorage] PackageInfo: Game.Ident unavailable — {ex.Message}" );
 		}
+
+		if ( string.IsNullOrWhiteSpace( ident ) )
+			ident = NetworkStorage.GetApplicationGameIdent();
+
+		if ( string.IsNullOrWhiteSpace( ident ) && runtimePackage is not null )
+			ident = runtimePackage.FullIdent ?? runtimePackage.Ident;
 
 		if ( string.IsNullOrWhiteSpace( ident ) )
 		{
@@ -110,16 +135,20 @@ public static class NetworkStoragePackageInfo
 		catch ( Exception ex )
 		{
 			Log.Warning( $"[NetworkStorage] PackageInfo: Failed to fetch package '{ident}' — {ex.Message}" );
-			return;
 		}
 
 		if ( package is null )
 		{
-			Log.Warning( $"[NetworkStorage] PackageInfo: Package.FetchAsync returned null for '{ident}'" );
-			return;
+			package = runtimePackage;
+			if ( package is null )
+			{
+				Log.Warning( $"[NetworkStorage] PackageInfo: Package.FetchAsync returned null for '{ident}'" );
+				return;
+			}
 		}
 
 		_cachedPackage = package;
+		IsPublishedGameBundle = NetworkStorage.IsPublishedGameBundleRuntime( package );
 
 		// Read package metadata
 		PackageTitle = package.Title;
@@ -143,18 +172,18 @@ public static class NetworkStoragePackageInfo
 			CurrentRevisionId = package.Revision.VersionId;
 		}
 
-		// IRevision does not expose a Published property.
-		// Derive publish status from whether the package is public and has a revision.
-		PublishStatus = package.Revision is not null
+		// Only actual published game bundles are considered live. Editor/local runs may
+		// share the same package ident, but they should target staged/editor revisions.
+		PublishStatus = IsPublishedGameBundle && package.Revision is not null
 			? ( package.Public ? "live" : "unlisted" )
-			: "local";
+			: IsEditorContext ? "editor" : "local";
 
 		// Latest revision ID — use the same revision if no separate latest is exposed
 		LatestRevisionId = CurrentRevisionId;
 
 		IsDetected = true;
 
-		Log.Info( $"[NetworkStorage] PackageInfo: Detected — ident={PackageIdent}, org={OrgIdent ?? "(none)"}, title={PackageTitle ?? "(none)"}, type={PackageType ?? "(unknown)"}, revision={CurrentRevisionId?.ToString() ?? "null"}, status={PublishStatus ?? "unknown"}" );
+		Log.Info( $"[NetworkStorage] PackageInfo: Detected — ident={PackageIdent}, org={OrgIdent ?? "(none)"}, title={PackageTitle ?? "(none)"}, type={PackageType ?? "(unknown)"}, revision={CurrentRevisionId?.ToString() ?? "null"}, status={PublishStatus ?? "unknown"}, clientType={RuntimeClientType ?? "unknown"}, publishedBundle={IsPublishedGameBundle}" );
 	}
 
 	/// <summary>
@@ -173,6 +202,9 @@ public static class NetworkStoragePackageInfo
 			writer.WriteString( "packageTitle", PackageTitle ?? "" );
 			writer.WriteString( "orgIdent", OrgIdent ?? "" );
 			writer.WriteString( "packageType", PackageType ?? "" );
+			writer.WriteString( "runtimeClientType", RuntimeClientType ?? "" );
+			writer.WriteBoolean( "isEditorContext", IsEditorContext );
+			writer.WriteBoolean( "isPublishedGameBundle", IsPublishedGameBundle );
 
 			if ( CurrentRevisionId.HasValue )
 				writer.WriteNumber( "currentRevisionId", CurrentRevisionId.Value );
@@ -212,6 +244,11 @@ public static class NetworkStoragePackageInfo
 			writer.WriteEndObject();
 
 			writer.WriteStartObject( "rawBundle" );
+			writer.WriteString( "clientType", RuntimeClientType ?? "" );
+			writer.WriteBoolean( "isEditor", IsEditorContext );
+			writer.WriteBoolean( "isPublishedGameBundle", IsPublishedGameBundle );
+			if ( RuntimeRevisionId.HasValue )
+				writer.WriteNumber( "runtimeRevisionId", RuntimeRevisionId.Value );
 			writer.WriteEndObject();
 
 			writer.WriteEndObject();
@@ -232,6 +269,9 @@ public static class NetworkStoragePackageInfo
 		PackageTitle = null;
 		PublishStatus = null;
 		PackageType = null;
+		IsEditorContext = false;
+		IsPublishedGameBundle = false;
+		RuntimeClientType = null;
 		IsDetected = false;
 		_cachedPackage = null;
 		IsOutdatedRevision = false;
@@ -325,7 +365,7 @@ public static class NetworkStoragePackageInfo
 				GraceRemainingMinutes = GraceRemainingMinutes,
 				Action = RevisionAction,
 				Message = RevisionMessage,
-				PlayerRevision = CurrentRevisionId,
+				PlayerRevision = RuntimeRevisionId,
 				CurrentRevision = ServerCurrentRevision,
 				PolicyGracePeriodMinutes = PolicyGracePeriodMinutes,
 				PolicyPostGraceAction = PolicyPostGraceAction,
@@ -370,7 +410,7 @@ public static class NetworkStoragePackageInfo
 				GraceRemainingMinutes = GraceRemainingMinutes,
 				Action = RevisionAction,
 				Message = RevisionMessage,
-				PlayerRevision = CurrentRevisionId,
+				PlayerRevision = RuntimeRevisionId,
 				CurrentRevision = ServerCurrentRevision,
 			} );
 		}

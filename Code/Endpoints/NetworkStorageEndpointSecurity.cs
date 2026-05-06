@@ -87,7 +87,7 @@ public static partial class NetworkStorage
 		["clientMode"] = mode,
 		["authSessions"] = RuntimeEnableAuthSessions ? "enabled" : "disabled",
 		["encryptedRequests"] = RuntimeEnableEncryptedRequests ? "required" : "disabled",
-		["revisionId"] = NetworkStoragePackageInfo.CurrentRevisionId ?? 0,
+		["revisionId"] = NetworkStoragePackageInfo.RuntimeRevisionId ?? 0,
 		["revisionOutdated"] = NetworkStoragePackageInfo.IsOutdatedRevision,
 	};
 
@@ -129,7 +129,7 @@ public static partial class NetworkStorage
 			["x-steam-id"] = steamId,
 			["x-sbox-token"] = token
 		};
-		var revisionId = NetworkStoragePackageInfo.CurrentRevisionId;
+		var revisionId = NetworkStoragePackageInfo.RuntimeRevisionId;
 		if ( revisionId.HasValue )
 			headers["x-ns-revision-id"] = revisionId.Value.ToString();
 		headers["x-ns-client-type"] = GetClientType();

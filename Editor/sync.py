@@ -334,7 +334,11 @@ def format_yaml_scalar(value):
         return "true"
     if value is False:
         return "false"
-    if isinstance(value, (int, float)) and not isinstance(value, bool):
+    if isinstance(value, float) and not isinstance(value, bool):
+        if value.is_integer():
+            return repr(int(value))
+        return repr(value)
+    if isinstance(value, int) and not isinstance(value, bool):
         return repr(value)
     return json.dumps(str(value), ensure_ascii=False)
 

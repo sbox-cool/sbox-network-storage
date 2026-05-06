@@ -59,12 +59,14 @@ public static class NetworkStorageRevisionInit
 		}
 
 		// ── Build request body ──
-		var revisionId = NetworkStoragePackageInfo.CurrentRevisionId;
+		var clientType = NetworkStorage.GetClientType();
+		var revisionId = NetworkStoragePackageInfo.RuntimeRevisionId;
 		var body = new Dictionary<string, object>
 		{
 			{ "projectId", NetworkStorage.ProjectId },
-			{ "clientType", "game" },
-			{ "networkStorageVersion", "1.0" }
+			{ "clientType", clientType },
+			{ "networkStorageVersion", "1.0" },
+			{ "isPublishedGameBundle", NetworkStoragePackageInfo.IsPublishedGameBundle }
 		};
 
 		if ( !string.IsNullOrEmpty( NetworkStoragePackageInfo.PackageIdent ) )
@@ -82,7 +84,7 @@ public static class NetworkStorageRevisionInit
 		if ( revisionId.HasValue )
 			headers["x-ns-revision-id"] = revisionId.Value.ToString();
 
-		headers["x-ns-client-type"] = "game";
+		headers["x-ns-client-type"] = clientType;
 
 		// ── Send POST ──
 		var path = $"/{NetworkStorage.ApiVersion}/manage/{Uri.EscapeDataString( NetworkStorage.ProjectId )}/revision-init";
@@ -104,7 +106,7 @@ public static class NetworkStorageRevisionInit
 			var result = ParseInitResponse( raw, revisionId );
 			LastInitResult = result;
 
-			Log.Info( $"[NetworkStorage] Game revision: {NetworkStoragePackageInfo.CurrentRevisionId?.ToString() ?? "unknown"}, server latest: {result.CurrentRevision?.ToString() ?? "unknown"}" );
+			Log.Info( $"[NetworkStorage] Game revision: {NetworkStoragePackageInfo.RuntimeRevisionId?.ToString() ?? "unknown"}, server latest: {result.CurrentRevision?.ToString() ?? "unknown"}, clientType={clientType}" );
 
 			if ( result.IsOutdatedRevision )
 				Log.Warning( $"[NetworkStorage] Running outdated revision. {result.Message}" );
