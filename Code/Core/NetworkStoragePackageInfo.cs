@@ -183,7 +183,7 @@ public static class NetworkStoragePackageInfo
 
 		IsDetected = true;
 
-		Log.Info( $"[NetworkStorage] PackageInfo: Detected — ident={PackageIdent}, org={OrgIdent ?? "(none)"}, title={PackageTitle ?? "(none)"}, type={PackageType ?? "(unknown)"}, revision={CurrentRevisionId?.ToString() ?? "null"}, status={PublishStatus ?? "unknown"}, clientType={RuntimeClientType ?? "unknown"}, publishedBundle={IsPublishedGameBundle}" );
+		Log.Info( $"[NetworkStorage] PackageInfo: Detected — ident={PackageIdent}, org={OrgIdent ?? "(none)"}, title={PackageTitle ?? "(none)"}, type={PackageType ?? "(unknown)"}, revision={CurrentRevisionId?.ToString() ?? "null"}, status={PublishStatus ?? "unknown"}, clientType={RuntimeClientType ?? "unknown"}, publishedBundle={IsPublishedGameBundle}, context=({NetworkStorage.BuildRuntimeContextSummary()})" );
 	}
 
 	/// <summary>

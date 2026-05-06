@@ -200,7 +200,7 @@ public static partial class SyncToolConfig
 		EnableEncryptedRequests = false;
 		PublishTarget = "live";
 		DataFolder = "Network Storage";
-		ProxyEnabled = true;
+		ProxyEnabled = false;
 
 		// ── Try new split config first ──
 		if ( File.Exists( Abs( ProjectConfigFile ) ) )
@@ -257,7 +257,7 @@ public static partial class SyncToolConfig
 		}
 		SourceExport = SourceExportMode.SourceOnly;
 		// Only override the default when the property is explicitly present in the file.
-		// If absent, leave ProxyEnabled at its default (true) set in Load().
+		// If absent, leave ProxyEnabled at its default (false) set in Load().
 		if ( json.TryGetProperty( "proxyEnabled", out var pe ) )
 			ProxyEnabled = pe.GetBoolean();
 		if ( json.TryGetProperty( "enableAuthSessions", out var eas ) )
@@ -769,7 +769,7 @@ public static partial class SyncToolConfig
 			["enableAuthSessions"] = false,
 			["enableEncryptedRequests"] = false,
 			["publishTarget"] = "live",
-			["proxyEnabled"] = true
+			["proxyEnabled"] = false
 		};
 		File.WriteAllText( Abs( ProjectConfigFile ), JsonSerializer.Serialize( publicConfig, _jsonOptions ) );
 

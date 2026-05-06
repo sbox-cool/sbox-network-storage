@@ -61,7 +61,7 @@ public static partial class NetworkStorage
 			var cdnUrl = json.TryGetProperty( "cdnUrl", out var cu ) ? cu.GetString() : null;
 
 			// Read proxy setting from credentials — only override when explicitly present.
-			// ProxyEnabled defaults to true; credentials file can explicitly set false for production.
+			// ProxyEnabled defaults to false; credentials can explicitly enable it for local multiplayer testing.
 			if ( json.TryGetProperty( "proxyEnabled", out var pe ) )
 				ProxyEnabled = pe.GetBoolean();
 			if ( json.TryGetProperty( "enableAuthSessions", out var eas ) )

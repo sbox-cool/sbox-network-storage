@@ -33,7 +33,7 @@ public static partial class NetworkStorage
 	public static string ApiRoot => $"{BaseUrl}/{ApiVersion}";
 
 	/// <summary>Whether non-host clients route API calls through the game host.</summary>
-	public static bool ProxyEnabled { get; set; } = true;
+	public static bool ProxyEnabled { get; set; } = false;
 
 	/// <summary>Project flag for fast auth sessions.</summary>
 	public static bool EnableAuthSessions { get; private set; }
