@@ -30,8 +30,13 @@ const TEMPLATE_PATTERN = /\{\{([^}]*)\}\}/g;
 
 const MAX_STEPS_PER_ENDPOINT = 20;
 const MAX_READ_LOOKUP_FILTER_STEPS = 10;
-const MAX_ENDPOINTS_PER_PROJECT = 20;
+const MAX_ENDPOINTS_PER_PROJECT = 1000;
 const MAX_COLLECTIONS_PER_PROJECT = 50;
+const ENDPOINT_CREATION_LIMITS = {
+  endpointsPerProject: MAX_ENDPOINTS_PER_PROJECT,
+  stepsPerEndpoint: MAX_STEPS_PER_ENDPOINT,
+  readLookupFilterStepsPerEndpoint: MAX_READ_LOOKUP_FILTER_STEPS,
+} as const;
 
 const REQUIRED_ENV_KEYS = ["SBOXCOOL_PROJECT_ID", "SBOXCOOL_PUBLIC_KEY", "SBOXCOOL_SECRET_KEY"] as const;
 const OPTIONAL_ENV_KEYS = ["SBOXCOOL_BASE_URL", "SBOXCOOL_API_VERSION", "SBOXCOOL_DATA_FOLDER", "SBOXCOOL_DATA_SOURCE"] as const;
@@ -206,7 +211,7 @@ Endpoints are server-side pipelines that your game calls via the API. Each endpo
 
 ## Slug Rules
 
-Endpoint slugs must match \`/^[a-z0-9-]+$/\` — lowercase letters, digits, and hyphens only. Max 20 endpoints per project.
+Endpoint slugs must match \`/^[a-z0-9-]+$/\` — lowercase letters, digits, and hyphens only. Max 1000 endpoints per project.
 
 ## Calling Endpoints from Game Code
 
@@ -755,7 +760,7 @@ Compares local YAML source files with sbox.cool server state, lets you push/pull
 ## Maximums
 - Steps per endpoint: 20
 - Read/lookup/filter steps per endpoint: 10
-- Endpoints per project: 20
+- Endpoints per project: 1000
 - Collections per project: 50
 - Records scanned in filter: 500
 
@@ -2095,7 +2100,7 @@ server.tool(
 
 server.tool(
   "scaffold_endpoint",
-  "Generate an endpoint YAML source template with correct structure and step defaults",
+  "Generate an endpoint YAML source template with correct structure, step defaults, and creation limits",
   {
     slug: z.string().describe("Endpoint slug (lowercase alphanumeric + hyphens)"),
     name: z.string().optional().describe("Human-readable name"),
@@ -2138,7 +2143,7 @@ server.tool(
     const filePath = `Editor/Network Storage/endpoints/${slug}.endpoint.yml`;
 
     return {
-      content: [{ type: "text" as const, text: JSON.stringify({ source, filePath }, null, 2) }],
+      content: [{ type: "text" as const, text: JSON.stringify({ source, filePath, limits: ENDPOINT_CREATION_LIMITS }, null, 2) }],
     };
   }
 );

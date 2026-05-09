@@ -1857,10 +1857,19 @@ public partial class SyncToolWindow : DockWindow
 	private string[] GetRemoteSemanticsIds()
 	{
 		return _items
-			.Where( x => x.Value.Status == SyncStatus.MergeAvailable && !string.IsNullOrEmpty( x.Value.RemoteJson ) )
+			.Where( x => x.Value.Status == SyncStatus.MergeAvailable && !string.IsNullOrEmpty( x.Value.RemoteJson ) && !IsGeneratedMappedCollectionId( x.Key ) )
 			.Select( x => x.Key )
 			.OrderBy( x => x )
 			.ToArray();
+	}
+
+	private static bool IsGeneratedMappedCollectionId( string id )
+	{
+		if ( string.IsNullOrWhiteSpace( id ) || !id.StartsWith( "col_" ) )
+			return false;
+
+		var collection = id[4..];
+		return SyncToolConfig.SyncMappings.Any( mapping => string.Equals( mapping.Collection, collection, StringComparison.OrdinalIgnoreCase ) );
 	}
 
 	private int GetRemoteSemanticsCount()
@@ -2118,12 +2127,21 @@ public partial class SyncToolWindow : DockWindow
 						var remotePretty = PrettyJson( remoteJson );
 						var classification = ClassifyRemoteDifference( id, localPretty, remotePretty );
 
-						SetItemState( id, remoteDiffers: true, status: classification.Status,
-							diffSummary: classification.Summary,
-							localJson: localPretty, remoteJson: remotePretty );
+						if ( IsGeneratedMappedCollectionId( id ) && classification.Analysis.IsRemoteAdditiveOnly )
+						{
+							SetItemState( id, remoteDiffers: false, status: SyncStatus.InSync,
+								diffSummary: "Generated from C# — remote semantics ignored",
+								localJson: localPretty, remoteJson: remotePretty );
+						}
+						else
+						{
+							SetItemState( id, remoteDiffers: true, status: classification.Status,
+								diffSummary: classification.Summary,
+								localJson: localPretty, remoteJson: remotePretty );
 
-						if ( classification.Status == SyncStatus.MergeAvailable ) remoteSemanticsCount++;
-						else diffs++;
+							if ( classification.Status == SyncStatus.MergeAvailable ) remoteSemanticsCount++;
+							else diffs++;
+						}
 					}
 					else
 					{
@@ -2224,6 +2242,11 @@ public partial class SyncToolWindow : DockWindow
 	/// <summary>
 	/// Normalize JSON for comparison — sorts all object keys recursively so key order doesn't cause false diffs.
 	/// </summary>
+	private static string NormalizeSourceTextForVerification( string sourceText )
+	{
+		return (sourceText ?? "").Replace( "\r\n", "\n" ).Replace( '\r', '\n' ).Trim();
+	}
+
 	private static string NormalizeJson( string json )
 	{
 		try
@@ -2503,10 +2526,13 @@ public partial class SyncToolWindow : DockWindow
 			// Re-load local files fresh, stripping server-managed fields for fair comparison
 			var localCollections = SyncToolConfig.LoadCollections();
 			var localColByName = new Dictionary<string, string>();
+			var localColSourceTextByName = new Dictionary<string, string>( StringComparer.OrdinalIgnoreCase );
 			foreach ( var (name, data) in localCollections )
 			{
 				var stripped = SyncToolTransforms.StripServerManagedFields( data );
 				localColByName[name] = NormalizeJson( JsonSerializer.Serialize( stripped, new JsonSerializerOptions { WriteIndented = true } ) );
+				if ( data.TryGetValue( "sourceText", out var sourceText ) && sourceText is string source && !string.IsNullOrWhiteSpace( source ) )
+					localColSourceTextByName[name] = NormalizeSourceTextForVerification( source );
 			}
 
 			var localWorkflows = SyncToolConfig.LoadWorkflows();
@@ -2580,36 +2606,57 @@ public partial class SyncToolWindow : DockWindow
 			// Process collection results
 			if ( remoteCols.HasValue )
 			{
-				var collections = SyncToolTransforms.ServerToCollections( remoteCols.Value );
-				foreach ( var (colName, remoteLocal) in collections )
+				var remoteCollections = remoteCols.Value;
+				if ( remoteCollections.TryGetProperty( "data", out var remoteCollectionData ) ) remoteCollections = remoteCollectionData;
+				if ( remoteCollections.ValueKind == JsonValueKind.Array )
 				{
-					var remoteNorm = NormalizeJson( JsonSerializer.Serialize( remoteLocal ) );
-					var logIdx = _syncLog.FindIndex( e => e.Name == $"{colName}.collection.yml" && e.Type == "Collection" );
-					if ( logIdx < 0 ) continue;
-
-					var entry = _syncLog[logIdx];
-					if ( !entry.Ok ) continue;
-
-					if ( localColByName.TryGetValue( colName, out var localNorm ) && localNorm == remoteNorm )
+					foreach ( var remoteCollection in remoteCollections.EnumerateArray() )
 					{
-						entry.Detail = "Verified ✓";
-					}
-					else
-					{
-						var cid = $"col_{colName}";
-						var localPretty = PrettyJson( localColByName.GetValueOrDefault( colName, "{}" ) );
-						var remotePretty = PrettyJson( JsonSerializer.Serialize( remoteLocal ) );
-						var classification = ClassifyRemoteDifference( cid, localPretty, remotePretty );
+						var remoteLocal = SyncToolTransforms.ServerCollectionToLocal( remoteCollection );
+						var colName = remoteLocal.TryGetValue( "name", out var nameValue ) ? nameValue?.ToString() ?? "unknown" : "unknown";
+						var remoteNorm = NormalizeJson( JsonSerializer.Serialize( remoteLocal ) );
+						var logIdx = _syncLog.FindIndex( e => e.Name == $"{colName}.collection.yml" && e.Type == "Collection" );
+						if ( logIdx < 0 ) continue;
 
-						entry.Detail = classification.Status == SyncStatus.MergeAvailable
-							? BuildRemoteSemanticsLogDetail( classification.Analysis )
-							: $"Mismatch - {classification.Summary}";
-						entry.Ok = classification.Status == SyncStatus.MergeAvailable;
-						SetItemState( cid, remoteDiffers: true, status: classification.Status,
-							diffSummary: classification.Summary,
-							localJson: localPretty, remoteJson: remotePretty );
+						var entry = _syncLog[logIdx];
+						if ( !entry.Ok ) continue;
+
+						var sourceTextMatches = localColSourceTextByName.TryGetValue( colName, out var localSourceText )
+							&& SyncToolTransforms.TryGetSourceText( remoteCollection, out var remoteSourceText )
+							&& localSourceText == NormalizeSourceTextForVerification( remoteSourceText );
+
+						if ( sourceTextMatches || (localColByName.TryGetValue( colName, out var localNorm ) && localNorm == remoteNorm) )
+						{
+							entry.Detail = sourceTextMatches ? "Verified source ✓" : "Verified ✓";
+						}
+						else
+						{
+							var cid = $"col_{colName}";
+							var localPretty = PrettyJson( localColByName.GetValueOrDefault( colName, "{}" ) );
+							var remotePretty = PrettyJson( JsonSerializer.Serialize( remoteLocal ) );
+							var classification = ClassifyRemoteDifference( cid, localPretty, remotePretty );
+
+							if ( IsGeneratedMappedCollectionId( cid ) && classification.Analysis.IsRemoteAdditiveOnly )
+							{
+								entry.Detail = "Verified generated C# source ✓ (remote semantics ignored)";
+								entry.Ok = true;
+								SetItemState( cid, remoteDiffers: false, status: SyncStatus.InSync,
+									diffSummary: "Generated from C# — remote semantics ignored",
+									localJson: localPretty, remoteJson: remotePretty );
+							}
+							else
+							{
+								entry.Detail = classification.Status == SyncStatus.MergeAvailable
+									? BuildRemoteSemanticsLogDetail( classification.Analysis )
+									: $"Mismatch - {classification.Summary}";
+								entry.Ok = classification.Status == SyncStatus.MergeAvailable;
+								SetItemState( cid, remoteDiffers: true, status: classification.Status,
+									diffSummary: classification.Summary,
+									localJson: localPretty, remoteJson: remotePretty );
+							}
+						}
+						_syncLog[logIdx] = entry;
 					}
-					_syncLog[logIdx] = entry;
 				}
 			}
 
@@ -2978,14 +3025,13 @@ public partial class SyncToolWindow : DockWindow
 	{
 		try
 		{
-			var localEps = SyncToolConfig.LoadEndpoints();
+			var localEps = SyncToolConfig.LoadSourcePayloadResources( "endpoint", includeDeprecated: false );
 			if ( localEps.Count == 0 )
 			{
 				SyncToolApi.ReportLocalError( "endpoints", "No readable local endpoint source files were loaded for push." );
 				return false;
 			}
-			var existing = await SyncToolApi.GetEndpointsForPublishTarget( _publishTarget );
-			var serverFmt = SyncToolTransforms.EndpointsToServer( localEps, existing );
+			var serverFmt = JsonSerializer.Deserialize<JsonElement>( JsonSerializer.Serialize( localEps ) );
 			var resp = await SyncToolApi.PushEndpoints( serverFmt, _publishTarget );
 			return resp.HasValue;
 		}
@@ -3005,10 +3051,10 @@ public partial class SyncToolWindow : DockWindow
 	{
 		try
 		{
-			// Load all local resources
-			var localEps = SyncToolConfig.LoadEndpoints();
-			var localCols = SyncToolConfig.LoadCollections();
-			var localWfs = SyncToolConfig.LoadWorkflows();
+			// Load raw local source. Backend compiler owns canonicalization.
+			var localEps = SyncToolConfig.LoadSourcePayloadResources( "endpoint", includeDeprecated: false );
+			var localCols = SyncToolConfig.LoadSourcePayloadResources( "collection" );
+			var localWfs = SyncToolConfig.LoadSourcePayloadResources( "workflow" );
 
 			var hasEndpoints = localEps.Count > 0;
 			var hasCollections = localCols.Count > 0;
@@ -3017,34 +3063,22 @@ public partial class SyncToolWindow : DockWindow
 			if ( !hasEndpoints && !hasCollections && !hasWorkflows )
 				return (false, false, false);
 
-			// Fetch existing server state for ID preservation (parallel)
-			var existingEpTask = hasEndpoints ? SyncToolApi.GetEndpointsForPublishTarget( _publishTarget ) : Task.FromResult<JsonElement?>( null );
-			var existingWfTask = hasWorkflows ? SyncToolApi.GetWorkflows() : Task.FromResult<JsonElement?>( null );
-			await Task.WhenAll( existingEpTask, existingWfTask );
+			// The production batch /sync route historically accepted publishTarget=next
+			// but did not stage collections. Use the dedicated resource routes for next
+			// publishes so game_values/loot_tables are verified against revision overrides.
+			if ( hasCollections && string.Equals( _publishTarget, "next", StringComparison.OrdinalIgnoreCase ) )
+				return await DoPushAllIndividual( hasEndpoints, hasCollections, hasWorkflows );
 
-			var existingEp = await existingEpTask;
-			var existingWf = await existingWfTask;
-
-			// Transform to server format
 			var batchPayload = new Dictionary<string, object>();
 
 			if ( hasEndpoints )
-			{
-				var epServerFmt = SyncToolTransforms.EndpointsToServer( localEps, existingEp );
-				batchPayload["endpoints"] = JsonSerializer.Deserialize<object>( epServerFmt.GetRawText() );
-			}
+				batchPayload["endpoints"] = JsonSerializer.Deserialize<object>( JsonSerializer.Serialize( localEps ) );
 
 			if ( hasCollections )
-			{
-				var colServerFmt = SyncToolTransforms.CollectionsToServer( localCols.Select( c => c.Data ).ToList() );
-				batchPayload["collections"] = JsonSerializer.Deserialize<object>( colServerFmt.GetRawText() );
-			}
+				batchPayload["collections"] = JsonSerializer.Deserialize<object>( JsonSerializer.Serialize( localCols ) );
 
 			if ( hasWorkflows )
-			{
-				var wfServerFmt = SyncToolTransforms.WorkflowsToServer( localWfs, existingWf );
-				batchPayload["workflows"] = JsonSerializer.Deserialize<object>( wfServerFmt.GetRawText() );
-			}
+				batchPayload["workflows"] = JsonSerializer.Deserialize<object>( JsonSerializer.Serialize( localWfs ) );
 
 			var payload = JsonSerializer.Deserialize<JsonElement>( JsonSerializer.Serialize( batchPayload ) );
 			var resp = await SyncToolApi.PushSync( payload, _publishTarget );
@@ -3074,14 +3108,6 @@ public partial class SyncToolWindow : DockWindow
 				colResult.TryGetProperty( "ok", out var colOkProp ) && colOkProp.GetBoolean());
 			var wfOk = !hasWorkflows || (resp.Value.TryGetProperty( "workflows", out var wfResult ) &&
 				wfResult.TryGetProperty( "ok", out var wfOkProp ) && wfOkProp.GetBoolean());
-
-			// Also accept top-level ok as success for all
-			if ( resp.Value.TryGetProperty( "ok", out var topOk ) && topOk.GetBoolean() )
-			{
-				epOk = !hasEndpoints || epOk || true;
-				colOk = !hasCollections || colOk || true;
-				wfOk = !hasWorkflows || wfOk || true;
-			}
 
 			return (hasEndpoints && epOk, hasCollections && colOk, hasWorkflows && wfOk);
 		}
@@ -3140,15 +3166,14 @@ public partial class SyncToolWindow : DockWindow
 				return false;
 			}
 
-			if ( !TryReadLocalResourceFile( localFile, "endpoint", out var localEp ) )
+			if ( !SyncToolConfig.TryLoadSourcePayloadResource( "endpoint", localFile, out var localEp, includeDeprecated: false ) )
 			{
-				SyncToolApi.ReportLocalError( "endpoints", $"Local endpoint file for {slug} could not be parsed." );
+				SyncToolApi.ReportLocalError( "endpoints", $"Local endpoint file for {slug} could not be read." );
 				return false;
 			}
-			if ( SyncToolConfig.IsEndpointDeprecated( localEp ) ) return false;
 
-			// Transform to server format
-			var localDict = SyncToolTransforms.ServerEndpointToLocal( localEp );
+			// Push raw source only; the backend compiler owns canonicalization.
+			var localDict = JsonSerializer.Deserialize<Dictionary<string, object>>( localEp.GetRawText() );
 			var payload = JsonSerializer.Deserialize<JsonElement>( JsonSerializer.Serialize( new { endpoint = localDict } ) );
 
 			// Try PATCH first (server handles upsert)
@@ -3219,16 +3244,16 @@ public partial class SyncToolWindow : DockWindow
 	{
 		try
 		{
-			var collections = SyncToolConfig.LoadCollections();
-			var col = collections.FirstOrDefault( c => c.Name == colName );
-			if ( col.Data == null )
+			var localFile = _collectionFiles.FirstOrDefault( f => ResourceIdFromFile( f, "collection" ) == colName );
+			if ( localFile == null || !SyncToolConfig.TryLoadSourcePayloadResource( "collection", localFile, out var localCollection ) )
 			{
 				SyncToolApi.ReportLocalError( "collections", $"Local collection file for {colName} was not found." );
 				return false;
 			}
 
-			// Try PATCH first (server handles upsert)
-			var payload = JsonSerializer.Deserialize<JsonElement>( JsonSerializer.Serialize( new { collection = col.Data } ) );
+			// Try PATCH first (server handles upsert and source compilation)
+			var collectionPayload = JsonSerializer.Deserialize<Dictionary<string, object>>( localCollection.GetRawText() );
+			var payload = JsonSerializer.Deserialize<JsonElement>( JsonSerializer.Serialize( new { collection = collectionPayload } ) );
 			var resp = await SyncToolApi.PatchCollection( payload, _publishTarget );
 			if ( resp.HasValue )
 				return true;
@@ -3240,7 +3265,7 @@ public partial class SyncToolWindow : DockWindow
 			if ( !isNotSupported )
 				return false;
 
-			var serverFmt = SyncToolTransforms.CollectionsToServer( new List<Dictionary<string, object>> { col.Data } );
+			var serverFmt = JsonSerializer.Deserialize<JsonElement>( JsonSerializer.Serialize( new List<JsonElement> { localCollection } ) );
 			resp = await SyncToolApi.PushCollections( serverFmt, _publishTarget );
 			return resp.HasValue;
 		}
@@ -3255,18 +3280,16 @@ public partial class SyncToolWindow : DockWindow
 	{
 		try
 		{
-			var localWfs = SyncToolConfig.LoadWorkflows();
-			var localWf = localWfs.FirstOrDefault( wf =>
-				(wf.TryGetProperty( "id", out var i ) ? i.GetString() : "") == wfId );
-
-			if ( localWf.ValueKind == JsonValueKind.Undefined )
+			var localFile = _workflowFiles.FirstOrDefault( f => ResourceIdFromFile( f, "workflow" ) == wfId );
+			if ( localFile == null || !SyncToolConfig.TryLoadSourcePayloadResource( "workflow", localFile, out var localWf ) )
 			{
 				SyncToolApi.ReportLocalError( "workflows", $"Local workflow file for {wfId} was not found." );
 				return false;
 			}
 
-			// Try PATCH first (server handles upsert)
-			var payload = JsonSerializer.Deserialize<JsonElement>( JsonSerializer.Serialize( new { workflow = localWf } ) );
+			// Try PATCH first (server handles upsert and source compilation)
+			var workflowPayload = JsonSerializer.Deserialize<Dictionary<string, object>>( localWf.GetRawText() );
+			var payload = JsonSerializer.Deserialize<JsonElement>( JsonSerializer.Serialize( new { workflow = workflowPayload } ) );
 			var resp = await SyncToolApi.PatchWorkflow( payload );
 			if ( resp.HasValue )
 				return true;
@@ -3294,13 +3317,13 @@ public partial class SyncToolWindow : DockWindow
 	{
 		try
 		{
-			var collections = SyncToolConfig.LoadCollections();
+			var collections = SyncToolConfig.LoadSourcePayloadResources( "collection" );
 			if ( collections.Count == 0 )
 			{
 				SyncToolApi.ReportLocalError( "collections", "No readable local collection source files were loaded for push." );
 				return false;
 			}
-			var serverFmt = SyncToolTransforms.CollectionsToServer( collections.Select( c => c.Data ).ToList() );
+			var serverFmt = JsonSerializer.Deserialize<JsonElement>( JsonSerializer.Serialize( collections ) );
 			var resp = await SyncToolApi.PushCollections( serverFmt, _publishTarget );
 			return resp.HasValue;
 		}
@@ -3315,14 +3338,13 @@ public partial class SyncToolWindow : DockWindow
 	{
 		try
 		{
-			var localWfs = SyncToolConfig.LoadWorkflows();
+			var localWfs = SyncToolConfig.LoadSourcePayloadResources( "workflow" );
 			if ( localWfs.Count == 0 )
 			{
 				SyncToolApi.ReportLocalError( "workflows", "No readable local workflow source files were loaded for push." );
 				return false;
 			}
-			var existing = await SyncToolApi.GetWorkflows();
-			var serverFmt = SyncToolTransforms.WorkflowsToServer( localWfs, existing );
+			var serverFmt = JsonSerializer.Deserialize<JsonElement>( JsonSerializer.Serialize( localWfs ) );
 			var resp = await SyncToolApi.PushWorkflows( serverFmt );
 			return resp.HasValue;
 		}

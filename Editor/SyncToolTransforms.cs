@@ -57,6 +57,48 @@ public static class SyncToolTransforms
 		return false;
 	}
 
+	/// <summary>
+	/// Build the management API payload for a source-authored resource. Pushes raw
+	/// source only; the backend compiler owns canonicalization and validation.
+	/// </summary>
+	public static bool TryBuildSourceOnlyPayload( JsonElement resource, string kind, out Dictionary<string, object> entry )
+	{
+		entry = null;
+		if ( !TryGetSourceText( resource, out var sourceText ) )
+			return false;
+
+		entry = new Dictionary<string, object>
+		{
+			["kind"] = kind,
+			["authoringMode"] = "source",
+			["sourceFormat"] = resource.TryGetProperty( "sourceFormat", out var sourceFormat ) && sourceFormat.ValueKind == JsonValueKind.String ? sourceFormat.GetString() : "yaml",
+			["sourcePath"] = resource.TryGetProperty( "sourcePath", out var sourcePath ) && sourcePath.ValueKind == JsonValueKind.String ? sourcePath.GetString() : null,
+			["sourceText"] = sourceText
+		};
+		if ( resource.TryGetProperty( "sourceVersion", out var sourceVersion ) )
+			entry["sourceVersion"] = JsonElementToObject( sourceVersion );
+		return true;
+	}
+
+	public static bool TryBuildSourceOnlyPayload( Dictionary<string, object> resource, string kind, out Dictionary<string, object> entry )
+	{
+		entry = null;
+		if ( resource == null || !resource.TryGetValue( "sourceText", out var sourceTextValue ) || string.IsNullOrWhiteSpace( sourceTextValue?.ToString() ) )
+			return false;
+
+		entry = new Dictionary<string, object>
+		{
+			["kind"] = kind,
+			["authoringMode"] = "source",
+			["sourceFormat"] = resource.TryGetValue( "sourceFormat", out var sourceFormat ) ? sourceFormat?.ToString() ?? "yaml" : "yaml",
+			["sourcePath"] = resource.TryGetValue( "sourcePath", out var sourcePath ) ? sourcePath?.ToString() : null,
+			["sourceText"] = sourceTextValue.ToString()
+		};
+		if ( resource.TryGetValue( "sourceVersion", out var sourceVersion ) && sourceVersion != null )
+			entry["sourceVersion"] = sourceVersion;
+		return true;
+	}
+
 	private static JsonElement GetComparableResourceView( JsonElement resource )
 	{
 		if ( TryGetCanonicalDefinition( resource, out var canonical ) )
@@ -106,6 +148,12 @@ public static class SyncToolTransforms
 
 		foreach ( var ep in localEndpoints )
 		{
+			if ( TryBuildSourceOnlyPayload( ep, "endpoint", out var sourceEntry ) )
+			{
+				result.Add( sourceEntry );
+				continue;
+			}
+
 			var slug = ep.TryGetProperty( "slug", out var s ) ? s.GetString() : "";
 			var existing = slugToExisting.GetValueOrDefault( slug );
 			var existingId = existing.ValueKind != JsonValueKind.Undefined && existing.TryGetProperty( "id", out var id ) ? id.GetString() : Guid.NewGuid().ToString( "N" )[..16];
@@ -126,8 +174,6 @@ public static class SyncToolTransforms
 
 			if ( SyncToolConfig.IsEndpointDeprecated( ep ) )
 				entry["deprecated"] = true;
-
-			TryAddSourceEnvelope( ep, entry );
 
 			result.Add( entry );
 		}
@@ -259,6 +305,12 @@ public static class SyncToolTransforms
 		var payload = new List<Dictionary<string, object>>();
 		foreach ( var col in localCollections )
 		{
+			if ( TryBuildSourceOnlyPayload( col, "collection", out var sourceEntry ) )
+			{
+				payload.Add( sourceEntry );
+				continue;
+			}
+
 			var entry = new Dictionary<string, object>
 			{
 				["name"] = col.GetValueOrDefault( "name", "unknown" ),
@@ -423,8 +475,13 @@ public static class SyncToolTransforms
 
 		foreach ( var wf in localWorkflows )
 		{
+			if ( TryBuildSourceOnlyPayload( wf, "workflow", out var sourceEntry ) )
+			{
+				result.Add( sourceEntry );
+				continue;
+			}
+
 			var entry = ServerWorkflowToLocal( wf );
-			TryAddSourceEnvelope( wf, entry );
 
 			// Preserve server-managed fields from existing if available
 			var wfIdStr = wf.TryGetProperty( "id", out var id ) ? id.GetString() : "";

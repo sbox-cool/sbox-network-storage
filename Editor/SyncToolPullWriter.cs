@@ -3,10 +3,16 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Text.Encodings.Web;
 using System.Text.Json;
 
 public static class SyncToolPullWriter
 {
+	private static readonly JsonSerializerOptions YamlJsonOptions = new()
+	{
+		Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+	};
+
 	public static bool SaveEndpoint( string slug, JsonElement remoteEndpoint )
 	{
 		var local = SyncToolTransforms.ServerEndpointToLocal( remoteEndpoint );
@@ -238,7 +244,7 @@ public static class SyncToolPullWriter
 	{
 		return key.All( ch => char.IsLetterOrDigit( ch ) || ch == '_' || ch == '-' || ch == '.' )
 			? key
-			: JsonSerializer.Serialize( key );
+			: JsonSerializer.Serialize( key, YamlJsonOptions );
 	}
 
 	private static string FormatYamlScalar( object value )
@@ -258,7 +264,7 @@ public static class SyncToolPullWriter
 			float n => n.ToString( "R", CultureInfo.InvariantCulture ),
 			double n => n.ToString( "R", CultureInfo.InvariantCulture ),
 			decimal n => n.ToString( CultureInfo.InvariantCulture ),
-			_ => JsonSerializer.Serialize( value.ToString() )
+			_ => JsonSerializer.Serialize( value.ToString(), YamlJsonOptions )
 		};
 	}
 

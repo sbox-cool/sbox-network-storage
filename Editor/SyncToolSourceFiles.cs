@@ -55,6 +55,83 @@ public static partial class SyncToolConfig
 			.ToList();
 	}
 
+	public static List<JsonElement> LoadSourcePayloadResources( string kind, bool includeDeprecated = true )
+	{
+		var folder = SourceFolderForKind( kind );
+		var absoluteDir = Abs( folder );
+		if ( !Directory.Exists( absoluteDir ) )
+			return new List<JsonElement>();
+
+		var typed = Directory.GetFiles( absoluteDir, $"*.{kind}.yml" )
+			.Concat( Directory.GetFiles( absoluteDir, $"*.{kind}.yaml" ) );
+		var plain = Directory.GetFiles( absoluteDir, "*.yml" )
+			.Concat( Directory.GetFiles( absoluteDir, "*.yaml" ) )
+			.Where( path => !Path.GetFileName( path ).Contains( $".{kind}.", StringComparison.OrdinalIgnoreCase ) );
+
+		return typed.Concat( plain )
+			.Distinct( StringComparer.OrdinalIgnoreCase )
+			.OrderBy( path => path, StringComparer.OrdinalIgnoreCase )
+			.Select( path => TryLoadSourcePayloadResource( kind, path, out var resource, includeDeprecated ) ? resource : default )
+			.Where( resource => resource.ValueKind != JsonValueKind.Undefined )
+			.ToList();
+	}
+
+	public static bool TryLoadSourcePayloadResource( string kind, string absolutePath, out JsonElement resource, bool includeDeprecated = true )
+	{
+		resource = default;
+		try
+		{
+			var sourceText = File.ReadAllText( absolutePath );
+			if ( !includeDeprecated && kind.Equals( "endpoint", StringComparison.OrdinalIgnoreCase ) && IsDeprecatedSourceText( sourceText ) )
+				return false;
+
+			var id = ResourceIdFromFilePath( absolutePath, kind );
+			var payload = new Dictionary<string, object>
+			{
+				["kind"] = kind,
+				["id"] = id,
+				["authoringMode"] = "source",
+				["sourceFormat"] = Path.GetExtension( absolutePath ).Equals( ".json", StringComparison.OrdinalIgnoreCase ) ? "json" : "yaml",
+				["sourcePath"] = Path.GetFileName( absolutePath ),
+				["sourceText"] = sourceText
+			};
+			resource = JsonSerializer.Deserialize<JsonElement>( JsonSerializer.Serialize( payload ) );
+			return resource.ValueKind == JsonValueKind.Object;
+		}
+		catch ( Exception ex )
+		{
+			Log.Warning( $"[SyncTool] Failed to load raw source {absolutePath}: {ex.Message}" );
+			return false;
+		}
+	}
+
+	private static bool IsDeprecatedSourceText( string sourceText )
+	{
+		foreach ( var raw in (sourceText ?? "").Replace( "\r\n", "\n" ).Replace( '\r', '\n' ).Split( '\n' ) )
+		{
+			var line = raw.Trim();
+			if ( line.Length == 0 || line.StartsWith( "#" ) )
+				continue;
+
+			var colon = line.IndexOf( ':' );
+			if ( colon <= 0 )
+				continue;
+
+			var key = line[..colon].Trim();
+			if ( !key.Equals( "deprecated", StringComparison.OrdinalIgnoreCase )
+				&& !key.Equals( "_deprecated", StringComparison.OrdinalIgnoreCase )
+				&& !key.Equals( "depreciated", StringComparison.OrdinalIgnoreCase )
+				&& !key.Equals( "depricated", StringComparison.OrdinalIgnoreCase ) )
+				continue;
+
+			var value = line[(colon + 1)..].Trim().Trim( '"', '\'' );
+			if ( IsTruthyString( value ) )
+				return true;
+		}
+
+		return false;
+	}
+
 	public static List<JsonElement> LoadSourceCanonicalResources( string kind )
 	{
 		var folder = SourceFolderForKind( kind );

@@ -32,8 +32,7 @@ from urllib.request import Request, urlopen
 from urllib.error import HTTPError
 
 from sync_api_errors import SyncApiError, print_api_error
-from source_compiler import compile_path, compile_source_text
-from sync_sources import load_source_definitions
+from sync_sources import load_source_definitions, source_id_from_filename
 
 # ── Paths (set in main() from --project-root) ────────────────────
 
@@ -194,11 +193,14 @@ def is_truthy_flag(value):
 def is_deprecated_endpoint(item):
     if not isinstance(item, dict):
         return False
-    return any(is_truthy_flag(item.get(key)) for key in ("_deprecated", "deprecated", "depreciated", "depricated"))
+    if any(is_truthy_flag(item.get(key)) for key in ("_deprecated", "deprecated", "depreciated", "depricated")):
+        return True
+    source_text = item.get("sourceText") if isinstance(item.get("sourceText"), str) else ""
+    return re.search(r"(?im)^\s*(?:_?deprecated|depreciated|depricated)\s*:\s*(true|1|yes|on)\b", source_text) is not None
 
 
 def load_source_dir(directory, kind):
-    """Load YAML source files from a directory and return their canonical definition."""
+    """Load YAML source files as raw source payloads for backend compilation."""
     if not directory.exists():
         return []
 
@@ -206,26 +208,14 @@ def load_source_dir(directory, kind):
     plain = [p for p in list(directory.glob("*.yaml")) + list(directory.glob("*.yml")) if f".{kind}." not in p.name]
     items = []
     for f in sorted({*typed, *plain}):
-        compiled = compile_path(f)
-        resource_id = compiled.get('id') or f.stem
-
-        # Log any warnings even if compile succeeded
-        for diag in compiled.get("diagnostics", []):
-            severity = diag.get("severity", "info")
-            if severity == "warning":
-                pointer = diag.get("sourcePointer")
-                suffix = f" at {pointer}" if pointer else ""
-                print(f"  WARN [{resource_id}]: {diag['code']}: {diag['message']}{suffix}")
-
-        if not compiled.get("ok"):
-            print(f"  Source validation failed for {kind}:{resource_id} ({f}):")
-            for diag in compiled.get("diagnostics", []):
-                pointer = diag.get("sourcePointer")
-                suffix = f" at {pointer}" if pointer else ""
-                print(f"    - {diag['code']}: {diag['message']}{suffix}")
-            raise SyncApiError("Source validation failed")
-
-        items.append(compiled.get("canonicalDefinition") or {})
+        items.append({
+            "kind": kind,
+            "id": source_id_from_filename(f, kind),
+            "authoringMode": "source",
+            "sourceFormat": "yaml",
+            "sourcePath": f.relative_to(NS_DIR).as_posix(),
+            "sourceText": f.read_text(encoding="utf-8"),
+        })
 
     return items
 
@@ -375,23 +365,6 @@ def push_collections(config, dry_run=False):
     if dry_run:
         return
 
-    # Fetch existing remote collections to preserve IDs
-    try:
-        remote = api_request(config, "GET", "collections")
-        remote_by_name = {}
-        if isinstance(remote, list):
-            remote_by_name = {c["name"]: c for c in remote if "name" in c}
-        elif isinstance(remote, dict) and "collections" in remote:
-            remote_by_name = {c["name"]: c for c in remote["collections"] if "name" in c}
-    except Exception:
-        remote_by_name = {}
-
-    # Preserve server IDs
-    for c in collections:
-        name = c.get("name", "")
-        if name in remote_by_name and "id" in remote_by_name[name]:
-            c["id"] = remote_by_name[name]["id"]
-
     result = api_request(config, "PUT", "collections", collections)
     print(f"  Pushed collections: {json.dumps(result, indent=2)[:200]}")
 
@@ -417,23 +390,6 @@ def push_endpoints(config, dry_run=False, replace_all=False):
     if dry_run:
         return
 
-    # Fetch existing remote endpoints to preserve IDs (skip if replacing all)
-    remote_by_slug = {}
-    if not replace_all:
-        try:
-            remote = api_request(config, "GET", "endpoints")
-            if isinstance(remote, list):
-                remote_by_slug = {e["slug"]: e for e in remote if "slug" in e}
-            elif isinstance(remote, dict) and "endpoints" in remote:
-                remote_by_slug = {e["slug"]: e for e in remote["endpoints"] if "slug" in e}
-        except Exception:
-            pass
-
-    for e in endpoints:
-        slug = e.get("slug", "")
-        if slug in remote_by_slug and "id" in remote_by_slug[slug]:
-            e["id"] = remote_by_slug[slug]["id"]
-
     path = "endpoints?replaceAll=true" if replace_all else "endpoints"
     result = api_request(config, "PUT", path, endpoints)
     print(f"  Pushed endpoints: {json.dumps(result, indent=2)[:200]}")
@@ -451,16 +407,6 @@ def push_workflows(config, dry_run=False):
 
     if dry_run:
         return
-
-    try:
-        remote = api_request(config, "GET", "workflows")
-        remote_by_id = {}
-        if isinstance(remote, list):
-            remote_by_id = {w["id"]: w for w in remote if "id" in w}
-        elif isinstance(remote, dict) and "workflows" in remote:
-            remote_by_id = {w["id"]: w for w in remote["workflows"] if "id" in w}
-    except Exception:
-        remote_by_id = {}
 
     result = api_request(config, "PUT", "workflows", workflows)
     print(f"  Pushed workflows: {json.dumps(result, indent=2)[:200]}")
@@ -511,31 +457,21 @@ def push_sources(config, dry_run=False):
     for s in sources:
         print(f"    - {s['kind']}:{s['id']} ({s['sourcePath']})")
 
-    failed = False
-    for s in sources:
-        compiled = compile_source_text(s["sourceText"], s["sourcePath"])
-        if compiled.get("ok"):
-            continue
-        failed = True
-        print(f"  Source validation failed for {s['kind']}:{s['id']} ({s['sourcePath']}):")
-        for diag in compiled.get("diagnostics", []):
-            pointer = diag.get("sourcePointer")
-            suffix = f" at {pointer}" if pointer else ""
-            print(f"    - {diag['code']}: {diag['message']}{suffix}")
-    if failed:
-        raise SyncApiError("Source validation failed")
-
     if dry_run:
         return
 
-    upgraded_sources = []
+    pushable_sources = []
     for source in sources:
         if source.get("kind") == "library":
             print(f"  Skipping library source push: {source.get('sourcePath')} (used locally for imports)")
             continue
-        upgraded_sources.append({
-            **upgrade_source_with_backend(config, source),
+        pushable_sources.append({
             "kind": source.get("kind"),
+            "id": source.get("id"),
+            "authoringMode": "source",
+            "sourceFormat": source.get("sourceFormat", "yaml"),
+            "sourcePath": source.get("sourcePath"),
+            "sourceText": source.get("sourceText"),
         })
 
     # The management API is kind-scoped. Keep source sync using the same routes as
@@ -548,7 +484,7 @@ def push_sources(config, dry_run=False):
         "test": "tests",
     }
     grouped = {}
-    for source in upgraded_sources:
+    for source in pushable_sources:
         route = route_by_kind.get(source.get("kind"))
         if not route:
             print(f"  Skipping unsupported source kind: {source.get('kind')} ({source.get('sourcePath')})")
