@@ -174,74 +174,31 @@ public static partial class SyncToolConfig
 		resource = default;
 
 		var lines = sourceText.Replace( "\r\n", "\n" ).Replace( '\r', '\n' ).Split( '\n' );
-		var values = new Dictionary<string, string>( StringComparer.OrdinalIgnoreCase );
-		var definitionLine = -1;
+		var index = 0;
+		var root = ParseYamlMap( sourcePath, lines, ref index, 0 );
 
-		for ( var i = 0; i < lines.Length; i++ )
+		if ( root.TryGetValue( "sourceText", out var embeddedSourceTextValue )
+			&& embeddedSourceTextValue is string embeddedSourceText
+			&& !string.IsNullOrWhiteSpace( embeddedSourceText )
+			&& (!root.TryGetValue( "kind", out var embeddedKind ) || string.IsNullOrWhiteSpace( ScalarToString( embeddedKind ) )) )
 		{
-			var raw = lines[i];
-			if ( string.IsNullOrWhiteSpace( raw ) )
-				continue;
-			if ( char.IsWhiteSpace( raw[0] ) )
-				continue;
-
-			var line = raw.Trim();
-			if ( line.StartsWith( "#" ) )
-				continue;
-
-			var colon = FindTopLevelColon( line );
-			if ( colon <= 0 )
-				continue;
-
-			var key = line[..colon].Trim();
-			var value = line[(colon + 1)..].Trim();
-			if ( key.Equals( "definition", StringComparison.OrdinalIgnoreCase ) )
-			{
-				definitionLine = i;
-				if ( !string.IsNullOrWhiteSpace( value ) )
-					values["definition"] = JsonSerializer.Serialize( ParseYamlScalar( value ) );
-				break;
-			}
-
-			values[key] = DecodeYamlScalar( value );
+			return TryParseSourceText( kind, embeddedSourceText, sourcePath, out resource );
 		}
 
-		if ( definitionLine < 0 && values.TryGetValue( "sourceText", out var embeddedSourceText ) )
-			return TryParseSourceText( kind, embeddedSourceText, sourcePath, out resource );
-
-		if ( !values.TryGetValue( "kind", out var actualKind )
-			|| !actualKind.Equals( kind, StringComparison.OrdinalIgnoreCase ) )
+		var actualKind = root.TryGetValue( "kind", out var kindValue )
+			? ScalarToString( kindValue )
+			: root.TryGetValue( "resourceKind", out var resourceKindValue )
+				? ScalarToString( resourceKindValue )
+				: null;
+		if ( !string.Equals( actualKind, kind, StringComparison.OrdinalIgnoreCase ) )
 			return false;
 
-		if ( !values.TryGetValue( "id", out var id ) || string.IsNullOrWhiteSpace( id ) )
+		var sourceBody = UnwrapSourceBody( kind, root );
+		var id = sourceBody.TryGetValue( "id", out var bodyId ) ? ScalarToString( bodyId ) : null;
+		if ( string.IsNullOrWhiteSpace( id ) )
 			id = ResourceIdFromFilePath( sourcePath, kind );
 		if ( string.IsNullOrWhiteSpace( id ) )
 			return false;
-
-		JsonElement definitionElement;
-		JsonDocument definitionDoc = null;
-		if ( definitionLine >= 0 )
-		{
-			var definitionJson = values.TryGetValue( "definition", out var inlineDefinition )
-				? inlineDefinition
-				: SerializeIndentedDefinitionYamlAsJson( sourcePath, lines, definitionLine + 1 );
-			if ( string.IsNullOrWhiteSpace( definitionJson ) )
-				return false;
-			definitionDoc = JsonDocument.Parse( definitionJson );
-			definitionElement = definitionDoc.RootElement;
-		}
-		else
-		{
-			var index = 0;
-			var parsed = ParseYamlMap( sourcePath, lines, ref index, 0 );
-			definitionDoc = JsonDocument.Parse( JsonSerializer.Serialize( parsed ) );
-			definitionElement = definitionDoc.RootElement;
-		}
-
-		using ( definitionDoc )
-		{
-			if ( definitionElement.ValueKind != JsonValueKind.Object )
-				return false;
 
 		var canonical = new Dictionary<string, object>( StringComparer.OrdinalIgnoreCase );
 		switch ( kind )
@@ -259,39 +216,115 @@ public static partial class SyncToolConfig
 				break;
 		}
 
-		foreach ( var key in new[] { "name", "description", "notes" } )
+		foreach ( var pair in sourceBody )
 		{
-			if ( values.TryGetValue( key, out var value ) && !string.IsNullOrWhiteSpace( value ) )
-				canonical[key] = value;
+			if ( IsSourceOnlyProperty( pair.Key ) )
+				continue;
+			canonical[pair.Key] = pair.Value;
 		}
 
 		canonical["authoringMode"] = "source";
 		canonical["sourceFormat"] = "yaml";
 		canonical["sourcePath"] = Path.GetFileName( sourcePath );
 		canonical["sourceText"] = sourceText;
-		if ( values.TryGetValue( "sourceVersion", out var sourceVersion ) && !string.IsNullOrWhiteSpace( sourceVersion ) )
-			canonical["sourceVersion"] = sourceVersion;
-
-			foreach ( var property in definitionElement.EnumerateObject() )
-			{
-				if ( IsSourceOnlyProperty( property.Name ) )
-					continue;
-				canonical[property.Name] = property.Value.Clone();
-			}
-
-			if ( kind == "endpoint" )
-			{
-				if ( canonical.TryGetValue( "exposure", out var exposure ) )
-					canonical["exposure"] = NormalizeExposure( exposure?.ToString() );
-				else if ( canonical.TryGetValue( "internalOnly", out var internalOnly ) && internalOnly is bool b && b )
-					canonical["exposure"] = "internal";
-				else if ( canonical.TryGetValue( "publiclyCallable", out var callable ) && callable is bool c && c )
-					canonical["exposure"] = "public";
-			}
-
-			resource = JsonSerializer.Deserialize<JsonElement>( JsonSerializer.Serialize( canonical ) );
-		return resource.ValueKind == JsonValueKind.Object;
+		if ( root.TryGetValue( "sourceVersion", out var sourceVersionValue ) )
+		{
+			var sourceVersion = ScalarToString( sourceVersionValue );
+			if ( !string.IsNullOrWhiteSpace( sourceVersion ) )
+				canonical["sourceVersion"] = sourceVersion;
 		}
+
+		if ( kind == "endpoint" )
+		{
+			if ( canonical.TryGetValue( "exposure", out var exposure ) )
+				canonical["exposure"] = NormalizeExposure( exposure?.ToString() );
+			else if ( canonical.TryGetValue( "internalOnly", out var internalOnly ) && internalOnly is bool b && b )
+				canonical["exposure"] = "internal";
+			else if ( canonical.TryGetValue( "publiclyCallable", out var callable ) && callable is bool c && c )
+				canonical["exposure"] = "public";
+		}
+
+		resource = JsonSerializer.Deserialize<JsonElement>( JsonSerializer.Serialize( canonical ) );
+		return resource.ValueKind == JsonValueKind.Object;
+	}
+
+	private static Dictionary<string, object> UnwrapSourceBody( string kind, Dictionary<string, object> source )
+	{
+		if ( TryGetMap( source, kind, out var kindBody ) )
+		{
+			var merged = CopyExcept( source, kind, "resource" );
+			foreach ( var pair in kindBody ) merged[pair.Key] = pair.Value;
+			return merged;
+		}
+
+		if ( TryGetMap( source, "resource", out var resourceBody ) )
+		{
+			var merged = CopyExcept( source, "resource", kind );
+			foreach ( var pair in resourceBody ) merged[pair.Key] = pair.Value;
+			return merged;
+		}
+
+		if ( TryGetMap( source, "definition", out var definitionBody ) )
+		{
+			var merged = new Dictionary<string, object>( definitionBody, StringComparer.OrdinalIgnoreCase );
+			foreach ( var pair in source )
+			{
+				if ( pair.Key.Equals( "definition", StringComparison.OrdinalIgnoreCase )
+					|| pair.Key.Equals( kind, StringComparison.OrdinalIgnoreCase )
+					|| pair.Key.Equals( "resource", StringComparison.OrdinalIgnoreCase ) )
+					continue;
+				merged[pair.Key] = pair.Value;
+			}
+			return merged;
+		}
+
+		return new Dictionary<string, object>( source, StringComparer.OrdinalIgnoreCase );
+	}
+
+	private static Dictionary<string, object> CopyExcept( Dictionary<string, object> source, params string[] excludedKeys )
+	{
+		var excluded = new HashSet<string>( excludedKeys, StringComparer.OrdinalIgnoreCase );
+		var copy = new Dictionary<string, object>( StringComparer.OrdinalIgnoreCase );
+		foreach ( var pair in source )
+		{
+			if ( excluded.Contains( pair.Key ) )
+				continue;
+			copy[pair.Key] = pair.Value;
+		}
+		return copy;
+	}
+
+	private static bool TryGetMap( Dictionary<string, object> source, string key, out Dictionary<string, object> map )
+	{
+		map = null;
+		if ( !source.TryGetValue( key, out var value ) )
+			return false;
+
+		if ( value is Dictionary<string, object> typed )
+		{
+			map = typed;
+			return true;
+		}
+
+		if ( value is IDictionary<string, object> generic )
+		{
+			map = new Dictionary<string, object>( generic, StringComparer.OrdinalIgnoreCase );
+			return true;
+		}
+
+		return false;
+	}
+
+	private static string ScalarToString( object value )
+	{
+		return value switch
+		{
+			null => null,
+			string s => s,
+			JsonElement element when element.ValueKind == JsonValueKind.String => element.GetString(),
+			JsonElement element => element.ToString(),
+			_ => value.ToString()
+		};
 	}
 
 	private static bool IsSourceOnlyProperty( string name ) => name switch
@@ -474,13 +507,14 @@ public static partial class SyncToolConfig
 			return null;
 
 		var line = lines[index];
-		if ( CountLeadingSpaces( line ) < indent )
+		var actualIndent = CountLeadingSpaces( line );
+		if ( actualIndent < indent )
 			return null;
 
-		var trimmed = line[indent..];
+		var trimmed = line[actualIndent..];
 		return trimmed.StartsWith( "-", StringComparison.Ordinal )
-			? ParseYamlList( absolutePath, lines, ref index, indent )
-			: ParseYamlMap( absolutePath, lines, ref index, indent );
+			? ParseYamlList( absolutePath, lines, ref index, actualIndent )
+			: ParseYamlMap( absolutePath, lines, ref index, actualIndent );
 	}
 
 	private static Dictionary<string, object> ParseYamlMap( string absolutePath, string[] lines, ref int index, int indent )
@@ -513,7 +547,11 @@ public static partial class SyncToolConfig
 			var valueText = content[(colon + 1)..].Trim();
 			index++;
 
-			if ( string.IsNullOrEmpty( valueText ) )
+			if ( IsBlockScalarHeader( valueText ) )
+			{
+				result[key] = ParseYamlBlockScalar( lines, ref index, indent + 2, valueText );
+			}
+			else if ( string.IsNullOrEmpty( valueText ) )
 			{
 				var child = ParseYamlNode( absolutePath, lines, ref index, indent + 2 );
 				result[key] = child ?? new Dictionary<string, object>( StringComparer.OrdinalIgnoreCase );
@@ -575,6 +613,66 @@ public static partial class SyncToolConfig
 		}
 
 		return result;
+	}
+
+	private static bool IsBlockScalarHeader( string value )
+	{
+		return value is "|" or "|-" or "|+" or ">" or ">-" or ">+";
+	}
+
+	private static string ParseYamlBlockScalar( string[] lines, ref int index, int minIndent, string header )
+	{
+		var blockLines = new List<string>();
+		var blockIndent = -1;
+		var chompStrip = header.EndsWith( "-", StringComparison.Ordinal );
+		var folded = header.StartsWith( ">", StringComparison.Ordinal );
+
+		while ( index < lines.Length )
+		{
+			var line = lines[index];
+			if ( string.IsNullOrWhiteSpace( line ) )
+			{
+				blockLines.Add( "" );
+				index++;
+				continue;
+			}
+
+			var currentIndent = CountLeadingSpaces( line );
+			if ( currentIndent < minIndent )
+				break;
+
+			if ( blockIndent < 0 )
+				blockIndent = currentIndent;
+			var trimIndent = Math.Min( currentIndent, blockIndent );
+			blockLines.Add( line.Length >= trimIndent ? line[trimIndent..] : "" );
+			index++;
+		}
+
+		var text = folded ? FoldYamlBlockLines( blockLines ) : string.Join( "\n", blockLines );
+		return chompStrip ? text.TrimEnd( '\n' ) : text + "\n";
+	}
+
+	private static string FoldYamlBlockLines( List<string> blockLines )
+	{
+		var paragraphs = new List<string>();
+		var current = new List<string>();
+		foreach ( var line in blockLines )
+		{
+			if ( string.IsNullOrEmpty( line ) )
+			{
+				if ( current.Count > 0 )
+				{
+					paragraphs.Add( string.Join( " ", current ) );
+					current.Clear();
+				}
+				paragraphs.Add( "" );
+				continue;
+			}
+			current.Add( line );
+		}
+		if ( current.Count > 0 )
+			paragraphs.Add( string.Join( " ", current ) );
+		return string.Join( "\n", paragraphs );
 	}
 
 	private static object ParseYamlScalar( string value )

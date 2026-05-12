@@ -1925,10 +1925,16 @@ public partial class SyncToolWindow : DockWindow
 		var localWorkflows = SyncToolConfig.LoadWorkflows();
 
 		var localEpBySlug = new Dictionary<string, JsonElement>();
+		var localEpSourceTextBySlug = new Dictionary<string, string>( StringComparer.OrdinalIgnoreCase );
 		foreach ( var ep in localEndpoints )
 		{
 			var slug = ep.TryGetProperty( "slug", out var s ) ? s.GetString() : "";
-			if ( !string.IsNullOrEmpty( slug ) ) localEpBySlug[slug] = ep;
+			if ( !string.IsNullOrEmpty( slug ) )
+			{
+				localEpBySlug[slug] = ep;
+				if ( SyncToolTransforms.TryGetSourceText( ep, out var localSourceText ) )
+					localEpSourceTextBySlug[slug] = NormalizeSourceTextForVerification( localSourceText );
+			}
 		}
 
 		// Also track deprecated local files so the diff loop can distinguish
@@ -1943,17 +1949,26 @@ public partial class SyncToolWindow : DockWindow
 		}
 
 		var localColByName = new Dictionary<string, string>();
+		var localColSourceTextByName = new Dictionary<string, string>( StringComparer.OrdinalIgnoreCase );
 		foreach ( var (name, data) in localCollections )
 		{
 			var stripped = SyncToolTransforms.StripServerManagedFields( data );
 			localColByName[name] = JsonSerializer.Serialize( stripped, new JsonSerializerOptions { WriteIndented = true } );
+			if ( data.TryGetValue( "sourceText", out var sourceText ) && sourceText is string source && !string.IsNullOrWhiteSpace( source ) )
+				localColSourceTextByName[name] = NormalizeSourceTextForVerification( source );
 		}
 
 		var localWfById = new Dictionary<string, JsonElement>();
+		var localWfSourceTextById = new Dictionary<string, string>( StringComparer.OrdinalIgnoreCase );
 		foreach ( var wf in localWorkflows )
 		{
 			var wfId = wf.TryGetProperty( "id", out var id ) ? id.GetString() : "";
-			if ( !string.IsNullOrEmpty( wfId ) ) localWfById[wfId] = wf;
+			if ( !string.IsNullOrEmpty( wfId ) )
+			{
+				localWfById[wfId] = wf;
+				if ( SyncToolTransforms.TryGetSourceText( wf, out var localSourceText ) )
+					localWfSourceTextById[wfId] = NormalizeSourceTextForVerification( localSourceText );
+			}
 		}
 
 		// ── Fetch endpoints, collections, workflows in parallel ──
@@ -2059,10 +2074,15 @@ public partial class SyncToolWindow : DockWindow
 					}
 					else
 					{
-						// Transform local same as remote to strip server-managed fields
+						// Transform local same as remote to strip server-managed fields.
+						// If both sides expose identical sourceText, trust the backend compiler's
+						// canonicalization instead of the editor's lightweight YAML parser.
 						var localTransformed = SyncToolTransforms.ServerEndpointToLocal( localEp );
 						var localJson = JsonSerializer.Serialize( localTransformed, new JsonSerializerOptions { WriteIndented = true } );
-						var differs = NormalizeJson( remoteJson ) != NormalizeJson( localJson );
+						var sourceTextMatches = localEpSourceTextBySlug.TryGetValue( slug, out var localSourceText )
+							&& SyncToolTransforms.TryGetSourceText( ep, out var remoteSourceText )
+							&& localSourceText == NormalizeSourceTextForVerification( remoteSourceText );
+						var differs = !sourceTextMatches && NormalizeJson( remoteJson ) != NormalizeJson( localJson );
 
 						if ( differs )
 						{
@@ -2103,50 +2123,59 @@ public partial class SyncToolWindow : DockWindow
 		// ── Check collections ──
 		var remoteColNames = new HashSet<string>();
 		{
-			var remoteCollections = SyncToolTransforms.ServerToCollections( _remoteCollections.Value );
-			foreach ( var (colName, remoteLocal) in remoteCollections )
+			var remoteCollections = _remoteCollections.Value;
+			if ( remoteCollections.TryGetProperty( "data", out var remoteCollectionData ) ) remoteCollections = remoteCollectionData;
+			if ( remoteCollections.ValueKind == JsonValueKind.Array )
 			{
-				remoteColNames.Add( colName );
-				var id = $"col_{colName}";
-				var remoteJson = JsonSerializer.Serialize( remoteLocal, new JsonSerializerOptions { WriteIndented = true } );
-
-				if ( !localColByName.TryGetValue( colName, out var localJson ) )
+				foreach ( var remoteCollection in remoteCollections.EnumerateArray() )
 				{
-					SetItemState( id, remoteDiffers: true, status: SyncStatus.RemoteOnly,
-						diffSummary: "Remote only — no local file",
-						localJson: "", remoteJson: PrettyJson( remoteJson ) );
-					diffs++;
-				}
-				else
-				{
-					var differs = NormalizeJson( remoteJson ) != NormalizeJson( localJson );
+					var remoteLocal = SyncToolTransforms.ServerCollectionToLocal( remoteCollection );
+					var colName = remoteLocal.TryGetValue( "name", out var nameValue ) ? nameValue?.ToString() ?? "unknown" : "unknown";
+					remoteColNames.Add( colName );
+					var id = $"col_{colName}";
+					var remoteJson = JsonSerializer.Serialize( remoteLocal, new JsonSerializerOptions { WriteIndented = true } );
 
-					if ( differs )
+					if ( !localColByName.TryGetValue( colName, out var localJson ) )
 					{
-						var localPretty = PrettyJson( localJson );
-						var remotePretty = PrettyJson( remoteJson );
-						var classification = ClassifyRemoteDifference( id, localPretty, remotePretty );
-
-						if ( IsGeneratedMappedCollectionId( id ) && classification.Analysis.IsRemoteAdditiveOnly )
-						{
-							SetItemState( id, remoteDiffers: false, status: SyncStatus.InSync,
-								diffSummary: "Generated from C# — remote semantics ignored",
-								localJson: localPretty, remoteJson: remotePretty );
-						}
-						else
-						{
-							SetItemState( id, remoteDiffers: true, status: classification.Status,
-								diffSummary: classification.Summary,
-								localJson: localPretty, remoteJson: remotePretty );
-
-							if ( classification.Status == SyncStatus.MergeAvailable ) remoteSemanticsCount++;
-							else diffs++;
-						}
+						SetItemState( id, remoteDiffers: true, status: SyncStatus.RemoteOnly,
+							diffSummary: "Remote only — no local file",
+							localJson: "", remoteJson: PrettyJson( remoteJson ) );
+						diffs++;
 					}
 					else
 					{
-						SetItemState( id, remoteDiffers: false, status: SyncStatus.InSync,
-							localJson: PrettyJson( localJson ), remoteJson: PrettyJson( remoteJson ) );
+						var sourceTextMatches = localColSourceTextByName.TryGetValue( colName, out var localSourceText )
+							&& SyncToolTransforms.TryGetSourceText( remoteCollection, out var remoteSourceText )
+							&& localSourceText == NormalizeSourceTextForVerification( remoteSourceText );
+						var differs = !sourceTextMatches && !CollectionSemanticsMatch( localJson, remoteJson );
+
+						if ( differs )
+						{
+							var localPretty = PrettyJson( localJson );
+							var remotePretty = PrettyJson( remoteJson );
+							var classification = ClassifyRemoteDifference( id, localPretty, remotePretty );
+
+							if ( IsGeneratedMappedCollectionId( id ) && classification.Analysis.IsRemoteAdditiveOnly )
+							{
+								SetItemState( id, remoteDiffers: false, status: SyncStatus.InSync,
+									diffSummary: "Generated from C# — remote semantics ignored",
+									localJson: localPretty, remoteJson: remotePretty );
+							}
+							else
+							{
+								SetItemState( id, remoteDiffers: true, status: classification.Status,
+									diffSummary: classification.Summary,
+									localJson: localPretty, remoteJson: remotePretty );
+
+								if ( classification.Status == SyncStatus.MergeAvailable ) remoteSemanticsCount++;
+								else diffs++;
+							}
+						}
+						else
+						{
+							SetItemState( id, remoteDiffers: false, status: SyncStatus.InSync,
+								localJson: PrettyJson( localJson ), remoteJson: PrettyJson( remoteJson ) );
+						}
 					}
 				}
 			}
@@ -2168,6 +2197,20 @@ public partial class SyncToolWindow : DockWindow
 		var remoteWfIds = new HashSet<string>();
 		if ( _remoteWorkflows.HasValue )
 		{
+			var remoteWfSourceTextById = new Dictionary<string, string>( StringComparer.OrdinalIgnoreCase );
+			var remoteWorkflowData = _remoteWorkflows.Value;
+			if ( remoteWorkflowData.TryGetProperty( "data", out var remoteWorkflowArray ) ) remoteWorkflowData = remoteWorkflowArray;
+			if ( remoteWorkflowData.ValueKind == JsonValueKind.Array )
+			{
+				foreach ( var remoteWorkflow in remoteWorkflowData.EnumerateArray() )
+				{
+					var remoteLocal = SyncToolTransforms.ServerWorkflowToLocal( remoteWorkflow );
+					var remoteId = remoteLocal.TryGetValue( "id", out var value ) ? value?.ToString() : null;
+					if ( !string.IsNullOrEmpty( remoteId ) && SyncToolTransforms.TryGetSourceText( remoteWorkflow, out var remoteSourceText ) )
+						remoteWfSourceTextById[remoteId] = NormalizeSourceTextForVerification( remoteSourceText );
+				}
+			}
+
 			var workflows = SyncToolTransforms.ServerToWorkflows( _remoteWorkflows.Value );
 			foreach ( var (wfId, remoteLocal) in workflows )
 			{
@@ -2187,9 +2230,12 @@ public partial class SyncToolWindow : DockWindow
 					// Transform local same as remote to strip server-managed fields
 					var localTransformed = SyncToolTransforms.ServerWorkflowToLocal( localWf );
 					var localJson = JsonSerializer.Serialize( localTransformed, new JsonSerializerOptions { WriteIndented = true } );
+					var sourceTextMatches = localWfSourceTextById.TryGetValue( wfId, out var localSourceText )
+						&& remoteWfSourceTextById.TryGetValue( wfId, out var remoteSourceText )
+						&& localSourceText == remoteSourceText;
 					var normRemote = NormalizeJson( remoteJson );
 					var normLocal = NormalizeJson( localJson );
-					var differs = normRemote != normLocal;
+					var differs = !sourceTextMatches && normRemote != normLocal;
 					(SyncStatus Status, string Summary, JsonDiffUtilities.ComparisonResult Analysis) classification = default;
 
 					LogDiffResult( wfId, "workflow", localJson, remoteJson, differs, classification );
@@ -2397,6 +2443,7 @@ public partial class SyncToolWindow : DockWindow
 		// Apply same transform as remote so id/createdAt are stripped from both sides
 		var localEndpoints = SyncToolConfig.LoadEndpoints();
 		var localEpBySlug = new Dictionary<string, string>();
+		var localEpSourceTextBySlug = new Dictionary<string, string>( StringComparer.OrdinalIgnoreCase );
 		foreach ( var ep in localEndpoints )
 		{
 			var slug = ep.TryGetProperty( "slug", out var s ) ? s.GetString() : "";
@@ -2404,6 +2451,8 @@ public partial class SyncToolWindow : DockWindow
 			{
 				var localTransformed = SyncToolTransforms.ServerEndpointToLocal( ep );
 				localEpBySlug[slug] = NormalizeJson( JsonSerializer.Serialize( localTransformed ) );
+				if ( SyncToolTransforms.TryGetSourceText( ep, out var localSourceText ) )
+					localEpSourceTextBySlug[slug] = NormalizeSourceTextForVerification( localSourceText );
 			}
 		}
 
@@ -2461,7 +2510,7 @@ public partial class SyncToolWindow : DockWindow
 		_status = "Verifying remote matches local...";
 		Update();
 
-		await VerifyPushResults( localEpBySlug, _publishTarget );
+		await VerifyPushResults( localEpBySlug, localEpSourceTextBySlug, _publishTarget );
 
 		// ── Auto-generate typed C# files from the pushed schemas ──
 		_busyItem = "codegen";
@@ -2519,7 +2568,7 @@ public partial class SyncToolWindow : DockWindow
 	/// After pushing, re-fetch remote data and compare each resource to local.
 	/// Updates sync log entries with "Verified ✓" or "Mismatch — see diff".
 	/// </summary>
-	private async Task VerifyPushResults( Dictionary<string, string> localEpBySlug, string publishTarget )
+	private async Task VerifyPushResults( Dictionary<string, string> localEpBySlug, Dictionary<string, string> localEpSourceTextBySlug, string publishTarget )
 	{
 		try
 		{
@@ -2537,6 +2586,7 @@ public partial class SyncToolWindow : DockWindow
 
 			var localWorkflows = SyncToolConfig.LoadWorkflows();
 			var localWfById = new Dictionary<string, string>();
+			var localWfSourceTextById = new Dictionary<string, string>( StringComparer.OrdinalIgnoreCase );
 			foreach ( var wf in localWorkflows )
 			{
 				var wfId = wf.TryGetProperty( "id", out var id ) ? id.GetString() : "";
@@ -2544,6 +2594,8 @@ public partial class SyncToolWindow : DockWindow
 				{
 					var localTransformed = SyncToolTransforms.ServerWorkflowToLocal( wf );
 					localWfById[wfId] = NormalizeJson( JsonSerializer.Serialize( localTransformed ) );
+					if ( SyncToolTransforms.TryGetSourceText( wf, out var localSourceText ) )
+						localWfSourceTextById[wfId] = NormalizeSourceTextForVerification( localSourceText );
 				}
 			}
 
@@ -2579,9 +2631,13 @@ public partial class SyncToolWindow : DockWindow
 						var entry = _syncLog[logIdx];
 						if ( !entry.Ok ) continue; // Skip failed pushes
 
-						if ( localEpBySlug.TryGetValue( slug, out var localNorm ) && localNorm == remoteNorm )
+						var sourceTextMatches = localEpSourceTextBySlug.TryGetValue( slug, out var localSourceText )
+							&& SyncToolTransforms.TryGetSourceText( ep, out var remoteSourceText )
+							&& localSourceText == NormalizeSourceTextForVerification( remoteSourceText );
+
+						if ( sourceTextMatches || (localEpBySlug.TryGetValue( slug, out var localNorm ) && localNorm == remoteNorm) )
 						{
-							entry.Detail = "Verified ✓";
+							entry.Detail = sourceTextMatches ? "Verified source ✓" : "Verified ✓";
 						}
 						else
 						{
@@ -2625,7 +2681,7 @@ public partial class SyncToolWindow : DockWindow
 							&& SyncToolTransforms.TryGetSourceText( remoteCollection, out var remoteSourceText )
 							&& localSourceText == NormalizeSourceTextForVerification( remoteSourceText );
 
-						if ( sourceTextMatches || (localColByName.TryGetValue( colName, out var localNorm ) && localNorm == remoteNorm) )
+						if ( sourceTextMatches || (localColByName.TryGetValue( colName, out var localNorm ) && (localNorm == remoteNorm || CollectionSemanticsMatch( localNorm, remoteNorm ))) )
 						{
 							entry.Detail = sourceTextMatches ? "Verified source ✓" : "Verified ✓";
 						}
@@ -2663,6 +2719,20 @@ public partial class SyncToolWindow : DockWindow
 			// Process workflow results
 			if ( remoteWfs.HasValue )
 			{
+				var remoteWfSourceTextById = new Dictionary<string, string>( StringComparer.OrdinalIgnoreCase );
+				var remoteWorkflowData = remoteWfs.Value;
+				if ( remoteWorkflowData.TryGetProperty( "data", out var remoteWorkflowArray ) ) remoteWorkflowData = remoteWorkflowArray;
+				if ( remoteWorkflowData.ValueKind == JsonValueKind.Array )
+				{
+					foreach ( var remoteWorkflow in remoteWorkflowData.EnumerateArray() )
+					{
+						var remoteLocalForSource = SyncToolTransforms.ServerWorkflowToLocal( remoteWorkflow );
+						var remoteId = remoteLocalForSource.TryGetValue( "id", out var value ) ? value?.ToString() : null;
+						if ( !string.IsNullOrEmpty( remoteId ) && SyncToolTransforms.TryGetSourceText( remoteWorkflow, out var remoteSourceText ) )
+							remoteWfSourceTextById[remoteId] = NormalizeSourceTextForVerification( remoteSourceText );
+					}
+				}
+
 				var workflows = SyncToolTransforms.ServerToWorkflows( remoteWfs.Value );
 				foreach ( var (wfId, remoteLocal) in workflows )
 				{
@@ -2673,9 +2743,13 @@ public partial class SyncToolWindow : DockWindow
 					var entry = _syncLog[logIdx];
 					if ( !entry.Ok ) continue;
 
-					if ( localWfById.TryGetValue( wfId, out var localNorm ) && localNorm == remoteNorm )
+					var sourceTextMatches = localWfSourceTextById.TryGetValue( wfId, out var localSourceText )
+						&& remoteWfSourceTextById.TryGetValue( wfId, out var remoteSourceText )
+						&& localSourceText == remoteSourceText;
+
+					if ( sourceTextMatches || (localWfById.TryGetValue( wfId, out var localNorm ) && localNorm == remoteNorm) )
 					{
-						entry.Detail = "Verified ✓";
+						entry.Detail = sourceTextMatches ? "Verified source ✓" : "Verified ✓";
 					}
 					else
 					{
@@ -3555,6 +3629,50 @@ public partial class SyncToolWindow : DockWindow
 	/// Compare two collection resources field-by-field.
 	/// Distinguishes schema (structural) from metadata (non-structural) changes.
 	/// </summary>
+	private static bool CollectionSemanticsMatch( string localJson, string remoteJson )
+	{
+		try
+		{
+			var local = JsonSerializer.Deserialize<JsonElement>( localJson );
+			var remote = JsonSerializer.Deserialize<JsonElement>( remoteJson );
+			var rateLimitDefault = new Dictionary<string, object> { ["mode"] = "none" };
+			var emptyObject = new Dictionary<string, object>();
+
+			foreach ( var field in new[] { "name", "description", "notes" } )
+			{
+				if ( NormalizeCollectionField( local, field, "" ) != NormalizeCollectionField( remote, field, "" ) )
+					return false;
+			}
+
+			if ( NormalizeCollectionField( local, "collectionType", "per-steamid" ) != NormalizeCollectionField( remote, "collectionType", "per-steamid" ) ) return false;
+			if ( NormalizeCollectionField( local, "accessMode", "public" ) != NormalizeCollectionField( remote, "accessMode", "public" ) ) return false;
+			if ( NormalizeCollectionField( local, "visibility", "" ) != NormalizeCollectionField( remote, "visibility", "" ) ) return false;
+			if ( NormalizeCollectionField( local, "maxRecords", 1 ) != NormalizeCollectionField( remote, "maxRecords", 1 ) ) return false;
+			if ( NormalizeCollectionField( local, "allowRecordDelete", false ) != NormalizeCollectionField( remote, "allowRecordDelete", false ) ) return false;
+			if ( NormalizeCollectionField( local, "requireSaveVersion", false ) != NormalizeCollectionField( remote, "requireSaveVersion", false ) ) return false;
+			if ( NormalizeCollectionField( local, "webhookOnRateLimit", false ) != NormalizeCollectionField( remote, "webhookOnRateLimit", false ) ) return false;
+			if ( NormalizeCollectionField( local, "rateLimitAction", "reject" ) != NormalizeCollectionField( remote, "rateLimitAction", "reject" ) ) return false;
+			if ( NormalizeCollectionField( local, "rateLimits", rateLimitDefault ) != NormalizeCollectionField( remote, "rateLimits", rateLimitDefault ) ) return false;
+			if ( NormalizeCollectionField( local, "schema", emptyObject ) != NormalizeCollectionField( remote, "schema", emptyObject ) ) return false;
+			if ( NormalizeCollectionField( local, "constants", emptyObject ) != NormalizeCollectionField( remote, "constants", emptyObject ) ) return false;
+			if ( NormalizeCollectionField( local, "tables", emptyObject ) != NormalizeCollectionField( remote, "tables", emptyObject ) ) return false;
+
+			return true;
+		}
+		catch
+		{
+			return false;
+		}
+	}
+
+	private static string NormalizeCollectionField( JsonElement element, string field, object defaultValue )
+	{
+		var json = element.ValueKind == JsonValueKind.Object && element.TryGetProperty( field, out var value )
+			? value.GetRawText()
+			: JsonSerializer.Serialize( defaultValue );
+		return NormalizeJson( json );
+	}
+
 	private string DiffCollectionSchema( string localJson, string remoteJson )
 	{
 		try
@@ -3578,12 +3696,16 @@ public partial class SyncToolWindow : DockWindow
 				schemaChanges.Add( "schema: differs" );
 
 			// Compare metadata fields (non-structural)
+			CompareField( local, remote, "name", metaChanges );
 			CompareField( local, remote, "description", metaChanges );
+			CompareField( local, remote, "notes", metaChanges );
 			CompareField( local, remote, "accessMode", metaChanges );
+			CompareField( local, remote, "visibility", metaChanges );
 			CompareField( local, remote, "collectionType", metaChanges );
 			CompareField( local, remote, "maxRecords", metaChanges );
 			CompareField( local, remote, "allowRecordDelete", metaChanges );
 			CompareField( local, remote, "requireSaveVersion", metaChanges );
+			CompareField( local, remote, "webhookOnRateLimit", metaChanges );
 			CompareField( local, remote, "rateLimitAction", metaChanges );
 
 			// Compare rateLimits object
