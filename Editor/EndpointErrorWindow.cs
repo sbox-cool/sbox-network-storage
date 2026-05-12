@@ -13,6 +13,7 @@ public class EndpointErrorWindow : DockWindow
 	private readonly string _slug;
 	private readonly string _code;
 	private readonly string _message;
+	private readonly string _technicalCode;
 	private readonly string _rawJson;
 	private Vector2 _mousePos;
 	private Rect _copyRect;
@@ -25,8 +26,9 @@ public class EndpointErrorWindow : DockWindow
 	private EndpointErrorWindow( string slug, string code, string message, JsonElement raw )
 	{
 		_slug = slug ?? "unknown";
-		_code = code ?? "UNKNOWN";
-		_message = message ?? "";
+		_technicalCode = code ?? "UNKNOWN";
+		_code = FriendlyCode( _technicalCode, message, raw );
+		_message = FriendlyMessage( _technicalCode, message, raw );
 		_rawJson = FormatJson( raw );
 
 		Title = $"Endpoint Error: {_slug}";
@@ -70,6 +72,28 @@ public class EndpointErrorWindow : DockWindow
 		Show( slug, code, message, raw );
 	}
 
+	private static string FriendlyCode( string code, string message, JsonElement raw )
+	{
+		var text = $"{code} {message} {raw}";
+		if ( text.Contains( "LEGACY_FLATTEN_FAILED", StringComparison.OrdinalIgnoreCase )
+			|| (text.Contains( "steps[", StringComparison.OrdinalIgnoreCase ) && text.Contains( ".id", StringComparison.OrdinalIgnoreCase )) )
+			return "MISSING_STEP_IDS";
+		if ( text.Contains( "404", StringComparison.OrdinalIgnoreCase ) || text.Contains( "not found", StringComparison.OrdinalIgnoreCase ) )
+			return "BACKEND_ROUTE_UNAVAILABLE";
+		return string.IsNullOrWhiteSpace( code ) ? "SYNC_ERROR" : code;
+	}
+
+	private static string FriendlyMessage( string code, string message, JsonElement raw )
+	{
+		var text = $"{code} {message} {raw}";
+		if ( text.Contains( "LEGACY_FLATTEN_FAILED", StringComparison.OrdinalIgnoreCase )
+			|| (text.Contains( "steps[", StringComparison.OrdinalIgnoreCase ) && text.Contains( ".id", StringComparison.OrdinalIgnoreCase )) )
+			return "Some endpoint steps are missing IDs. Use Auto-add step IDs, review the preview, then push again.";
+		if ( text.Contains( "404", StringComparison.OrdinalIgnoreCase ) || text.Contains( "not found", StringComparison.OrdinalIgnoreCase ) )
+			return "Backend route missing or unavailable. Update the backend or retry against the correct target.";
+		return message ?? "";
+	}
+
 	private static string FormatJson( JsonElement raw )
 	{
 		if ( raw.ValueKind == JsonValueKind.Undefined )
@@ -108,7 +132,7 @@ public class EndpointErrorWindow : DockWindow
 		y += 22;
 
 		Paint.SetPen( Color.White.WithAlpha( 0.5f ) );
-		Paint.DrawText( new Rect( pad, y, 80, 18 ), "Code:", TextFlag.LeftCenter );
+		Paint.DrawText( new Rect( pad, y, 80, 18 ), "Status:", TextFlag.LeftCenter );
 		Paint.SetPen( new Color( 1f, 0.5f, 0.3f ) );
 		Paint.DrawText( new Rect( pad + 80, y, w - 80, 18 ), _code, TextFlag.LeftCenter );
 		y += 22;
@@ -132,7 +156,7 @@ public class EndpointErrorWindow : DockWindow
 		// Response header
 		Paint.SetDefaultFont( size: 11, weight: 700 );
 		Paint.SetPen( Color.White.WithAlpha( 0.6f ) );
-		Paint.DrawText( new Rect( pad, y, w, 18 ), "Response:", TextFlag.LeftCenter );
+		Paint.DrawText( new Rect( pad, y, w, 18 ), "Technical details:", TextFlag.LeftCenter );
 		y += 22;
 
 		// JSON box

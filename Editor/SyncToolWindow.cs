@@ -448,12 +448,21 @@ public partial class SyncToolWindow : DockWindow
 			DrawWideButton( checkRect, checkLabel, Color.Cyan, "check_updates", () => _ = CheckForUpdates() );
 			y += checkBtnH + 8;
 
+			var pullableCount = GetPullableResourceIds().Length;
+			if ( pullableCount > 0 )
+			{
+				var pullAllRect = new Rect( pad, y, w, checkBtnH );
+				DrawWideButton( pullAllRect, $"Pull All ({pullableCount}) from {(_publishTarget == "next" ? "Staged/Main" : "Live")}", Color.Cyan, "pull_all_changed",
+					() => PullAllChangedResources() );
+				y += checkBtnH + 8;
+			}
+
 			var remoteSemanticsCount = GetRemoteSemanticsCount();
 			if ( remoteSemanticsCount > 0 )
 			{
 				var semanticsLabel = remoteSemanticsCount == 1
-					? "Pull All (1 semantic item)"
-					: $"Pull All ({remoteSemanticsCount} semantic items)";
+					? "Merge All (1 semantic item)"
+					: $"Merge All ({remoteSemanticsCount} semantic items)";
 				var semanticsRect = new Rect( pad, y, w, checkBtnH );
 				DrawWideButton( semanticsRect, semanticsLabel, Color.Green, "pull_remote_semantics_all",
 					() => PullAllRemoteSemantics() );
@@ -755,10 +764,10 @@ public partial class SyncToolWindow : DockWindow
 			DrawSeparator( ref y, w, pad );
 			DrawSectionHeader( ref y, pad, w, "SYNC RESULTS" );
 
-			var okCount = _syncLog.Count( e => e.Ok );
-			var failCount = _syncLog.Count( e => !e.Ok );
-			var verifiedCount = _syncLog.Count( e => e.Detail != null && e.Detail.Contains( "Verified" ) );
-			var mismatchCount = _syncLog.Count( e => e.Detail != null && e.Detail.Contains( "Mismatch" ) );
+			var okCount = _syncLog.Count( e => e.Ok && IsResourceSyncLog( e ) );
+			var failCount = _syncLog.Count( e => !e.Ok && IsResourceSyncLog( e ) );
+			var verifiedCount = _syncLog.Count( e => IsResourceSyncLog( e ) && e.Detail != null && e.Detail.Contains( "Verified" ) );
+			var mismatchCount = _syncLog.Count( e => IsResourceSyncLog( e ) && e.Detail != null && e.Detail.Contains( "Mismatch" ) );
 
 			// Summary counts
 			Paint.SetDefaultFont( size: 9, weight: 600 );
@@ -923,12 +932,21 @@ public partial class SyncToolWindow : DockWindow
 			DrawWideButton( checkRect, checkLabel, Color.Cyan, "check_updates", () => _ = CheckForUpdates() );
 			y += checkBtnH + 8;
 
+			var pullableCount = GetPullableResourceIds().Length;
+			if ( pullableCount > 0 )
+			{
+				var pullAllRect = new Rect( pad, y, w, checkBtnH );
+				DrawWideButton( pullAllRect, $"Pull All ({pullableCount}) from {(_publishTarget == "next" ? "Staged/Main" : "Live")}", Color.Cyan, "pull_all_changed",
+					() => PullAllChangedResources() );
+				y += checkBtnH + 8;
+			}
+
 			var remoteSemanticsCount = GetRemoteSemanticsCount();
 			if ( remoteSemanticsCount > 0 )
 			{
 				var semanticsLabel = remoteSemanticsCount == 1
-					? "Pull All (1 semantic item)"
-					: $"Pull All ({remoteSemanticsCount} semantic items)";
+					? "Merge All (1 semantic item)"
+					: $"Merge All ({remoteSemanticsCount} semantic items)";
 				var semanticsRect = new Rect( pad, y, w, checkBtnH );
 				DrawWideButton( semanticsRect, semanticsLabel, Color.Green, "pull_remote_semantics_all",
 					() => PullAllRemoteSemantics() );
@@ -2439,6 +2457,16 @@ public partial class SyncToolWindow : DockWindow
 
 		var activeEndpointFiles = GetActiveEndpointFiles();
 
+		var pushAllPayload = BuildPushAllPayload( out var hasAnyPushResource );
+		if ( !hasAnyPushResource || !await RunPreflightOrOfferFix( pushAllPayload, () => _ = PushAll() ) )
+		{
+			_busy = false;
+			_busyItem = null;
+			ScrollToBottom();
+			Update();
+			return;
+		}
+
 		// ── Load local files for pre-push comparison ──
 		// Apply same transform as remote so id/createdAt are stripped from both sides
 		var localEndpoints = SyncToolConfig.LoadEndpoints();
@@ -2537,10 +2565,10 @@ public partial class SyncToolWindow : DockWindow
 		_remoteWorkflows = null;
 		_hasCheckedRemote = false;
 
-		var okCount = _syncLog.Count( e => e.Ok );
-		var failCount = _syncLog.Count( e => !e.Ok );
-		var mismatchCount = _syncLog.Count( e => e.Detail != null && e.Detail.Contains( "Mismatch" ) );
-		var verifiedCount = _syncLog.Count( e => e.Detail != null && e.Detail.Contains( "Verified" ) );
+		var okCount = _syncLog.Count( e => e.Ok && IsResourceSyncLog( e ) );
+		var failCount = _syncLog.Count( e => !e.Ok && IsResourceSyncLog( e ) );
+		var mismatchCount = _syncLog.Count( e => IsResourceSyncLog( e ) && e.Detail != null && e.Detail.Contains( "Mismatch" ) );
+		var verifiedCount = _syncLog.Count( e => IsResourceSyncLog( e ) && e.Detail != null && e.Detail.Contains( "Verified" ) );
 		var mergeCount = _syncLog.Count( e => e.Detail != null && e.Detail.Contains( "Remote semantics available" ) );
 
 		if ( mismatchCount > 0 )
@@ -2770,6 +2798,8 @@ public partial class SyncToolWindow : DockWindow
 				}
 			}
 
+			await RetryEndpointVerificationMismatches( localEpBySlug, localEpSourceTextBySlug, publishTarget );
+
 			Update();
 		}
 		catch ( Exception ex )
@@ -2777,6 +2807,121 @@ public partial class SyncToolWindow : DockWindow
 			Log.Warning( $"[SyncTool] Post-push verification failed: {ex.Message}" );
 			_status = $"Push done, verification failed: {ex.Message}";
 		}
+	}
+
+	private async Task RetryEndpointVerificationMismatches( Dictionary<string, string> localEpBySlug, Dictionary<string, string> localEpSourceTextBySlug, string publishTarget )
+	{
+		var endpointMismatches = _syncLog
+			.Where( e => e.Type == "Endpoint" && e.Detail != null && e.Detail.Contains( "Mismatch" ) )
+			.Select( e => e.Name.EndsWith( ".endpoint.yml", StringComparison.OrdinalIgnoreCase )
+				? e.Name[..^".endpoint.yml".Length]
+				: e.Name )
+			.Where( slug => !string.IsNullOrWhiteSpace( slug ) )
+			.Distinct( StringComparer.OrdinalIgnoreCase )
+			.ToList();
+
+		if ( endpointMismatches.Count == 0 )
+			return;
+
+		await RePushEndpointVerificationMismatches( endpointMismatches, publishTarget );
+
+		var delaysMs = new[] { 1000, 2000, 3000, 5000, 8000 };
+		foreach ( var delayMs in delaysMs )
+		{
+			_status = $"Waiting for remote readback ({endpointMismatches.Count} endpoint mismatch(es))...";
+			Update();
+			await Task.Delay( delayMs );
+
+			var remoteEps = await SyncToolApi.GetEndpointsForPublishTarget( publishTarget );
+			if ( !remoteEps.HasValue )
+				continue;
+
+			var data = remoteEps.Value;
+			if ( data.TryGetProperty( "data", out var d ) ) data = d;
+			if ( data.ValueKind != JsonValueKind.Array )
+				continue;
+
+			var remaining = new List<string>();
+			foreach ( var slug in endpointMismatches )
+			{
+				var remoteEndpoint = data.EnumerateArray().FirstOrDefault( ep => string.Equals( GetRemoteEndpointSlug( ep ), slug, StringComparison.OrdinalIgnoreCase ) );
+				if ( remoteEndpoint.ValueKind != JsonValueKind.Object )
+				{
+					remaining.Add( slug );
+					continue;
+				}
+
+				if ( EndpointVerificationMatches( slug, remoteEndpoint, localEpBySlug, localEpSourceTextBySlug ) )
+				{
+					var logIdx = _syncLog.FindIndex( e => e.Name == $"{slug}.endpoint.yml" && e.Type == "Endpoint" );
+					if ( logIdx >= 0 )
+					{
+						var entry = _syncLog[logIdx];
+						entry.Ok = true;
+						entry.Detail = "Verified source ✓ (after readback retry)";
+						_syncLog[logIdx] = entry;
+					}
+
+					SetItemState( $"ep_{slug}", remoteDiffers: false, diffSummary: "", status: SyncStatus.InSync );
+				}
+				else
+				{
+					remaining.Add( slug );
+				}
+			}
+
+			endpointMismatches = remaining;
+			if ( endpointMismatches.Count == 0 )
+				return;
+		}
+	}
+
+	private async Task RePushEndpointVerificationMismatches( List<string> slugs, string publishTarget )
+	{
+		if ( slugs == null || slugs.Count == 0 )
+			return;
+
+		_status = $"Refreshing staged endpoint override(s) ({slugs.Count})...";
+		Update();
+
+		foreach ( var slug in slugs )
+		{
+			try
+			{
+				var localFile = _endpointFiles.FirstOrDefault( f => string.Equals( ResourceIdFromFile( f, "endpoint" ), slug, StringComparison.OrdinalIgnoreCase ) );
+				if ( localFile == null || !SyncToolConfig.TryLoadSourcePayloadResource( "endpoint", localFile, out var localEp, includeDeprecated: false ) )
+					continue;
+
+				var localDict = JsonSerializer.Deserialize<Dictionary<string, object>>( localEp.GetRawText() );
+				var payload = JsonSerializer.Deserialize<JsonElement>( JsonSerializer.Serialize( new { endpoint = localDict } ) );
+				var patchResp = await SyncToolApi.PatchEndpoint( payload, publishTarget );
+				if ( patchResp.HasValue )
+					continue;
+
+				var singleArray = JsonSerializer.Deserialize<JsonElement>( JsonSerializer.Serialize( new[] { localDict } ) );
+				await SyncToolApi.PushEndpoints( singleArray, publishTarget );
+			}
+			catch ( Exception ex )
+			{
+				Log.Warning( $"[SyncTool] Verification re-push for {slug} failed: {ex.Message}" );
+			}
+		}
+	}
+
+	private bool EndpointVerificationMatches( string slug, JsonElement remoteEndpoint, Dictionary<string, string> localEpBySlug, Dictionary<string, string> localEpSourceTextBySlug )
+	{
+		var sourceTextMatches = localEpSourceTextBySlug.TryGetValue( slug, out var localSourceText )
+			&& SyncToolTransforms.TryGetSourceText( remoteEndpoint, out var remoteSourceText )
+			&& localSourceText == NormalizeSourceTextForVerification( remoteSourceText );
+		if ( sourceTextMatches )
+			return true;
+
+		if ( !localEpBySlug.TryGetValue( slug, out var localNorm ) )
+			return false;
+
+		var remoteLocal = SyncToolTransforms.ServerEndpointToLocal( remoteEndpoint );
+		var remoteNorm = NormalizeJson( JsonSerializer.Serialize( remoteLocal ) );
+		return localNorm == remoteNorm;
 	}
 
 	private void ShowVerificationMismatchWindow( int mismatchCount )
@@ -2883,6 +3028,11 @@ public partial class SyncToolWindow : DockWindow
 
 		try
 		{
+			var preflightPayload = BuildSinglePushPayload( id );
+			var endpointIds = id.StartsWith( "ep_" ) ? new[] { id[3..] } : null;
+			if ( !await RunPreflightOrOfferFix( preflightPayload, () => _ = DoPushItem( id ), endpointIds ) )
+				return;
+
 			bool ok;
 			string itemName;
 			string itemType;
@@ -2975,12 +3125,16 @@ public partial class SyncToolWindow : DockWindow
 			: "resource";
 		_items.TryGetValue( id, out var pullState );
 
-		ConfirmDialog.Show(
-			"Pull from Web",
-			$"This will replace your local {label} in Editor/{SyncToolConfig.DataFolder}/ with the version from the project dashboard.",
-			() => _ = DoPullItem( id ),
-			detail: pullState.DiffSummary
-		);
+		var warning = IsLocalChangedSinceCached( id, pullState )
+			? "Local changes detected. Applying remote will create a backup, then overwrite your local YAML."
+			: "A backup will be created before overwriting local YAML.";
+
+		new PullPreviewWindow(
+			DescribeSyncItem( id ),
+			pullState.LocalYaml ?? "",
+			pullState.RemoteYaml ?? "",
+			warning,
+			() => _ = DoPullItem( id ) ).Show();
 	}
 
 	private async Task DoPullItem( string id )
@@ -2992,6 +3146,8 @@ public partial class SyncToolWindow : DockWindow
 
 		try
 		{
+			BackupLocalFileForPull( id );
+
 			bool ok;
 			if ( id.StartsWith( "ep_" ) )
 			{
@@ -3137,11 +3293,12 @@ public partial class SyncToolWindow : DockWindow
 			if ( !hasEndpoints && !hasCollections && !hasWorkflows )
 				return (false, false, false);
 
-			// The production batch /sync route historically accepted publishTarget=next
-			// but did not stage collections. Use the dedicated resource routes for next
-			// publishes so game_values/loot_tables are verified against revision overrides.
-			if ( hasCollections && string.Equals( _publishTarget, "next", StringComparison.OrdinalIgnoreCase ) )
-				return await DoPushAllIndividual( hasEndpoints, hasCollections, hasWorkflows );
+			// For next/staged pushes, avoid relying on one combined /sync readback path for endpoints.
+			// Some deployed backends can report batch success while the immediate staged endpoint
+			// pull still returns the previous override. Use the dedicated endpoint route for the
+			// staged endpoint set, then verify against revisionTarget=next.
+			if ( string.Equals( _publishTarget, "next", StringComparison.OrdinalIgnoreCase ) )
+				return await DoPushNextWithDedicatedEndpoints( hasEndpoints, hasCollections, hasWorkflows );
 
 			var batchPayload = new Dictionary<string, object>();
 
@@ -3189,6 +3346,58 @@ public partial class SyncToolWindow : DockWindow
 		{
 			SyncToolApi.ReportLocalError( "sync", $"Batch sync preparation failed: {ex.Message}", ex );
 			return (false, false, false);
+		}
+	}
+
+	/// <summary>
+	/// Next-release push path: use the dedicated endpoints/collections routes for staged
+	/// overrides so immediate verification reads the same target that was written.
+	/// </summary>
+	private async Task<(bool epOk, bool colOk, bool wfOk)> DoPushNextWithDedicatedEndpoints( bool hasEndpoints, bool hasCollections, bool hasWorkflows )
+	{
+		var endpointsTask = hasEndpoints ? DoPushAllEndpoints() : Task.FromResult( false );
+		var collectionsTask = hasCollections ? DoPushCollections() : Task.FromResult( false );
+		var workflowsTask = hasWorkflows ? DoPushAllWorkflows() : Task.FromResult( false );
+
+		await Task.WhenAll( endpointsTask, collectionsTask, workflowsTask );
+
+		return (await endpointsTask, await collectionsTask, await workflowsTask);
+	}
+
+	private async Task<(bool epOk, bool wfOk)> DoPushEndpointsAndWorkflowsBatched( List<JsonElement> localEps, List<JsonElement> localWfs, bool hasEndpoints, bool hasWorkflows )
+	{
+		try
+		{
+			var batchPayload = new Dictionary<string, object>();
+			if ( hasEndpoints )
+				batchPayload["endpoints"] = JsonSerializer.Deserialize<object>( JsonSerializer.Serialize( localEps ) );
+			if ( hasWorkflows )
+				batchPayload["workflows"] = JsonSerializer.Deserialize<object>( JsonSerializer.Serialize( localWfs ) );
+
+			var payload = JsonSerializer.Deserialize<JsonElement>( JsonSerializer.Serialize( batchPayload ) );
+			var resp = await SyncToolApi.PushSync( payload, _publishTarget );
+
+			var errCode = SyncToolApi.LastErrorCode ?? "";
+			var errMsg = SyncToolApi.LastErrorMessage ?? "";
+			if ( !resp.HasValue )
+			{
+				var finalErrMsg = string.IsNullOrEmpty( errMsg ) ? "Unknown error" : errMsg;
+				SyncToolApi.ReportLocalError( "sync", $"Endpoint/workflow batch sync failed: {finalErrMsg}" );
+				ShowSyncBatchFailureWindow( finalErrMsg, errCode );
+				return (false, false);
+			}
+
+			var epOk = !hasEndpoints || (resp.Value.TryGetProperty( "endpoints", out var epResult ) &&
+				epResult.TryGetProperty( "ok", out var epOkProp ) && epOkProp.GetBoolean());
+			var wfOk = !hasWorkflows || (resp.Value.TryGetProperty( "workflows", out var wfResult ) &&
+				wfResult.TryGetProperty( "ok", out var wfOkProp ) && wfOkProp.GetBoolean());
+
+			return (hasEndpoints && epOk, hasWorkflows && wfOk);
+		}
+		catch ( Exception ex )
+		{
+			SyncToolApi.ReportLocalError( "sync", $"Endpoint/workflow batch sync preparation failed: {ex.Message}", ex );
+			return (false, false);
 		}
 	}
 

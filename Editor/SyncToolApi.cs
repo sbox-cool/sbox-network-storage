@@ -215,15 +215,27 @@ public static class SyncToolApi
 		}
 	}
 
+	private static Dictionary<string, string> NoCacheHeaders() => new()
+	{
+		["Cache-Control"] = "no-cache",
+		["Pragma"] = "no-cache"
+	};
+
+	private static string WithCacheBust( string path )
+	{
+		var separator = path.Contains( "?" ) ? "&" : "?";
+		return $"{path}{separator}_syncToolTs={DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()}";
+	}
+
 	/// <summary>Fetch current server endpoints (includes staged/next-revision endpoints).</summary>
-	public static Task<JsonElement?> GetEndpoints() => Request( "GET", "endpoints?includeStaged=true" );
+	public static Task<JsonElement?> GetEndpoints() => Request( "GET", WithCacheBust( "endpoints?includeStaged=true" ), null, NoCacheHeaders() );
 
 	/// <summary>Fetch endpoints for a publish target.</summary>
 	public static async Task<JsonElement?> GetEndpointsForPublishTarget( string publishTarget )
 	{
 		var result = await (string.Equals( publishTarget, "next", StringComparison.OrdinalIgnoreCase )
-			? Request( "GET", "endpoints?includeStaged=true&revisionTarget=next" )
-			: Request( "GET", "endpoints" ));
+			? Request( "GET", WithCacheBust( "endpoints?includeStaged=true&revisionTarget=next" ), null, NoCacheHeaders() )
+			: Request( "GET", WithCacheBust( "endpoints?revisionTarget=live" ), null, NoCacheHeaders() ));
 		return !result.HasValue || !string.Equals( publishTarget, "next", StringComparison.OrdinalIgnoreCase )
 			? result
 			: FilterPayloadByRevisionTarget( result.Value, "next", "slug" );
@@ -276,14 +288,14 @@ public static class SyncToolApi
  	}
 
 	/// <summary>Fetch current server collections (includes staged/next-revision collections).</summary>
-	public static Task<JsonElement?> GetCollections() => Request( "GET", "collections?includeStaged=true" );
+	public static Task<JsonElement?> GetCollections() => Request( "GET", WithCacheBust( "collections?includeStaged=true" ), null, NoCacheHeaders() );
 
 	/// <summary>Fetch collections for a publish target.</summary>
 	public static async Task<JsonElement?> GetCollectionsForPublishTarget( string publishTarget )
 	{
 		var result = await (string.Equals( publishTarget, "next", StringComparison.OrdinalIgnoreCase )
-			? Request( "GET", "collections?includeStaged=true&revisionTarget=next" )
-			: Request( "GET", "collections" ));
+			? Request( "GET", WithCacheBust( "collections?includeStaged=true&revisionTarget=next" ), null, NoCacheHeaders() )
+			: Request( "GET", WithCacheBust( "collections?revisionTarget=live" ), null, NoCacheHeaders() ));
 		return !result.HasValue || !string.Equals( publishTarget, "next", StringComparison.OrdinalIgnoreCase )
 			? result
 			: FilterPayloadByRevisionTarget( result.Value, "next", "name" );
@@ -300,7 +312,7 @@ public static class SyncToolApi
 	}
 
 	/// <summary>Fetch current server workflows.</summary>
-	public static Task<JsonElement?> GetWorkflows() => Request( "GET", "workflows" );
+	public static Task<JsonElement?> GetWorkflows() => Request( "GET", WithCacheBust( "workflows" ), null, NoCacheHeaders() );
 
 	/// <summary>Push workflows to server.</summary>
 	public static Task<JsonElement?> PushWorkflows( JsonElement data ) => Request( "PUT", "workflows", data );
@@ -337,6 +349,13 @@ public static class SyncToolApi
 	{
 		var headers = publishTarget != "live" ? new Dictionary<string, string> { ["x-ns-publish-target"] = publishTarget } : null;
 		return Request( "PUT", "sync", data, headers );
+	}
+
+	/// <summary>Validate resources before pushing. Does not write server-side data.</summary>
+	public static Task<JsonElement?> PreflightSync( JsonElement data, string publishTarget = "live" )
+	{
+		var headers = publishTarget != "live" ? new Dictionary<string, string> { ["x-ns-publish-target"] = publishTarget } : null;
+		return Request( "POST", "sync/preflight", data, headers );
 	}
 
 	/// <summary>Sync package/revision info with backend.</summary>
@@ -434,6 +453,9 @@ public static class SyncToolApi
 
 	private static string BuildStructuredErrorMessageFromBody( string body, int statusCode )
 	{
+		if ( statusCode == 404 || statusCode == 405 )
+			return $"Backend route missing or unavailable (HTTP {statusCode}). The management API route may not be deployed on this backend.";
+
 		var detail = TruncateForLog( body, 500 );
 		return string.IsNullOrWhiteSpace( detail )
 			? $"HTTP {statusCode}"
