@@ -22,6 +22,7 @@ public class TestResultsWindow : DockWindow
 	private float _scrollAreaTop;
 	private Vector2 _mousePos;
 	private List<ClickRegion> _buttons = new();
+	private string _publishTarget = "live";
 
 	private struct ClickRegion
 	{
@@ -54,11 +55,16 @@ public class TestResultsWindow : DockWindow
 		MinimumSize = new Vector2( 450, 300 );
 	}
 
+	private static string NormalizePublishTarget( string target ) => string.Equals( target, "next", StringComparison.OrdinalIgnoreCase ) ? "next" : "live";
+	private static string TargetLabel( string target ) => NormalizePublishTarget( target ) == "next" ? "Staged/Main" : "Live";
+
 	/// <summary>Open a new results window and run all tests, showing results as they arrive.</summary>
-	public static TestResultsWindow OpenAndRun( string endpointFilter = null )
+	public static TestResultsWindow OpenAndRun( string endpointFilter = null, string publishTarget = null )
 	{
-		var window = new TestResultsWindow();
-		window.Title = endpointFilter != null ? $"Testing: {endpointFilter}" : "Test Results";
+		SyncToolConfig.Load();
+		var target = NormalizePublishTarget( publishTarget ?? SyncToolConfig.PublishTarget );
+		var window = new TestResultsWindow { _publishTarget = target };
+		window.Title = endpointFilter != null ? $"Testing {TargetLabel( target )}: {endpointFilter}" : $"Test Results — {TargetLabel( target )}";
 		window.Show();
 		_ = window.RunTests( endpointFilter );
 		return window;
@@ -81,7 +87,7 @@ public class TestResultsWindow : DockWindow
 			var body = endpointFilter != null
 				? JsonSerializer.Serialize( new { slug = endpointFilter } )
 				: "{}";
-			var resp = await SyncToolApi.AutoTest( JsonSerializer.Deserialize<JsonElement>( body ) );
+			var resp = await SyncToolApi.AutoTest( JsonSerializer.Deserialize<JsonElement>( body ), _publishTarget );
 			if ( token.IsCancellationRequested ) return;
 
 			if ( !resp.HasValue )
@@ -144,7 +150,7 @@ public class TestResultsWindow : DockWindow
 		}
 
 		_finished = true;
-		Title = $"Test Results — {PassedCount}/{TotalCount} passed";
+		Title = $"Test Results — {TargetLabel( _publishTarget )} — {PassedCount}/{TotalCount} passed";
 		Update();
 	}
 
@@ -293,6 +299,16 @@ public class TestResultsWindow : DockWindow
 			Paint.SetPen( Color.White.WithAlpha( 0.25f ) );
 			Paint.DrawText( logBtnRect, "View All Logs", TextFlag.Center );
 		}
+		y += 32;
+
+		// Publish/test target confirmation
+		var targetColor = _publishTarget == "next" ? Color.Yellow : Color.Green;
+		Paint.SetBrush( targetColor.WithAlpha( 0.10f ) );
+		Paint.SetPen( targetColor.WithAlpha( 0.35f ) );
+		Paint.DrawRect( new Rect( pad, y, w, 24 ), 4 );
+		Paint.SetDefaultFont( size: 10, weight: 700 );
+		Paint.SetPen( targetColor.WithAlpha( 0.95f ) );
+		Paint.DrawText( new Rect( pad + 8, y, w - 16, 24 ), $"Testing publish target: {TargetLabel( _publishTarget )}", TextFlag.LeftCenter );
 		y += 32;
 
 		// Summary badges
@@ -532,6 +548,7 @@ public class TestResultsWindow : DockWindow
 		var sb = new System.Text.StringBuilder();
 		sb.AppendLine( "# Endpoint Test Report" );
 		sb.AppendLine( $"Generated: {DateTime.Now:yyyy-MM-dd HH:mm:ss}" );
+		sb.AppendLine( $"Publish target tested: {TargetLabel( _publishTarget )}" );
 		sb.AppendLine();
 		sb.AppendLine( "## Summary" );
 		sb.AppendLine( $"- **Total:** {TotalCount}" );
@@ -634,6 +651,7 @@ public class TestResultsWindow : DockWindow
 		var sb = new System.Text.StringBuilder();
 		sb.AppendLine( "# Failed Test Results — Full Context" );
 		sb.AppendLine( $"Generated: {DateTime.Now:yyyy-MM-dd HH:mm:ss}" );
+		sb.AppendLine( $"Publish target tested: {TargetLabel( _publishTarget )}" );
 		sb.AppendLine( $"Failed: {failed.Count} / {_entries.Count} total" );
 		sb.AppendLine();
 

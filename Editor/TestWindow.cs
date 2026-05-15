@@ -30,6 +30,7 @@ public class TestWindow : DockWindow
 
 	private TextEdit _inputJson;
 	private bool _skipWebhooks = true;
+	private string _publishTarget = "live";
 
 	private JsonElement? _lastResult;
 	private string _lastError;
@@ -57,6 +58,8 @@ public class TestWindow : DockWindow
 		Title = "Endpoint Tester";
 		Size = new Vector2( 420, 640 );
 		MinimumSize = new Vector2( 350, 400 );
+		SyncToolConfig.Load();
+		_publishTarget = NormalizePublishTarget( SyncToolConfig.PublishTarget );
 		LoadData();
 	}
 
@@ -67,6 +70,9 @@ public class TestWindow : DockWindow
 		var window = new TestWindow();
 		window.Show();
 	}
+
+	private static string NormalizePublishTarget( string target ) => string.Equals( target, "next", StringComparison.OrdinalIgnoreCase ) ? "next" : "live";
+	private static string TargetLabel( string target ) => NormalizePublishTarget( target ) == "next" ? "Staged/Main" : "Live";
 
 	private void LoadData()
 	{
@@ -238,6 +244,15 @@ public class TestWindow : DockWindow
 			return;
 		}
 
+		var targetColor = _publishTarget == "next" ? Color.Yellow : Color.Green;
+		Paint.SetBrush( targetColor.WithAlpha( 0.10f ) );
+		Paint.SetPen( targetColor.WithAlpha( 0.35f ) );
+		Paint.DrawRect( new Rect( pad, y, w, 24 ), 4 );
+		Paint.SetDefaultFont( size: 10, weight: 700 );
+		Paint.SetPen( targetColor.WithAlpha( 0.95f ) );
+		Paint.DrawText( new Rect( pad + 8, y, w - 16, 24 ), $"Tests run against: {TargetLabel( _publishTarget )}", TextFlag.LeftCenter );
+		y += 32;
+
 		_scrollAreaTop = y;
 		y -= _scrollY;
 
@@ -287,7 +302,7 @@ public class TestWindow : DockWindow
 		y += 6;
 
 		// Run button
-		DrawButton( ref y, pad, w, "Run Quick Test", Color.Cyan, "run_quick", _busy ? null : RunQuickTest );
+		DrawButton( ref y, pad, w, $"Run Quick Test ({TargetLabel( _publishTarget )})", Color.Cyan, "run_quick", _busy ? null : RunQuickTest );
 		y += 8;
 
 		DrawSeparator( ref y, w, pad );
@@ -303,7 +318,7 @@ public class TestWindow : DockWindow
 			}
 
 			y += 4;
-			DrawButton( ref y, pad, w, "Run All Tests", new Color( 0.2f, 0.8f, 0.4f ), "run_all", _busy ? null : RunAllTests );
+			DrawButton( ref y, pad, w, $"Run All Tests ({TargetLabel( _publishTarget )})", new Color( 0.2f, 0.8f, 0.4f ), "run_all", _busy ? null : RunAllTests );
 		}
 		else
 		{
@@ -314,7 +329,7 @@ public class TestWindow : DockWindow
 		}
 
 		y += 4;
-		DrawButton( ref y, pad, w, "Run All + Auto-Generate Preset Tests", new Color( 0.6f, 0.4f, 1f ), "run_all_auto", _busy ? null : RunAllWithAutoGenerate );
+		DrawButton( ref y, pad, w, $"Run All + Auto-Generate Preset Tests ({TargetLabel( _publishTarget )})", new Color( 0.6f, 0.4f, 1f ), "run_all_auto", _busy ? null : RunAllWithAutoGenerate );
 
 		y += 8;
 		DrawSeparator( ref y, w, pad );
@@ -342,7 +357,7 @@ public class TestWindow : DockWindow
 		Paint.DrawRect( new Rect( 0, 0, Width, _scrollAreaTop ) );
 		Paint.SetDefaultFont( size: 14, weight: 700 );
 		Paint.SetPen( Color.White );
-		Paint.DrawText( new Rect( pad, 38, w, 24 ), "Endpoint Tester", TextFlag.LeftCenter );
+		Paint.DrawText( new Rect( pad, 38, w, 24 ), $"Endpoint Tester — {TargetLabel( _publishTarget )}", TextFlag.LeftCenter );
 	}
 
 	private void DrawTestRow( ref float y, float pad, float w, JsonElement test )
@@ -821,7 +836,7 @@ public class TestWindow : DockWindow
 			}
 
 			var body = JsonSerializer.Deserialize<JsonElement>( JsonSerializer.Serialize( inputObj ) );
-			var resp = await SyncToolApi.RunTest( body );
+			var resp = await SyncToolApi.RunTest( body, _publishTarget );
 			if ( resp.HasValue )
 				_lastResult = resp.Value;
 			else
@@ -844,7 +859,7 @@ public class TestWindow : DockWindow
 		try
 		{
 			var body = JsonSerializer.Deserialize<JsonElement>( JsonSerializer.Serialize( new { testId } ) );
-			var resp = await SyncToolApi.RunTest( body );
+			var resp = await SyncToolApi.RunTest( body, _publishTarget );
 			if ( resp.HasValue ) _lastResult = resp.Value;
 			else _lastError = SyncToolApi.LastErrorMessage ?? "Request failed.";
 		}
@@ -878,7 +893,7 @@ public class TestWindow : DockWindow
 			Update();
 
 			var allBody = JsonSerializer.Deserialize<JsonElement>( "{}" );
-			var allResp = await SyncToolApi.RunAllTests( allBody );
+			var allResp = await SyncToolApi.RunAllTests( allBody, _publishTarget );
 
 			if ( token.IsCancellationRequested ) { _busy = false; return; }
 
@@ -909,7 +924,7 @@ public class TestWindow : DockWindow
 
 					var input = JsonSerializer.Deserialize<JsonElement>( GenerateSmartInput( ep ) );
 					var body = JsonSerializer.Deserialize<JsonElement>( JsonSerializer.Serialize( new { slug, input, skipWebhooks = true } ) );
-					var resp = await SyncToolApi.RunTest( body );
+					var resp = await SyncToolApi.RunTest( body, _publishTarget );
 
 					if ( token.IsCancellationRequested ) break;
 
@@ -977,6 +992,7 @@ public class TestWindow : DockWindow
 		var sb = new System.Text.StringBuilder();
 		sb.AppendLine( "# Endpoint Test Report" );
 		sb.AppendLine( $"Generated: {DateTime.Now:yyyy-MM-dd HH:mm:ss}" );
+		sb.AppendLine( $"Publish target tested: {TargetLabel( _publishTarget )}" );
 		sb.AppendLine();
 
 		sb.AppendLine( "## Summary" );
@@ -1072,7 +1088,7 @@ public class TestWindow : DockWindow
 			Update();
 
 			var runBody = JsonSerializer.Deserialize<JsonElement>( JsonSerializer.Serialize( new { } ) );
-			var runResp = await SyncToolApi.RunAllTests( runBody );
+			var runResp = await SyncToolApi.RunAllTests( runBody, _publishTarget );
 			if ( runResp.HasValue ) _lastResult = runResp.Value;
 			else _lastError = SyncToolApi.LastErrorMessage ?? "Request failed.";
 		}

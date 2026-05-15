@@ -1,9 +1,0 @@
-{
-  "mcpServers": {
-    "sbox-network-storage": {
-      "command": "node",
-      "args": ["--import", "tsx/esm", "index.ts"],
-      "cwd": "mcp"
-    }
-  }
-}

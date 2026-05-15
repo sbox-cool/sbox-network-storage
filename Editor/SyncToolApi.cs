@@ -329,17 +329,23 @@ public static class SyncToolApi
  	/// <summary>Ask backend compiler to canonicalize and safely upgrade one source file.</summary>
 	public static Task<JsonElement?> UpgradeSource( JsonElement data ) => Request( "POST", "source-upgrade", data );
 
+	private static Dictionary<string, string> PublishTargetHeaders( string publishTarget )
+	{
+		var normalized = string.Equals( publishTarget, "next", StringComparison.OrdinalIgnoreCase ) ? "next" : "live";
+		return new Dictionary<string, string> { ["x-ns-publish-target"] = normalized };
+	}
+
 	/// <summary>Run a single test via dry-run.</summary>
-	public static Task<JsonElement?> RunTest( JsonElement data ) => Request( "POST", "test-endpoint", data );
+	public static Task<JsonElement?> RunTest( JsonElement data, string publishTarget = "live" ) => Request( "POST", "test-endpoint", data, PublishTargetHeaders( publishTarget ) );
 
 	/// <summary>Run all tests via dry-run.</summary>
-	public static Task<JsonElement?> RunAllTests( JsonElement data ) => Request( "POST", "run-tests", data );
+	public static Task<JsonElement?> RunAllTests( JsonElement data, string publishTarget = "live" ) => Request( "POST", "run-tests", data, PublishTargetHeaders( publishTarget ) );
 
 	/// <summary>Suggest tests for an endpoint.</summary>
 	public static Task<JsonElement?> SuggestTests( JsonElement data ) => Request( "POST", "suggest-tests", data );
 
 	/// <summary>Auto-test one or all endpoints (no saved tests needed). Pass { slug } for one, {} for all.</summary>
-	public static Task<JsonElement?> AutoTest( JsonElement data ) => Request( "POST", "auto-test", data );
+	public static Task<JsonElement?> AutoTest( JsonElement data, string publishTarget = "live" ) => Request( "POST", "auto-test", data, PublishTargetHeaders( publishTarget ) );
 
 	/// <summary>
 	/// Push all resources (endpoints, collections, workflows) in a single batch request.

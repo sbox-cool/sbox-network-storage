@@ -80,6 +80,10 @@ public partial class SyncToolWindow : DockWindow
 		Update();
 	}
 
+	private string PublishTargetLabel => _publishTarget == "next" ? "Staged/Main" : "Live";
+	private string PushAllLabel => _publishTarget == "next" ? "Push Staged" : "Push Live";
+	private string TestAllLabel => _publishTarget == "next" ? "Test Staged" : "Test Live";
+
 	// ── Scroll state ──
 	private float _scrollY;
 	private float _scrollAreaTop;
@@ -407,12 +411,12 @@ public partial class SyncToolWindow : DockWindow
 		// Push All + Test All buttons
 		if ( SyncToolConfig.IsValid )
 		{
-			var btnW2 = 70f;
-			var testAllW = 65f;
+			var btnW2 = 92f;
+			var testAllW = 92f;
 			var pushAllRect = new Rect( pad + w - btnW2, y, btnW2, 22 );
 			var testAllRect = new Rect( pad + w - btnW2 - 4 - testAllW, y, testAllW, 22 );
-			DrawSmallButton( pushAllRect, "Push All", Color.Green, "push_all", () => _ = PushAll() );
-			DrawSmallButton( testAllRect, "Test All", Color.Cyan, "test_all", () => TestResultsWindow.OpenAndRun() );
+			DrawSmallButton( pushAllRect, PushAllLabel, Color.Green, "push_all", () => _ = PushAll() );
+			DrawSmallButton( testAllRect, TestAllLabel, Color.Cyan, "test_all", () => TestResultsWindow.OpenAndRun( publishTarget: _publishTarget ) );
 		}
 		y += 30;
 
@@ -443,7 +447,7 @@ public partial class SyncToolWindow : DockWindow
 		if ( SyncToolConfig.IsValid )
 		{
 			var checkBtnH = 26f;
-			var checkLabel = _hasCheckedRemote ? "Pull from Web (re-check)" : "Check for Updates";
+			var checkLabel = _hasCheckedRemote ? $"Pull from {PublishTargetLabel} (re-check)" : $"Check {PublishTargetLabel} for Updates";
 			var checkRect = new Rect( pad, y, w, checkBtnH );
 			DrawWideButton( checkRect, checkLabel, Color.Cyan, "check_updates", () => _ = CheckForUpdates() );
 			y += checkBtnH + 8;
@@ -682,7 +686,7 @@ public partial class SyncToolWindow : DockWindow
 				DrawResourceRow( ref y, pad, w, $"{slug}.endpoint.yml", info, id,
 					hasLocal && !deprecated ? () => PushItem( id ) : null,
 					deprecated ? null : () => PullItem( id ),
-					deprecated ? null : () => TestResultsWindow.OpenAndRun( capturedSlug ),
+					deprecated ? null : () => TestResultsWindow.OpenAndRun( capturedSlug, _publishTarget ),
 					deprecated, staged: IsEndpointStaged( slug ) );
 			}
 		}
@@ -891,12 +895,12 @@ public partial class SyncToolWindow : DockWindow
 
 		if ( SyncToolConfig.IsValid )
 		{
-			var btnW2 = 70f;
-			var testAllW = 65f;
+			var btnW2 = 92f;
+			var testAllW = 92f;
 			var pushAllRect = new Rect( pad + w - btnW2, y, btnW2, 22 );
 			var testAllRect = new Rect( pad + w - btnW2 - 4 - testAllW, y, testAllW, 22 );
-			DrawSmallButton( pushAllRect, "Push All", Color.Green, "push_all", () => _ = PushAll() );
-			DrawSmallButton( testAllRect, "Test All", Color.Cyan, "test_all", () => TestResultsWindow.OpenAndRun() );
+			DrawSmallButton( pushAllRect, PushAllLabel, Color.Green, "push_all", () => _ = PushAll() );
+			DrawSmallButton( testAllRect, TestAllLabel, Color.Cyan, "test_all", () => TestResultsWindow.OpenAndRun( publishTarget: _publishTarget ) );
 		}
 		y += 30;
 
@@ -927,7 +931,7 @@ public partial class SyncToolWindow : DockWindow
 		if ( SyncToolConfig.IsValid )
 		{
 			var checkBtnH = 26f;
-			var checkLabel = _hasCheckedRemote ? "Pull from Web (re-check)" : "Check for Updates";
+			var checkLabel = _hasCheckedRemote ? $"Pull from {PublishTargetLabel} (re-check)" : $"Check {PublishTargetLabel} for Updates";
 			var checkRect = new Rect( pad, y, w, checkBtnH );
 			DrawWideButton( checkRect, checkLabel, Color.Cyan, "check_updates", () => _ = CheckForUpdates() );
 			y += checkBtnH + 8;
@@ -1716,7 +1720,7 @@ public partial class SyncToolWindow : DockWindow
 			var capturedSlug = slug;
 			pushAction = hasLocal && !deprecated ? () => PushItem( capturedId ) : null;
 			pullAction = deprecated ? null : () => PullItem( capturedId );
-			testAction = deprecated ? null : () => TestResultsWindow.OpenAndRun( capturedSlug );
+			testAction = deprecated ? null : () => TestResultsWindow.OpenAndRun( capturedSlug, _publishTarget );
 		}
 		else if ( id.StartsWith( "col_" ) )
 		{
@@ -1990,12 +1994,10 @@ public partial class SyncToolWindow : DockWindow
 		}
 
 		// ── Fetch endpoints, collections, workflows in parallel ──
-		var remoteEpsTask = _publishTarget == "next"
-			? SyncToolApi.GetEndpointsForPublishTarget( _publishTarget )
-			: SyncToolApi.GetEndpoints();
-		var remoteColsTask = _publishTarget == "next"
-			? SyncToolApi.GetCollectionsForPublishTarget( _publishTarget )
-			: SyncToolApi.GetCollections();
+		// Always read the selected publish target so Live checks do not accidentally
+		// compare against staged overrides, and Staged/Main checks see next-release data.
+		var remoteEpsTask = SyncToolApi.GetEndpointsForPublishTarget( _publishTarget );
+		var remoteColsTask = SyncToolApi.GetCollectionsForPublishTarget( _publishTarget );
 		var remoteWfsTask = SyncToolApi.GetWorkflows();
 		var projectSettingsTask = SyncToolApi.GetProjectSettings();
 
@@ -3606,9 +3608,26 @@ public partial class SyncToolWindow : DockWindow
 				SyncToolApi.ReportLocalError( "collections", "No readable local collection source files were loaded for push." );
 				return false;
 			}
+
+			// Staged/Main collection writes must use the per-resource PATCH route. The bulk
+			// PUT route can return success while updating only the live collection set on
+			// older backends, which makes immediate verification read back the old Live row.
+			if ( string.Equals( _publishTarget, "next", StringComparison.OrdinalIgnoreCase ) )
+			{
+				var allOk = true;
+				foreach ( var collection in collections )
+				{
+					var collectionPayload = JsonSerializer.Deserialize<Dictionary<string, object>>( collection.GetRawText() );
+					var payload = JsonSerializer.Deserialize<JsonElement>( JsonSerializer.Serialize( new { collection = collectionPayload } ) );
+					var resp = await SyncToolApi.PatchCollection( payload, _publishTarget );
+					allOk &= resp.HasValue;
+				}
+				return allOk;
+			}
+
 			var serverFmt = JsonSerializer.Deserialize<JsonElement>( JsonSerializer.Serialize( collections ) );
-			var resp = await SyncToolApi.PushCollections( serverFmt, _publishTarget );
-			return resp.HasValue;
+			var bulkResp = await SyncToolApi.PushCollections( serverFmt, _publishTarget );
+			return bulkResp.HasValue;
 		}
 		catch ( Exception ex )
 		{
@@ -3644,10 +3663,8 @@ public partial class SyncToolWindow : DockWindow
 
 	private async Task<bool> DoPullSingleEndpoint( string slug )
 	{
-		// Use cached live remote data if available, otherwise fetch for current publish target.
-		var resp = _publishTarget == "next"
-			? await SyncToolApi.GetEndpointsForPublishTarget( _publishTarget )
-			: _remoteEndpoints ?? await SyncToolApi.GetEndpoints();
+		// Use cached selected-target remote data if available, otherwise fetch that target.
+		var resp = _remoteEndpoints ?? await SyncToolApi.GetEndpointsForPublishTarget( _publishTarget );
 		if ( !resp.HasValue ) return false;
 
 		try
@@ -3675,9 +3692,7 @@ public partial class SyncToolWindow : DockWindow
 
 	private async Task<bool> DoPullCollections()
 	{
-		var resp = _publishTarget == "next"
-			? await SyncToolApi.GetCollectionsForPublishTarget( _publishTarget )
-			: _remoteCollections ?? await SyncToolApi.GetCollections();
+		var resp = _remoteCollections ?? await SyncToolApi.GetCollectionsForPublishTarget( _publishTarget );
 		if ( !resp.HasValue ) return false;
 		try
 		{
@@ -3692,9 +3707,7 @@ public partial class SyncToolWindow : DockWindow
 
 	private async Task<bool> DoPullSingleCollection( string colName )
 	{
-		var resp = _publishTarget == "next"
-			? await SyncToolApi.GetCollectionsForPublishTarget( _publishTarget )
-			: _remoteCollections ?? await SyncToolApi.GetCollections();
+		var resp = _remoteCollections ?? await SyncToolApi.GetCollectionsForPublishTarget( _publishTarget );
 		if ( !resp.HasValue ) return false;
 		try
 		{
