@@ -12,7 +12,7 @@ public static partial class NetworkStorage
 			return $"synced(authSessions={EnableAuthSessions}, encryptedRequests={EnableEncryptedRequests}) runtime=not-loaded";
 
 		return $"synced(authSessions={runtime.SyncedEnableAuthSessions}, encryptedRequests={runtime.SyncedEnableEncryptedRequests}) "
-			+ $"runtime(authSessions={runtime.EnableAuthSessions}, encryptedRequests={runtime.EnableEncryptedRequests}, source={runtime.Source}, "
+			+ $"runtime(authSessions={runtime.EnableAuthSessions}, encryptedRequests={runtime.EnableEncryptedRequests}, analytics={runtime.EnablePlayerAnalytics}, source={runtime.Source}, "
 			+ $"version={runtime.ConfigVersion}, ageSeconds={runtime.AgeSeconds}, mismatch={runtime.LastMismatchCode}, mode={runtime.ModeText})";
 	}
 
@@ -41,6 +41,7 @@ public static partial class NetworkStorage
 		public int TtlSeconds { get; init; } = 60;
 		public bool EnableAuthSessions { get; init; }
 		public bool EnableEncryptedRequests { get; init; }
+		public bool EnablePlayerAnalytics { get; init; } = true;
 		public bool SyncedEnableAuthSessions { get; init; }
 		public bool SyncedEnableEncryptedRequests { get; init; }
 		public bool SignaturePresent { get; init; }
@@ -58,6 +59,7 @@ public static partial class NetworkStorage
 			ProjectId = NetworkStorage.ProjectId,
 			EnableAuthSessions = NetworkStorage.EnableAuthSessions,
 			EnableEncryptedRequests = NetworkStorage.EnableEncryptedRequests,
+			EnablePlayerAnalytics = NetworkStorage.EnablePlayerAnalytics,
 			SyncedEnableAuthSessions = NetworkStorage.EnableAuthSessions,
 			SyncedEnableEncryptedRequests = NetworkStorage.EnableEncryptedRequests,
 		};

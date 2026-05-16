@@ -77,6 +77,7 @@ public static partial class NetworkStorage
 				Log.Warning( "[NetworkStorage] security config RSA verification failed; accepted HTTPS config with config-version integrity fallback" );
 
 			var settings = config.TryGetProperty( "settings", out var settingsProp ) ? settingsProp : default;
+			ApplyAnalyticsRuntimeConfig( settings );
 			snapshot = new RuntimeSecurityConfigSnapshot
 			{
 				ProjectId = projectId,
@@ -85,6 +86,7 @@ public static partial class NetworkStorage
 				TtlSeconds = ReadInt( config, "ttlSeconds", 60 ),
 				EnableAuthSessions = ReadBool( settings, "enableAuthSessions", EnableAuthSessions ),
 				EnableEncryptedRequests = ReadBool( settings, "enableEncryptedRequests", EnableEncryptedRequests ),
+				EnablePlayerAnalytics = EnablePlayerAnalytics,
 				SignaturePresent = true
 			};
 			return true;

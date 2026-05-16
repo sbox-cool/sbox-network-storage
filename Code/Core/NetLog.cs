@@ -9,7 +9,7 @@ namespace Sandbox;
 /// </summary>
 public static class NetLog
 {
-	public enum EntryKind { Request, Response, Error, Info }
+	public enum EntryKind { Request, Response, Warning, Error, Info }
 
 	public record Entry(
 		DateTime Time,
@@ -35,8 +35,25 @@ public static class NetLog
 
 	public static void Request( string tag, string message ) => Add( EntryKind.Request, tag, message );
 	public static void Response( string tag, string message ) => Add( EntryKind.Response, tag, message );
-	public static void Error( string tag, string message ) => Add( EntryKind.Error, tag, message );
+	public static void Warning( string tag, string message )
+	{
+		Add( EntryKind.Warning, tag, message );
+		ReportDiagnostic( false, tag, message );
+	}
+	public static void Error( string tag, string message )
+	{
+		Add( EntryKind.Error, tag, message );
+		ReportDiagnostic( true, tag, message );
+	}
 	public static void Info( string tag, string message ) => Add( EntryKind.Info, tag, message );
+
+	private static void ReportDiagnostic( bool error, string tag, string message )
+	{
+		if ( string.Equals( tag, "analytics", StringComparison.OrdinalIgnoreCase ) ) return;
+		var context = new { source = "network-storage-library", tag };
+		if ( error ) _ = NetworkStorage.TrackAnalyticsError( $"network_storage_{tag}", message, null, context );
+		else _ = NetworkStorage.TrackAnalyticsWarning( $"network_storage_{tag}", message, context );
+	}
 
 	public static void Clear()
 	{

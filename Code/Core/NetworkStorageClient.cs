@@ -60,6 +60,7 @@ public static partial class NetworkStorage
 		CdnUrl = string.IsNullOrEmpty( cdnUrl ) ? null : cdnUrl.TrimEnd( '/' );
 		_autoConfigAttempted = true;
 		NetworkStorageRevisionHandler.Initialize();
+		NetworkStorageAnalyticsRuntime.EnsureCreated( "configure" );
 		if ( NetworkStorageLogConfig.LogConfig )
 			NetLog.Info( "config", $"NetworkStorage ready — {ApiRoot}" );
 	}

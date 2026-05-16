@@ -28,7 +28,11 @@ internal static class NetworkStorageBootstrap
 
 		// If the client configured successfully (from credentials JSON or manual call),
 		// no editor is needed — skip the warning. This is the normal path for published games.
-		if ( NetworkStorage.IsConfigured ) return;
+		if ( NetworkStorage.IsConfigured )
+		{
+			NetworkStorageAnalyticsRuntime.EnsureCreated( "bootstrap-check" );
+			return;
+		}
 
 		// Only show editor hint when the editor assembly is expected but didn't load
 		var editorLoaded = TypeLibrary.GetType( "SetupWindow" ) != null;

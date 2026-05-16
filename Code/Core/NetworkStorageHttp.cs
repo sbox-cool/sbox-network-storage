@@ -13,6 +13,8 @@ public static partial class NetworkStorage
 
 		if ( !IsConfigured )
 			throw new InvalidOperationException( "NetworkStorage not configured. Add credentials via Editor → Network Storage → Setup, or call NetworkStorage.Configure() manually." );
+
+		NetworkStorageAnalyticsRuntime.EnsureCreated( "ensure-configured" );
 	}
 
 	private static bool IsCdnRoot( string root )

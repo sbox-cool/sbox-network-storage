@@ -151,8 +151,14 @@ See the [Examples/](Examples/) folder for complete working patterns.
 | `UpdateDocument(collectionId, documentId, ops)` | Apply server-side operations (`set`, `inc`, `push`, `pull`, `remove`) to a document. |
 | `DeleteDocument(collectionId, documentId?)` | Delete one collection document/row. Public calls require record deletes to be enabled; dedicated secret keys with collection execute permission can delete rows for diagnostics/backoffice cleanup. Does not delete collection schemas. |
 | `ListRecords/CreateRecord/RenameRecord/DeleteRecord` | Manage multi-record save slots. |
+| `NetworkStorageAnalytics.TrackEvent(eventType, payload?)` | Report an allowlisted custom Player Analytics event. |
+| `NetworkStorageAnalytics.Warning(code, message?, context?)` | Report a recoverable warning/pain point to the player timeline. |
+| `NetworkStorageAnalytics.Error(exception, code?, context?)` | Report an exception/error to the player timeline without breaking gameplay. |
+| `NetworkStorageAnalytics.SessionStart/SessionEnd` | Report managed session boundaries when analytics is enabled. |
 | `IsConfigured` | `true` after `Configure()` has been called. |
 | `ApiRoot` | The full versioned API URL (e.g. `https://api.sboxcool.com/v3`). |
+
+See [analytics.md](analytics.md) for Player Analytics setup, custom events, warnings, and error reporting examples.
 
 ### JsonHelpers (static)
 
