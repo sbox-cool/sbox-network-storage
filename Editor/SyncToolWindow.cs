@@ -2801,6 +2801,7 @@ public partial class SyncToolWindow : DockWindow
 			}
 
 			await RetryEndpointVerificationMismatches( localEpBySlug, localEpSourceTextBySlug, publishTarget );
+			await RetryCollectionVerificationMismatches( localColByName, localColSourceTextByName, publishTarget );
 
 			Update();
 		}

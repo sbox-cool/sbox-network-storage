@@ -315,6 +315,8 @@ internal sealed class NetworkStorageAnalyticsRuntime : Component
 	private object BuildSystemSnapshot() => new
 	{
 		clientType = NetworkStorage.GetClientType(),
+		platform = Game.IsRunningOnHandheld ? "handheld" : "unknown",
+		osVersion = "",
 		isEditor = Game.IsEditor,
 		isDedicated = NetworkStorage.GetClientType() == "dedicated",
 		isRunningInVr = Game.IsRunningInVR,
