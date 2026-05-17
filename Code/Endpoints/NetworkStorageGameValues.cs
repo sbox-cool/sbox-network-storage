@@ -17,9 +17,10 @@ public static partial class NetworkStorage
 		try
 		{
 			var url = BuildUrl( $"/values/{ProjectId}" );
+			var headers = BuildPublicHeaders();
 			if ( NetworkStorageLogConfig.LogRequests )
 				NetLog.Request( "game-values", $"GET {ApiRoot}/values/{ProjectId}" );
-			var result = await Http.RequestStringAsync( url, "GET", null, null );
+			var result = await Http.RequestStringAsync( url, "GET", null, headers );
 			if ( NetworkStorageLogConfig.LogResponses )
 				Log.Info( $"[NetworkStorage] game-values → {TruncateJson( result, 300 )}" );
 			var parsed = ParseResponse( "game-values", result );

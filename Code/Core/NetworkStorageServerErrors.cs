@@ -10,6 +10,7 @@ public static partial class NetworkStorage
 		var code = "UNKNOWN";
 		var message = "";
 		var authFailureKind = "";
+		var statusCode = 0;
 
 		if ( json.TryGetProperty( "error", out var err ) )
 		{
@@ -30,6 +31,9 @@ public static partial class NetworkStorage
 		// Top-level message (server copies error.message here for convenience)
 		if ( string.IsNullOrEmpty( message ) && json.TryGetProperty( "message", out var topMsg ) )
 			message = topMsg.GetString() ?? "";
+
+		if ( json.TryGetProperty( "status", out var statusProp ) && statusProp.ValueKind == JsonValueKind.Number )
+			statusProp.TryGetInt32( out statusCode );
 
 		if ( string.Equals( code, "SBOX_AUTH_FAILED", StringComparison.OrdinalIgnoreCase )
 			|| string.Equals( authFailureKind, "token_rejected", StringComparison.OrdinalIgnoreCase ) )
@@ -63,9 +67,56 @@ public static partial class NetworkStorage
 
 		if ( NetworkStorageLogConfig.LogErrors )
 		{
-			Log.Warning( $"[NetworkStorage] {slug}: {code} — {message}" );
-			NetLog.Error( slug, $"{code}: {message}" );
+			var logMessage = $"{code}: {message}";
+			if ( IsExpectedStorageNotFound( slug, code, statusCode, message ) )
+			{
+				Log.Info( $"[NetworkStorage] {slug}: {logMessage}" );
+				NetLog.Info( slug, logMessage );
+			}
+			else
+			{
+				Log.Warning( $"[NetworkStorage] {slug}: {code} — {message}" );
+				NetLog.Error( slug, logMessage );
+			}
 		}
 		RecordEndpointError( slug, code, message );
+	}
+
+	private static bool IsExpectedStorageNotFound( string slug, string code, int statusCode, string message )
+	{
+		if ( !string.Equals( slug, "storage", StringComparison.OrdinalIgnoreCase ) )
+			return false;
+
+		if ( statusCode == 404 )
+			return true;
+
+		if ( string.Equals( code, "NOT_FOUND", StringComparison.OrdinalIgnoreCase )
+			|| string.Equals( code, "PROFILE_MISSING", StringComparison.OrdinalIgnoreCase ) )
+			return true;
+
+		return !string.IsNullOrWhiteSpace( message )
+			&& message.Contains( "404", StringComparison.OrdinalIgnoreCase )
+			&& message.Contains( "Not Found", StringComparison.OrdinalIgnoreCase );
+	}
+
+	private static bool IsHttpNotFoundException( Exception ex )
+	{
+		if ( ex is System.Net.Http.HttpRequestException httpEx && httpEx.StatusCode.HasValue && (int)httpEx.StatusCode.Value == 404 )
+			return true;
+
+		var message = ex?.Message ?? "";
+		return message.Contains( "404", StringComparison.OrdinalIgnoreCase )
+			&& message.Contains( "Not Found", StringComparison.OrdinalIgnoreCase );
+	}
+
+	private static void RecordStorageNotFound( string details )
+	{
+		var message = string.IsNullOrWhiteSpace( details ) ? "404 Not Found" : $"404 Not Found: {details}";
+		if ( NetworkStorageLogConfig.LogErrors )
+		{
+			Log.Info( $"[NetworkStorage] storage: {message}" );
+			NetLog.Info( "storage", message );
+		}
+		RecordEndpointError( "storage", "NOT_FOUND", message );
 	}
 }

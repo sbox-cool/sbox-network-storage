@@ -60,6 +60,20 @@ public static partial class NetworkStorage
 
 		// ── Error detection (multiple patterns for robustness) ──
 
+		// Update revision status before error handling too. Revision-expired
+		// responses intentionally return ok:false but still carry _revisionStatus.
+		NetworkStoragePackageInfo.UpdateFromServerResponse( json );
+		var firedRevisionStatusOutdated = false;
+		if ( json.TryGetProperty( "_revisionStatus", out var statusProp ) && statusProp.ValueKind == JsonValueKind.Object )
+		{
+			var statusData = RevisionOutdatedData.FromRevisionStatusJson( statusProp );
+			if ( statusData.HasValue && statusData.Value.RevisionOutdated )
+			{
+				firedRevisionStatusOutdated = true;
+				OnRevisionOutdated?.Invoke( statusData.Value );
+			}
+		}
+
 		// 1) Explicit ok: false
 		if ( json.TryGetProperty( "ok", out var ok ) && ok.ValueKind == JsonValueKind.False )
 		{
@@ -104,11 +118,8 @@ public static partial class NetworkStorage
 			}
 		}
 
-		// ── Success — update revision status from top-level response ──
-		NetworkStoragePackageInfo.UpdateFromServerResponse( json );
-	
 		// Check for load-profile revision block and fire outdated event
-		if ( json.TryGetProperty( "revision", out var revisionProp ) && revisionProp.ValueKind == JsonValueKind.Object )
+		if ( !firedRevisionStatusOutdated && json.TryGetProperty( "revision", out var revisionProp ) && revisionProp.ValueKind == JsonValueKind.Object )
 		{
 			var data = RevisionOutdatedData.FromJson( revisionProp );
 			if ( data.HasValue && data.Value.RevisionOutdated )
@@ -137,11 +148,14 @@ public static partial class NetworkStorage
 		if ( string.IsNullOrEmpty( slug ) )
 			return;
 
+		var safeCode = string.IsNullOrWhiteSpace( code ) ? "UNKNOWN" : code;
+		var safeMessage = message ?? "";
 		_lastEndpointErrors[slug] = new EndpointErrorInfo
 		{
-			Code = string.IsNullOrWhiteSpace( code ) ? "UNKNOWN" : code,
-			Message = message ?? ""
+			Code = safeCode,
+			Message = safeMessage
 		};
+		NetworkStorageAnalyticsRuntime.RecordEndpointDiagnostic( slug, ok: false, code: safeCode, message: safeMessage );
 	}
 
 	private sealed class EndpointErrorInfo

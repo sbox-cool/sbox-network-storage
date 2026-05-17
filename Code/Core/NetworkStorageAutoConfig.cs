@@ -59,6 +59,7 @@ public static partial class NetworkStorage
 			var baseUrl = json.TryGetProperty( "baseUrl", out var bu ) ? bu.GetString() : null;
 			var apiVersion = json.TryGetProperty( "apiVersion", out var av ) ? av.GetString() : null;
 			var cdnUrl = json.TryGetProperty( "cdnUrl", out var cu ) ? cu.GetString() : null;
+			var publishTarget = json.TryGetProperty( "publishTarget", out var pt ) ? pt.GetString() : null;
 
 			// Read proxy setting from credentials — only override when explicitly present.
 			// ProxyEnabled defaults to false; credentials can explicitly enable it for local multiplayer testing.
@@ -71,7 +72,7 @@ public static partial class NetworkStorage
 
 			if ( !string.IsNullOrEmpty( projectId ) && !string.IsNullOrEmpty( publicKey ) )
 			{
-				Configure( projectId, publicKey, baseUrl, apiVersion, cdnUrl );
+				Configure( projectId, publicKey, baseUrl, apiVersion, cdnUrl, publishTarget );
 			}
 			else if ( NetworkStorageLogConfig.LogConfig )
 			{
@@ -102,6 +103,7 @@ public static partial class NetworkStorage
 			var publicKey = nsConfigType.GetStaticValue( "PublicKey" ) as string;
 			var baseUrl = nsConfigType.GetStaticValue( "BaseUrl" ) as string;
 			var apiVersion = nsConfigType.GetStaticValue( "ApiVersion" ) as string;
+			var publishTarget = nsConfigType.GetStaticValue( "PublishTarget" ) as string;
 
 			if ( !string.IsNullOrEmpty( projectId ) && !string.IsNullOrEmpty( publicKey ) )
 			{
@@ -117,9 +119,9 @@ public static partial class NetworkStorage
 				if ( encryptedRequestsVal is bool encryptedRequestsBool )
 					EnableEncryptedRequests = encryptedRequestsBool;
 
-				Configure( projectId, publicKey, baseUrl, apiVersion );
+				Configure( projectId, publicKey, baseUrl, apiVersion, publishTarget: publishTarget );
 				if ( NetworkStorageLogConfig.LogConfig )
-					NetLog.Info( "config", $"Configured from NSConfig constants (ProxyEnabled={ProxyEnabled})" );
+					NetLog.Info( "config", $"Configured from NSConfig constants (ProxyEnabled={ProxyEnabled}, PublishTarget={PublishTarget})" );
 				return true;
 			}
 		}

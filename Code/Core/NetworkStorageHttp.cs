@@ -28,6 +28,8 @@ public static partial class NetworkStorage
 		var baseUrl = $"{ApiRoot}{path}?apiKey={Uri.EscapeDataString( ApiKey )}";
 		if ( includeDedicatedSecretFlag )
 			baseUrl += "&secret-key=1";
+		if ( string.Equals( PublishTarget, "next", StringComparison.OrdinalIgnoreCase ) )
+			baseUrl += "&revisionTarget=next&includeStaged=true";
 		if ( IsCdnRoot( ApiRoot ) )
 		{
 			var v = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
@@ -52,10 +54,7 @@ public static partial class NetworkStorage
 		if ( !string.IsNullOrWhiteSpace( RuntimeSecurityConfigVersion ) )
 			headers["x-ns-security-config-version"] = RuntimeSecurityConfigVersion;
 
-		var revisionId = NetworkStoragePackageInfo.RuntimeRevisionId;
-		if ( revisionId.HasValue )
-			headers["x-ns-revision-id"] = revisionId.Value.ToString();
-		headers["x-ns-client-type"] = GetClientType();
+		AddRuntimeTargetHeaders( headers );
 		return headers;
 	}
 
@@ -94,15 +93,23 @@ public static partial class NetworkStorage
 		if ( !string.IsNullOrWhiteSpace( RuntimeSecurityConfigVersion ) )
 			headers["x-ns-security-config-version"] = RuntimeSecurityConfigVersion;
 
+		AddRuntimeTargetHeaders( headers );
+
+		return headers;
+	}
+
+	private static void AddRuntimeTargetHeaders( Dictionary<string, string> headers )
+	{
 		var revisionId = NetworkStoragePackageInfo.RuntimeRevisionId;
 		if ( revisionId.HasValue )
 			headers["x-ns-revision-id"] = revisionId.Value.ToString();
 
+		if ( string.Equals( PublishTarget, "next", StringComparison.OrdinalIgnoreCase ) )
+			headers["x-ns-publish-target"] = "next";
+
 		var clientType = GetClientType();
 		if ( !string.IsNullOrEmpty( clientType ) )
 			headers["x-ns-client-type"] = clientType;
-
-		return headers;
 	}
 
 }

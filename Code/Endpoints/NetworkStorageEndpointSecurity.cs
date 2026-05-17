@@ -129,10 +129,7 @@ public static partial class NetworkStorage
 			["x-steam-id"] = steamId,
 			["x-sbox-token"] = token
 		};
-		var revisionId = NetworkStoragePackageInfo.RuntimeRevisionId;
-		if ( revisionId.HasValue )
-			headers["x-ns-revision-id"] = revisionId.Value.ToString();
-		headers["x-ns-client-type"] = GetClientType();
+		AddRuntimeTargetHeaders( headers );
 		var body = new Dictionary<string, object> { ["steamId"] = steamId };
 		var raw = await Http.RequestStringAsync( url, "POST", Http.CreateJsonContent( body ), headers );
 		if ( NetworkStorageLogConfig.LogTokens )

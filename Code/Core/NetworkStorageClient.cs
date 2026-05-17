@@ -17,6 +17,9 @@ public static partial class NetworkStorage
 	/// <summary>API version prefix.</summary>
 	public static string ApiVersion { get; private set; } = "v3";
 
+	/// <summary>Network Storage library package version reported to analytics.</summary>
+	public static string PackageVersion { get; private set; } = "1.0";
+
 	/// <summary>Your project ID from the sboxcool.com dashboard.</summary>
 	public static string ProjectId { get; private set; }
 
@@ -41,6 +44,9 @@ public static partial class NetworkStorage
 	/// <summary>Project flag for encrypted Network Storage requests.</summary>
 	public static bool EnableEncryptedRequests { get; private set; }
 
+	/// <summary>Runtime publish target for Network Storage resources ("live" or staged "next").</summary>
+	public static string PublishTarget { get; private set; } = "live";
+
 	/// <summary>Delegate for proxying endpoint calls through the game host.</summary>
 	public static Func<string, string, string, string, Task<string>> RequestProxy { get; set; }
 
@@ -51,19 +57,30 @@ public static partial class NetworkStorage
 	public static bool IsHost => !Networking.IsActive || Networking.IsHost;
 
 	/// <summary>Configure the client manually. Call once at game startup.</summary>
-	public static void Configure( string projectId, string apiKey, string baseUrl = null, string apiVersion = null, string cdnUrl = null )
+	public static void Configure( string projectId, string apiKey, string baseUrl = null, string apiVersion = null, string cdnUrl = null, string publishTarget = null )
 	{
 		ProjectId = projectId;
 		ApiKey = apiKey;
 		if ( !string.IsNullOrEmpty( baseUrl ) ) BaseUrl = baseUrl.TrimEnd( '/' );
 		if ( !string.IsNullOrEmpty( apiVersion ) ) ApiVersion = apiVersion.Trim( '/' );
 		CdnUrl = string.IsNullOrEmpty( cdnUrl ) ? null : cdnUrl.TrimEnd( '/' );
+		PublishTarget = NormalizePublishTarget( publishTarget ?? PublishTarget );
 		_autoConfigAttempted = true;
 		NetworkStorageRevisionHandler.Initialize();
 		NetworkStorageAnalyticsRuntime.EnsureCreated( "configure" );
 		if ( NetworkStorageLogConfig.LogConfig )
 			NetLog.Info( "config", $"NetworkStorage ready — {ApiRoot}" );
 	}
+
+	/// <summary>Override the runtime publish target used for endpoint/storage/value requests.</summary>
+	public static void SetPublishTarget( string publishTarget )
+	{
+		PublishTarget = NormalizePublishTarget( publishTarget );
+		_runtimeAuthSession = null;
+	}
+
+	private static string NormalizePublishTarget( string publishTarget )
+		=> string.Equals( publishTarget, "next", StringComparison.OrdinalIgnoreCase ) ? "next" : "live";
 
 	/// <summary>Reset the auto-configure guard so AutoConfigure() can retry.</summary>
 	public static void ResetAutoConfigureFlag()

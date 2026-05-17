@@ -34,6 +34,7 @@ public static partial class NetworkStorage
 			Log.Info( $"[NetworkStorage] {slug} direct (proxy bypass: enabled={ProxyEnabled} isHost={IsHost} hasDelegate={RequestProxy != null})" );
 		string url = null;
 		string bodyJson = null;
+		double requestStartedAt = 0;
 		try
 		{
 			var shouldUseDedicatedSecret = ShouldUseDedicatedServerSecret( endpoint );
@@ -46,13 +47,14 @@ public static partial class NetworkStorage
 			url = BuildUrl( securityRequest.RoutePath, hasDedicatedSecret );
 
 			string result;
+			requestStartedAt = RealTime.Now;
 			if ( input is not null )
 			{
 				bodyJson = JsonSerializer.Serialize( securityRequest.Body );
 				if ( NetworkStorageLogConfig.LogRequests )
 				{
 					NetLog.Request( slug, $"POST {securityRequest.Mode} {bodyJson}" );
-					Log.Info( $"[NetworkStorage] {slug} request: POST {ApiRoot}{securityRequest.RouteLabel} mode={securityRequest.Mode} revision={NetworkStoragePackageInfo.RuntimeRevisionId?.ToString() ?? "unknown"} body={bodyJson}" );
+					Log.Info( $"[NetworkStorage] {slug} request: POST {ApiRoot}{securityRequest.RouteLabel} mode={securityRequest.Mode} revision={NetworkStoragePackageInfo.RuntimeRevisionId?.ToString() ?? "unknown"} target={PublishTarget} body={bodyJson}" );
 				}
 				var content = Http.CreateJsonContent( securityRequest.Body );
 				result = await Http.RequestStringAsync( url, "POST", content, headers );
@@ -72,6 +74,7 @@ public static partial class NetworkStorage
 			var parsed = ParseResponse( slug, result );
 			if ( parsed.HasValue )
 			{
+				NetworkStorageAnalyticsRuntime.RecordEndpointDiagnostic( slug, ok: true, elapsedMs: requestStartedAt > 0 ? (RealTime.Now - requestStartedAt) * 1000.0 : 0 );
 				if ( NetworkStorageLogConfig.LogResponses )
 					NetLog.Response( slug, TruncateJson( parsed.Value ) );
 				return parsed;

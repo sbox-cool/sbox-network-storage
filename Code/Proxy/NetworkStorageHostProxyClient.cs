@@ -169,6 +169,12 @@ public static partial class NetworkStorage
 		}
 		catch ( Exception ex )
 		{
+			if ( IsHttpNotFoundException( ex ) )
+			{
+				RecordStorageNotFound( $"{collectionId}/{documentId ?? targetSteamId}" );
+				return null;
+			}
+
 			if ( NetworkStorageLogConfig.LogErrors )
 			{
 				Log.Warning( $"[NetworkStorage] GetDocumentAs({targetSteamId}): {ex.Message}" );

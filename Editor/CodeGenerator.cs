@@ -124,6 +124,7 @@ public static class CodeGenerator
 		merged["apiVersion"] = SyncToolConfig.ApiVersion;
 		merged["enableAuthSessions"] = SyncToolConfig.EnableAuthSessions;
 		merged["enableEncryptedRequests"] = SyncToolConfig.EnableEncryptedRequests;
+		merged["publishTarget"] = SyncToolConfig.PublishTarget;
 
 		File.WriteAllText( path, JsonSerializer.Serialize( merged, new JsonSerializerOptions { WriteIndented = true } ) );
 	}
@@ -230,6 +231,7 @@ public static class CodeGenerator
 		sb.AppendLine( $"\tpublic const string PublicKey = \"{Escape( SyncToolConfig.PublicApiKey )}\";" );
 		sb.AppendLine( $"\tpublic const string BaseUrl = \"{Escape( SyncToolConfig.BaseUrl )}\";" );
 		sb.AppendLine( $"\tpublic const string ApiVersion = \"{Escape( SyncToolConfig.ApiVersion )}\";" );
+		sb.AppendLine( $"\tpublic const string PublishTarget = \"{Escape( SyncToolConfig.PublishTarget )}\";" );
 		sb.AppendLine();
 		sb.AppendLine( "\t/// <summary>" );
 		sb.AppendLine( "\t/// Whether the game host proxies Network Storage API calls for non-host clients." );

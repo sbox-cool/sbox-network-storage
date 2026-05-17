@@ -141,6 +141,52 @@ public struct RevisionOutdatedData
 			Reason = RevisionOutdatedReason.LoadProfileDetected,
 		};
 	}
+
+	internal static RevisionOutdatedData? FromRevisionStatusJson( JsonElement json )
+	{
+		if ( json.ValueKind != JsonValueKind.Object )
+			return null;
+
+		if ( !json.TryGetProperty( "isOutdatedRevision", out var outdated ) )
+			return null;
+
+		var enforcementMode = RevisionEnforcementMode.ForceUpgrade;
+		if ( json.TryGetProperty( "enforcementMode", out var em ) && em.ValueKind == JsonValueKind.String && em.GetString() == "allow_continue" )
+			enforcementMode = RevisionEnforcementMode.AllowContinue;
+
+		var graceRemaining = json.TryGetProperty( "graceRemainingMinutes", out var gr ) && gr.ValueKind == JsonValueKind.Number ? gr.GetInt32() : (int?)null;
+		var graceSeconds = graceRemaining.HasValue ? Math.Max( 0, graceRemaining.Value * 60 ) : 0;
+		var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+
+		var showUpdateOptions = true;
+		var showPopupOnce = true;
+		if ( json.TryGetProperty( "policy", out var policy ) && policy.ValueKind == JsonValueKind.Object )
+		{
+			showUpdateOptions = !policy.TryGetProperty( "showUpdateOptions", out var suo ) || suo.ValueKind != JsonValueKind.False;
+			showPopupOnce = !policy.TryGetProperty( "showPopupOnce", out var spo ) || spo.ValueKind != JsonValueKind.False;
+		}
+
+		return new RevisionOutdatedData
+		{
+			CurrentRevisionId = json.TryGetProperty( "playerRevision", out var pr ) && pr.ValueKind == JsonValueKind.Number ? pr.GetInt64() : 0,
+			LatestRevisionId = json.TryGetProperty( "currentRevision", out var cr ) && cr.ValueKind == JsonValueKind.Number ? cr.GetInt64() : 0,
+			RevisionOutdated = outdated.ValueKind == JsonValueKind.True,
+			GraceSeconds = graceSeconds,
+			GraceEndsAtUnixSeconds = graceSeconds > 0 ? now + graceSeconds : null,
+			ServerUnixSeconds = now,
+			Source = "_revisionStatus",
+			Reason = json.TryGetProperty( "graceExpired", out var ge ) && ge.ValueKind == JsonValueKind.True
+				? RevisionOutdatedReason.GraceExpired
+				: RevisionOutdatedReason.LoadProfileDetected,
+			EnforcementMode = enforcementMode,
+			Message = json.TryGetProperty( "message", out var message ) ? message.GetString() : null,
+			Action = json.TryGetProperty( "action", out var action ) ? action.GetString() : null,
+			GraceExpired = json.TryGetProperty( "graceExpired", out var expired ) && expired.ValueKind == JsonValueKind.True,
+			GraceRemainingMinutes = graceRemaining,
+			ShowUpdateOptions = showUpdateOptions,
+			ShowPopupOnce = showPopupOnce
+		};
+	}
 }
 
 public static partial class NetworkStorage
@@ -153,7 +199,7 @@ public static partial class NetworkStorage
 	public static event Action<RevisionOutdatedData> OnRevisionOutdated;
 
 	/// <summary>
-	/// Called internally by <see cref="NetworkStorageResponse"/> when a
+	/// Called internally when a parsed server response contains a
 	/// load-profile response contains a <c>revision</c> block.
 	/// </summary>
 	internal static void FireRevisionOutdated( RevisionOutdatedData data )

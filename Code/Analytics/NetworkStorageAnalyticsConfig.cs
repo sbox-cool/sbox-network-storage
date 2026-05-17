@@ -9,7 +9,18 @@ public static partial class NetworkStorage
 	public static bool AnalyticsCaptureSessions { get; private set; } = true;
 	public static bool AnalyticsCaptureWarnings { get; private set; } = true;
 	public static bool AnalyticsCaptureErrors { get; private set; } = true;
+	public static bool AnalyticsCaptureLocalWarnings { get; private set; } = true;
+	public static bool AnalyticsCaptureLocalErrors { get; private set; } = true;
+	public static bool AnalyticsCaptureEndpointDiagnostics { get; private set; } = true;
 	public static bool AnalyticsManagedLibraryEvents { get; private set; } = true;
+	public static bool AnalyticsManagedPerformance { get; private set; } = true;
+	public static bool AnalyticsManagedNetwork { get; private set; } = true;
+	public static bool AnalyticsManagedVoice { get; private set; } = true;
+	public static bool AnalyticsManagedInputFocus { get; private set; } = true;
+	public static bool AnalyticsManagedScene { get; private set; } = true;
+	public static bool AnalyticsManagedRuntime { get; private set; } = true;
+	public static bool AnalyticsManagedRevision { get; private set; } = true;
+	public static bool AnalyticsManagedSystemInfo { get; private set; } = true;
 	public static bool AnalyticsRetainErrorStacks { get; private set; }
 
 	private static HashSet<string> AnalyticsAllowedEventTypes { get; set; } = new( StringComparer.OrdinalIgnoreCase )
@@ -46,7 +57,18 @@ public static partial class NetworkStorage
 		AnalyticsCaptureSessions = ReadBool( analytics, "captureSessions", AnalyticsCaptureSessions );
 		AnalyticsCaptureWarnings = ReadBool( analytics, "captureWarnings", AnalyticsCaptureWarnings );
 		AnalyticsCaptureErrors = ReadBool( analytics, "captureErrors", AnalyticsCaptureErrors );
+		AnalyticsCaptureLocalWarnings = ReadBool( analytics, "captureLocalWarnings", AnalyticsCaptureLocalWarnings );
+		AnalyticsCaptureLocalErrors = ReadBool( analytics, "captureLocalErrors", AnalyticsCaptureLocalErrors );
+		AnalyticsCaptureEndpointDiagnostics = ReadBool( analytics, "captureEndpointDiagnostics", AnalyticsCaptureEndpointDiagnostics );
 		AnalyticsManagedLibraryEvents = ReadBool( analytics, "managedLibraryEvents", AnalyticsManagedLibraryEvents );
+		AnalyticsManagedPerformance = ReadBool( analytics, "managedPerformance", AnalyticsManagedPerformance );
+		AnalyticsManagedNetwork = ReadBool( analytics, "managedNetwork", AnalyticsManagedNetwork );
+		AnalyticsManagedVoice = ReadBool( analytics, "managedVoice", AnalyticsManagedVoice );
+		AnalyticsManagedInputFocus = ReadBool( analytics, "managedInputFocus", AnalyticsManagedInputFocus );
+		AnalyticsManagedScene = ReadBool( analytics, "managedScene", AnalyticsManagedScene );
+		AnalyticsManagedRuntime = ReadBool( analytics, "managedRuntime", AnalyticsManagedRuntime );
+		AnalyticsManagedRevision = ReadBool( analytics, "managedRevision", AnalyticsManagedRevision );
+		AnalyticsManagedSystemInfo = ReadBool( analytics, "managedSystemInfo", AnalyticsManagedSystemInfo );
 		AnalyticsRetainErrorStacks = ReadBool( analytics, "retainErrorStacks", AnalyticsRetainErrorStacks );
 
 		if ( analytics.TryGetProperty( "allowedEventTypes", out var allowed ) && allowed.ValueKind == System.Text.Json.JsonValueKind.Array )

@@ -35,6 +35,9 @@ public static partial class NetworkStorage
 	internal static Task TrackManagedSessionSignal( string eventType, string sessionId, double sessionSeconds, object context = null, object fps = null )
 		=> AnalyticsCaptureSessions ? SendSessionSignal( eventType, sessionSeconds, context, fps, sessionId ) : Task.CompletedTask;
 
+	internal static Task TrackManagedDiagnosticEvent( string eventType, object payload = null, string label = null )
+		=> EnablePlayerAnalytics ? SendAnalyticsEvent( eventType, payload, "info", label, null ) : Task.CompletedTask;
+
 	private static async Task SendSessionSignal( string eventType, double sessionSeconds, object context, object fps, string sessionId )
 	{
 		try
@@ -51,7 +54,7 @@ public static partial class NetworkStorage
 				["event"] = eventType,
 				["playerName"] = Connection.Local?.DisplayName,
 				["source"] = "network-storage-library",
-				["libraryVersion"] = "1.0",
+				["libraryVersion"] = NetworkStorage.PackageVersion,
 				["packageIdent"] = NetworkStoragePackageInfo.PackageIdent,
 				["context"] = context,
 				["fps"] = fps
@@ -99,11 +102,12 @@ public static partial class NetworkStorage
 				["steamId"] = steamId,
 				["type"] = reportType,
 				["severity"] = severity == "custom" ? null : severity,
-				["label"] = normalized,
+				["label"] = severity == "info" && !string.IsNullOrWhiteSpace( message ) ? message : normalized,
 				["message"] = message,
 				["stack"] = stack,
 				["context"] = payload,
 				["source"] = "network-storage-library",
+				["libraryVersion"] = NetworkStorage.PackageVersion,
 				["packageIdent"] = NetworkStoragePackageInfo.PackageIdent
 			};
 

@@ -47,6 +47,12 @@ public static partial class NetworkStorage
 		}
 		catch ( Exception ex )
 		{
+			if ( IsHttpNotFoundException( ex ) )
+			{
+				RecordStorageNotFound( $"{collectionId}/{documentId ?? Game.SteamId.ToString()}" );
+				return null;
+			}
+
 			if ( NetworkStorageLogConfig.LogErrors )
 			{
 				Log.Warning( $"[NetworkStorage] GetDocument: {ex.Message}" );
