@@ -2892,7 +2892,7 @@ public partial class SyncToolWindow : DockWindow
 			try
 			{
 				var localFile = _endpointFiles.FirstOrDefault( f => string.Equals( ResourceIdFromFile( f, "endpoint" ), slug, StringComparison.OrdinalIgnoreCase ) );
-				if ( localFile == null || !SyncToolConfig.TryLoadSourcePayloadResource( "endpoint", localFile, out var localEp, includeDeprecated: false ) )
+				if ( localFile == null || !SyncToolConfig.TryLoadSourcePayloadResource( "endpoint", localFile, out var localEp, includeDeprecated: true ) )
 					continue;
 
 				var localDict = JsonSerializer.Deserialize<Dictionary<string, object>>( localEp.GetRawText() );
@@ -3482,7 +3482,7 @@ public partial class SyncToolWindow : DockWindow
 				return false;
 			}
 
-			if ( !SyncToolConfig.TryLoadSourcePayloadResource( "endpoint", localFile, out var localEp, includeDeprecated: false ) )
+			if ( !SyncToolConfig.TryLoadSourcePayloadResource( "endpoint", localFile, out var localEp, includeDeprecated: true ) )
 			{
 				SyncToolApi.ReportLocalError( "endpoints", $"Local endpoint file for {slug} could not be read." );
 				return false;

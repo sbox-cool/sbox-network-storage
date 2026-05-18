@@ -73,7 +73,7 @@ public partial class SyncToolWindow
 		{
 			var slug = id[3..];
 			var file = _endpointFiles.FirstOrDefault( f => ResourceIdFromFile( f, "endpoint" ) == slug );
-			if ( file != null && SyncToolConfig.TryLoadSourcePayloadResource( "endpoint", file, out var ep, includeDeprecated: false ) )
+			if ( file != null && SyncToolConfig.TryLoadSourcePayloadResource( "endpoint", file, out var ep, includeDeprecated: true ) )
 				batchPayload["endpoints"] = new[] { JsonSerializer.Deserialize<object>( ep.GetRawText() ) };
 		}
 		else if ( id.StartsWith( "col_" ) )
