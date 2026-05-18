@@ -70,17 +70,30 @@ public static class SyncToolPullWriter
 	{
 		var hasSource = SyncToolTransforms.TryGetSourceText( remote, out var sourceText );
 		var sourcePath = SyncToolTransforms.GetSourcePath( remote );
+		var hasCompiledRemoteView = SyncToolTransforms.TryGetCanonicalDefinition( remote, out _ )
+			|| (remote.TryGetProperty( "definition", out var definition ) && definition.ValueKind == JsonValueKind.Object);
 
-		if ( hasSource )
+		// The pull preview is built from the compiled/canonical remote view. When the
+		// API returns both sourceText and canonicalDefinition, sourceText can be stale
+		// or semantically different from what the preview shows, so write the same
+		// canonical data the user approved. Only preserve raw sourceText for older
+		// responses that do not expose a compiled view.
+		if ( hasSource && !hasCompiledRemoteView )
 			SyncToolConfig.SaveSourceResource( kind, id, sourceText, sourcePath );
 		else
-			WriteSource( kind, id, local );
+			WriteSource( kind, id, local, sourcePath );
 
 		return true;
 	}
 
-	public static void WriteSource( string kind, string id, Dictionary<string, object> data )
+	public static void WriteSource( string kind, string id, Dictionary<string, object> data, string sourcePath = null )
 	{
+		if ( !string.IsNullOrWhiteSpace( sourcePath ) )
+		{
+			SyncToolConfig.SaveSourceResource( kind, id, BuildSourceText( kind, id, data ), sourcePath );
+			return;
+		}
+
 		var folder = kind switch
 		{
 			"collection" => SyncToolConfig.CollectionsPath,
@@ -89,12 +102,24 @@ public static class SyncToolPullWriter
 			"test" => SyncToolConfig.TestsPath,
 			_ => SyncToolConfig.SyncToolsPath
 		};
-		var path = Path.Combine( SyncToolConfig.Abs( folder ), $"{id}.{kind}.yml" );
+		var absoluteFolder = SyncToolConfig.Abs( folder );
+		var path = FindExistingSourcePath( absoluteFolder, kind, id )
+			?? Path.Combine( absoluteFolder, $"{id}.{kind}.yml" );
 		var dir = Path.GetDirectoryName( path );
 		if ( !Directory.Exists( dir ) )
 			Directory.CreateDirectory( dir );
 
 		File.WriteAllText( path, BuildSourceText( kind, id, data ) );
+	}
+
+	private static string FindExistingSourcePath( string absoluteFolder, string kind, string id )
+	{
+		if ( !Directory.Exists( absoluteFolder ) )
+			return null;
+
+		return Directory.GetFiles( absoluteFolder, $"*.{kind}.yml" )
+			.Concat( Directory.GetFiles( absoluteFolder, $"*.{kind}.yaml" ) )
+			.FirstOrDefault( path => string.Equals( SyncToolConfig.ResourceIdFromFilePath( path, kind ), id, StringComparison.OrdinalIgnoreCase ) );
 	}
 
 	private static string BuildSourceText( string kind, string id, Dictionary<string, object> data )

@@ -37,7 +37,7 @@ public static partial class NetworkStorage
 		string bodyJson = null;
 		try
 		{
-			var routePath = $"/endpoints/{ProjectId}";
+			var routePath = $"/endpoints/{ProjectId}/{EscapeRouteSegment( slug )}";
 			var usesDedicatedSecret = ShouldUseDedicatedServerSecret( endpoint );
 			if ( !usesDedicatedSecret && TryRejectDedicatedServerPlayerAuth( slug ) )
 				return null;

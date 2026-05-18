@@ -55,7 +55,7 @@ public static partial class NetworkStorage
 				Body = payload,
 				Headers = headers,
 				Mode = mode,
-				RoutePath = $"/endpoints/{ProjectId}",
+				RoutePath = $"/endpoints/{ProjectId}/{EscapeRouteSegment( slug )}",
 				RouteLabel = $"/endpoints/{ProjectId}/{slug}"
 			};
 		}
@@ -76,8 +76,8 @@ public static partial class NetworkStorage
 			},
 			Headers = headers,
 			Mode = mode,
-			RoutePath = $"/endpoints/{ProjectId}",
-			RouteLabel = $"/endpoints/{ProjectId}"
+			RoutePath = $"/endpoints/{ProjectId}/{EscapeRouteSegment( slug )}",
+			RouteLabel = $"/endpoints/{ProjectId}/{slug}"
 		};
 	}
 

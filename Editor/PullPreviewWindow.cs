@@ -58,7 +58,8 @@ public class PullPreviewWindow : DockWindow
 		var linesR = _remoteText.Replace( "\r\n", "\n" ).Split( '\n' );
 		var max = Math.Max( linesL.Length, linesR.Length );
 		var clipTop = y;
-		var clipH = Height - clipTop - 62;
+		var footerTop = Math.Max( clipTop + 48f, Height - 96f );
+		var clipH = Math.Max( 32f, footerTop - clipTop - 10f );
 		var start = Math.Max( 0, (int)(_scroll / 15) );
 		var visible = Math.Max( 1, (int)(clipH / 15) );
 		Paint.SetDefaultFont( size: 8 );
@@ -79,7 +80,11 @@ public class PullPreviewWindow : DockWindow
 			Paint.DrawText( new Rect( pad + half + 8, ly, half - 4, 14 ), r, TextFlag.LeftCenter );
 		}
 
-		var btnY = Height - 44;
+		Paint.SetBrush( Color.Black.WithAlpha( 0.18f ) );
+		Paint.SetPen( Color.White.WithAlpha( 0.08f ) );
+		Paint.DrawRect( new Rect( 0, footerTop, Width, Height - footerTop ) );
+
+		var btnY = footerTop + 18f;
 		_cancelRect = new Rect( pad, btnY, 100, 30 );
 		_copyRect = new Rect( pad + 112, btnY, 130, 30 );
 		_applyRect = new Rect( Width - pad - 165, btnY, 165, 30 );
@@ -103,7 +108,7 @@ public class PullPreviewWindow : DockWindow
 	{
 		if ( _cancelRect.IsInside( e.LocalPosition ) ) Close();
 		else if ( _copyRect.IsInside( e.LocalPosition ) ) TryCopy( _remoteText );
-		else if ( _applyRect.IsInside( e.LocalPosition ) ) { Close(); _apply?.Invoke(); }
+		else if ( _applyRect.IsInside( e.LocalPosition ) ) { _apply?.Invoke(); Close(); }
 	}
 
 	private static void TryCopy( string text )

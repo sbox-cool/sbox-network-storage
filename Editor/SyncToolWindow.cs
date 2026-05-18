@@ -3137,10 +3137,10 @@ public partial class SyncToolWindow : DockWindow
 			pullState.LocalYaml ?? "",
 			pullState.RemoteYaml ?? "",
 			warning,
-			() => _ = DoPullItem( id ) ).Show();
+			() => _ = DoPullItem( id, pullState.RemoteJson ) ).Show();
 	}
 
-	private async Task DoPullItem( string id )
+	private async Task DoPullItem( string id, string approvedRemoteJson = null )
 	{
 		_busy = true;
 		_busyItem = $"pull_{id}";
@@ -3151,25 +3151,24 @@ public partial class SyncToolWindow : DockWindow
 		{
 			BackupLocalFileForPull( id );
 
-			bool ok;
-			if ( id.StartsWith( "ep_" ) )
+			var ok = TryWriteApprovedRemoteToLocal( id, approvedRemoteJson );
+			if ( !ok )
 			{
-				var slug = id[3..];
-				ok = await DoPullSingleEndpoint( slug );
-			}
-			else if ( id.StartsWith( "col_" ) )
-			{
-				var colName = id[4..];
-				ok = await DoPullSingleCollection( colName );
-			}
-			else if ( id.StartsWith( "wf_" ) )
-			{
-				var wfId = id[3..];
-				ok = await DoPullSingleWorkflow( wfId );
-			}
-			else
-			{
-				ok = false;
+				if ( id.StartsWith( "ep_" ) )
+				{
+					var slug = id[3..];
+					ok = await DoPullSingleEndpoint( slug );
+				}
+				else if ( id.StartsWith( "col_" ) )
+				{
+					var colName = id[4..];
+					ok = await DoPullSingleCollection( colName );
+				}
+				else if ( id.StartsWith( "wf_" ) )
+				{
+					var wfId = id[3..];
+					ok = await DoPullSingleWorkflow( wfId );
+				}
 			}
 
 			if ( ok )
@@ -3214,6 +3213,41 @@ public partial class SyncToolWindow : DockWindow
 			_ = SyncLocalPackageInfoAsync();
 			Update();
 		}
+	}
+
+	private bool TryWriteApprovedRemoteToLocal( string id, string approvedRemoteJson )
+	{
+		if ( string.IsNullOrWhiteSpace( approvedRemoteJson ) )
+			return false;
+
+		try
+		{
+			var data = JsonSerializer.Deserialize<Dictionary<string, object>>( approvedRemoteJson, _readOptions );
+			if ( data == null )
+				return false;
+
+			if ( id.StartsWith( "ep_", StringComparison.OrdinalIgnoreCase ) )
+			{
+				SyncToolPullWriter.WriteSource( "endpoint", id[3..], data );
+				return true;
+			}
+			if ( id.StartsWith( "col_", StringComparison.OrdinalIgnoreCase ) )
+			{
+				SyncToolPullWriter.WriteSource( "collection", id[4..], data );
+				return true;
+			}
+			if ( id.StartsWith( "wf_", StringComparison.OrdinalIgnoreCase ) )
+			{
+				SyncToolPullWriter.WriteSource( "workflow", id[3..], data );
+				return true;
+			}
+		}
+		catch ( Exception ex )
+		{
+			Log.Warning( $"[SyncTool] Failed to write approved pull preview for {id}: {ex.Message}" );
+		}
+
+		return false;
 	}
 
 	/// <summary>
@@ -3296,13 +3330,9 @@ public partial class SyncToolWindow : DockWindow
 			if ( !hasEndpoints && !hasCollections && !hasWorkflows )
 				return (false, false, false);
 
-			// For next/staged pushes, avoid relying on one combined /sync readback path for endpoints.
-			// Some deployed backends can report batch success while the immediate staged endpoint
-			// pull still returns the previous override. Use the dedicated endpoint route for the
-			// staged endpoint set, then verify against revisionTarget=next.
-			if ( string.Equals( _publishTarget, "next", StringComparison.OrdinalIgnoreCase ) )
-				return await DoPushNextWithDedicatedEndpoints( hasEndpoints, hasCollections, hasWorkflows );
-
+			// For next/staged pushes, keep endpoints and collections in one /sync request.
+			// Separate PATCH calls can land on different API workers and overwrite each
+			// other's revision override buckets before caches converge.
 			var batchPayload = new Dictionary<string, object>();
 
 			if ( hasEndpoints )
@@ -3676,8 +3706,8 @@ public partial class SyncToolWindow : DockWindow
 
 			foreach ( var ep in data.EnumerateArray() )
 			{
-				var epSlug = ep.TryGetProperty( "slug", out var s ) ? s.GetString() : "";
-				if ( epSlug != slug ) continue;
+				var epSlug = GetRemoteEndpointSlug( ep );
+				if ( !string.Equals( epSlug, slug, StringComparison.OrdinalIgnoreCase ) ) continue;
 				if ( SyncToolConfig.IsEndpointDeprecated( ep ) ) return false;
 
 				return SyncToolPullWriter.SaveEndpoint( slug, ep );
@@ -3720,7 +3750,7 @@ public partial class SyncToolWindow : DockWindow
 			{
 				var local = SyncToolTransforms.ServerCollectionToLocal( collection );
 				var name = local.TryGetValue( "name", out var value ) ? value?.ToString() : null;
-				if ( name == colName )
+				if ( string.Equals( name, colName, StringComparison.OrdinalIgnoreCase ) )
 					return SyncToolPullWriter.SaveCollection( colName, collection );
 			}
 
@@ -3747,7 +3777,7 @@ public partial class SyncToolWindow : DockWindow
 			{
 				var local = SyncToolTransforms.ServerWorkflowToLocal( workflow );
 				var id = local.TryGetValue( "id", out var value ) ? value?.ToString() : null;
-				if ( id == wfId )
+				if ( string.Equals( id, wfId, StringComparison.OrdinalIgnoreCase ) )
 					return SyncToolPullWriter.SaveWorkflow( wfId, workflow );
 			}
 
