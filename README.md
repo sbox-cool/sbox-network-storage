@@ -142,7 +142,7 @@ See the [Examples/](Examples/) folder for complete working patterns.
 ### NetworkStorage (static)
 
 | Method | Description |
-|————|——————-|
+| --- | --- |
 | `Configure(projectId, apiKey)` | Set credentials. Call once at startup. |
 | `CallEndpoint(slugOrUrl, input?)` | Call a server endpoint by slug or endpoint URL. Returns `JsonElement?`. |
 | `GetGameValues()` | Fetch all game values (constants + tables). Returns `JsonElement?`. |
@@ -287,7 +287,7 @@ python Libraries/sboxcool.network-storage/Editor/sync.py --project-root . --sour
 ### Status Indicators
 
 | Icon | Meaning |
-|———|————-|
+| --- | --- |
 | ✓ | In sync — local matches remote |
 | ▲ | Local only — exists locally but not on server |
 | ▼ | Remote only — exists on server but not locally |
@@ -362,7 +362,7 @@ Set the working directory to this repository root.
 ### Available Tools
 
 | Tool | Description |
-|———|——————-|
+| --- | --- |
 | `get_documentation` | Retrieve docs by topic (collections, endpoints, workflows, setup, errors, etc.) |
 | `validate_collection` | Validate a collection definition for correct schema and naming |
 | `validate_endpoint` | Validate an endpoint definition — steps, operators, templates, constraints |
