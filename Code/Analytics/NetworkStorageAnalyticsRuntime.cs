@@ -20,10 +20,23 @@ internal sealed class NetworkStorageAnalyticsRuntime : Component
 	private static int _endpointCallCount;
 	private static int _endpointFailureCount;
 	private static string _lastEndpointSlug;
+	private static string _lastEndpointErrorSlug; // tracked separately from _lastEndpointSlug
 	private static string _lastEndpointErrorCode;
 	private static string _lastEndpointErrorMessage;
 	private static double _lastEndpointLatencyMs;
 
+	// Process-stable session identity: survives scene loads that re-create the
+	// runtime component. Join is sent only on first creation; scene-change
+	// OnDestroy no longer emits leave (the server's 60s stale-presence sweep
+	// covers hard exits). Spec: game-client-analytics-telemetry.
+	private static string _processSessionId;
+	private static double _processSessionStartedAt;
+	private static bool _processJoinSent;
+
+	// Voice sampling throttle: the per-frame GetAllComponents<Voice>() walk is
+	// O(scene) for a 30s-cadence telemetry field. Throttle to 4 Hz.
+	private const float VoiceSampleInterval = 0.25f;
+	private double _nextVoiceSampleAt;
 	private string _sessionId;
 	private double _sessionStartedAt;
 	private double _nextHeartbeatAt;
@@ -39,6 +52,11 @@ internal sealed class NetworkStorageAnalyticsRuntime : Component
 	internal static void EnsureCreated( string reason = "unspecified" )
 	{
 		if ( _instance is not null ) return;
+		// Dedicated servers have no local player — don't create the managed
+		// session runtime (no join/heartbeat/leave signals). Error/warning
+		// events still flow (the server's IsPlausibleSteamId filter is
+		// defense-in-depth). Spec: game-client-analytics-telemetry.
+		if ( NetworkStorage.GetClientType() == "dedicated" ) return;
 		if ( Game.ActiveScene is null )
 		{
 			QueueEnsureRetry( reason );
@@ -59,6 +77,12 @@ internal sealed class NetworkStorageAnalyticsRuntime : Component
 			Log.Info( $"[NetworkStorage] Analytics runtime created (reason={reason}); join + 30s heartbeat reporting enabled." );
 	}
 
+	/// <summary>
+	/// The current process-stable session id (for analytics event enrichment).
+	/// Null until the runtime has initialized.
+	/// </summary>
+	internal static string CurrentSessionId => _processSessionId;
+
 	internal static void RecordEndpointDiagnostic( string slug, bool ok, double elapsedMs = 0, string code = null, string message = null )
 	{
 		if ( string.IsNullOrWhiteSpace( slug ) ) return;
@@ -72,6 +96,7 @@ internal sealed class NetworkStorageAnalyticsRuntime : Component
 			if ( !ok )
 			{
 				_endpointFailureCount++;
+				_lastEndpointErrorSlug = slug; // track the failing endpoint separately
 				_lastEndpointErrorCode = string.IsNullOrWhiteSpace( code ) ? "UNKNOWN" : code;
 				_lastEndpointErrorMessage = Redact( message ?? "" );
 			}
@@ -123,13 +148,25 @@ internal sealed class NetworkStorageAnalyticsRuntime : Component
 	protected override void OnEnabled()
 	{
 		_instance = this;
-		_sessionId = Guid.NewGuid().ToString( "N" );
-		_sessionStartedAt = RealTime.Now;
+		// Process-stable session identity: reuse across scene loads.
+		if ( string.IsNullOrEmpty( _processSessionId ) )
+		{
+			_processSessionId = Guid.NewGuid().ToString( "N" );
+			_processSessionStartedAt = RealTime.Now;
+			_processJoinSent = false;
+		}
+		_sessionId = _processSessionId;
+		_sessionStartedAt = _processSessionStartedAt;
 		_nextHeartbeatAt = RealTime.Now + 2f;
+		_nextVoiceSampleAt = 0;
 		ResetFpsWindow();
 		if ( NetworkStorageLogConfig.LogRequests )
 			Log.Info( $"[NetworkStorage] Analytics session join queued session={_sessionId}" );
-		_ = NetworkStorage.TrackManagedSessionSignal( "join", _sessionId, 0, BuildContext( "join" ) );
+		if ( !_processJoinSent )
+		{
+			_processJoinSent = true;
+			_ = NetworkStorage.TrackManagedSessionSignal( "join", _sessionId, 0, BuildContext( "join" ) );
+		}
 	}
 
 	protected override void OnUpdate()
@@ -148,9 +185,12 @@ internal sealed class NetworkStorageAnalyticsRuntime : Component
 
 	protected override void OnDestroy()
 	{
-		SendLeaveOnce();
+		// Process-stable session: scene-change destruction does NOT emit leave.
+		// The final leave is best-effort (the server's 60s stale-presence sweep
+		// covers hard exits). Only clear the instance reference.
 		if ( _instance == this ) _instance = null;
 	}
+
 
 	private double SessionSeconds => Math.Max( 0, RealTime.Now - _sessionStartedAt );
 
@@ -333,7 +373,7 @@ internal sealed class NetworkStorageAnalyticsRuntime : Component
 				callCount = _endpointCallCount,
 				failureCount = _endpointFailureCount,
 				lastEndpointSlug = _lastEndpointSlug,
-				lastErrorSlug = _lastEndpointSlug,
+				lastErrorSlug = _lastEndpointErrorSlug ?? _lastEndpointSlug, // the endpoint that actually failed
 				lastErrorCode = _lastEndpointErrorCode,
 				lastErrorMessage = _lastEndpointErrorMessage,
 				lastLatencyMs = Math.Round( _lastEndpointLatencyMs, 1 )
@@ -360,6 +400,11 @@ internal sealed class NetworkStorageAnalyticsRuntime : Component
 	private void SampleVoice()
 	{
 		if ( !NetworkStorage.AnalyticsManagedVoice || Game.ActiveScene is null ) return;
+		// Throttle the GetAllComponents<Voice>() walk to 4 Hz — per-frame O(scene)
+		// for a 30s-cadence telemetry field is wasteful. Accumulate speaking time
+		// by elapsed wall-clock delta between samples.
+		if ( RealTime.Now < _nextVoiceSampleAt ) return;
+		_nextVoiceSampleAt = RealTime.Now + VoiceSampleInterval;
 		try
 		{
 			var listening = 0;
@@ -370,7 +415,7 @@ internal sealed class NetworkStorageAnalyticsRuntime : Component
 				var amplitude = Math.Max( 0, voice.Amplitude );
 				if ( voice.IsRecording || amplitude > VoiceActivityThreshold )
 				{
-					_voiceSpeakingSeconds += Math.Max( 0, Time.Delta );
+					_voiceSpeakingSeconds += VoiceSampleInterval; // wall-clock delta since last sample
 					_voicePeakAmplitude = Math.Max( _voicePeakAmplitude, amplitude );
 				}
 			}

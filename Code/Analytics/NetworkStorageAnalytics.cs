@@ -46,19 +46,19 @@ public static partial class NetworkStorage
 			await EnsureRuntimeSecurityConfigAsync( "analytics-session" );
 			if ( !EnablePlayerAnalytics || !AnalyticsCaptureSessions ) return;
 
-			var body = new Dictionary<string, object>
-			{
-				["steamId"] = Game.SteamId.ToString(),
-				["sessionId"] = sessionId,
-				["sessionSeconds"] = Math.Max( 0, sessionSeconds ),
-				["event"] = eventType,
-				["playerName"] = Connection.Local?.DisplayName,
-				["source"] = "network-storage-library",
-				["libraryVersion"] = NetworkStorage.PackageVersion,
-				["packageIdent"] = NetworkStoragePackageInfo.PackageIdent,
-				["context"] = context,
-				["fps"] = fps
-			};
+		var body = new Dictionary<string, object>
+		{
+			["steamId"] = Game.SteamId.ToString(),
+			["sessionId"] = sessionId,
+			["sessionSeconds"] = Math.Max( 0, sessionSeconds ),
+			["event"] = eventType,
+			["playerName"] = ResolvePlayerName(),
+			["source"] = "network-storage-library",
+			["libraryVersion"] = NetworkStorage.PackageVersion,
+			["packageIdent"] = NetworkStoragePackageInfo.PackageIdent,
+			["context"] = context,
+			["fps"] = fps
+		};
 
 			var headers = await BuildAuthHeaders();
 			var url = BuildUrl( $"/storage/{Uri.EscapeDataString( ProjectId )}/stats/heartbeat" );
@@ -97,19 +97,21 @@ public static partial class NetworkStorage
 
 			var steamId = Game.SteamId.ToString();
 			var reportType = severity == "session" ? $"session.{normalized}" : normalized;
-			var body = new Dictionary<string, object>
-			{
-				["steamId"] = steamId,
-				["type"] = reportType,
-				["severity"] = severity == "custom" ? null : severity,
-				["label"] = severity == "info" && !string.IsNullOrWhiteSpace( message ) ? message : normalized,
-				["message"] = message,
-				["stack"] = stack,
-				["context"] = payload,
-				["source"] = "network-storage-library",
-				["libraryVersion"] = NetworkStorage.PackageVersion,
-				["packageIdent"] = NetworkStoragePackageInfo.PackageIdent
-			};
+		var body = new Dictionary<string, object>
+		{
+			["steamId"] = steamId,
+			["type"] = reportType,
+			["severity"] = severity == "custom" ? null : severity,
+			["label"] = severity == "info" && !string.IsNullOrWhiteSpace( message ) ? message : normalized,
+			["message"] = message,
+			["stack"] = stack,
+			["context"] = payload,
+			["playerName"] = ResolvePlayerName(),
+			["sessionId"] = NetworkStorageAnalyticsRuntime.CurrentSessionId,
+			["source"] = "network-storage-library",
+			["libraryVersion"] = NetworkStorage.PackageVersion,
+			["packageIdent"] = NetworkStoragePackageInfo.PackageIdent
+		};
 
 			var headers = await BuildAuthHeaders();
 			var url = BuildUrl( $"/storage/{Uri.EscapeDataString( ProjectId )}/analytics/events" );
@@ -123,5 +125,30 @@ public static partial class NetworkStorage
 			if ( NetworkStorageLogConfig.LogErrors )
 				NetLog.Error( "analytics", $"Analytics report failed: {ex.Message}" );
 		}
+	}
+
+	/// <summary>
+	/// Resolves the local player's display name for analytics payloads.
+	/// Prefers <see cref="Connection.Local.DisplayName"/> (active networking
+	/// session); falls back to the Steam persona name (solo/menu play where
+	/// Connection.Local is null). Returns null when neither is available.
+	/// </summary>
+	private static string ResolvePlayerName()
+	{
+		try
+		{
+			var displayName = Connection.Local?.DisplayName;
+			if ( !string.IsNullOrWhiteSpace( displayName ) ) return displayName;
+		}
+		catch { /* Connection.Local can throw before networking is initialized */ }
+
+		try
+		{
+			var persona = Sandbox.Utility.Steam.PersonaName;
+			if ( !string.IsNullOrWhiteSpace( persona ) ) return persona;
+		}
+		catch { /* Steam persona not available (e.g. dedicated server) */ }
+
+		return null;
 	}
 }
