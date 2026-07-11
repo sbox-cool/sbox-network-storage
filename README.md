@@ -235,7 +235,7 @@ var version = NetLog.Version; // increments on every add/clear
 ## Editor Sync Tool
 
 The Sync Tool lets you manage your sboxcool.com project data as local YAML source files, then push/pull changes through the API.
-YAML source definitions are the only supported local authoring format. Legacy JSON authoring and local JSON fallback are no longer supported.
+YAML is the preferred authoring format. Existing legacy JSON resources remain readable and pushable for compatibility; newly created and pulled resources are written as YAML.
 
 ### Open the Sync Tool
 
@@ -244,7 +244,7 @@ YAML source definitions are the only supported local authoring format. Legacy JS
 ### Workflow
 
 1. **Define new collections, endpoints, workflows, tests, and libraries** as YAML source files in `Editor/Network Storage/`
-2. Migrate existing JSON resources to YAML before editing them; `.json` resources are ignored by the tooling
+2. Existing JSON resources can still be pushed; migrate them to YAML when convenient to use the current authoring format
 3. Click **Check for Updates** to compare local files against the remote server
 4. **Push** sends your local changes to sboxcool.com
 5. **Pull** downloads the latest from sboxcool.com to your local files

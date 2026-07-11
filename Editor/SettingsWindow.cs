@@ -244,7 +244,7 @@ public class SettingsWindow : DockWindow
 		Paint.SetDefaultFont( size: 9 );
 		Paint.SetPen( Color.White.WithAlpha( 0.45f ) );
 		DrawWrappedText( ref y, pad, w, lineH + 2,
-			"The Sync Tool writes YAML source only. Legacy JSON export and local JSON fallback are no longer supported." );
+			"The Sync Tool writes YAML source. Existing JSON resources remain readable and pushable for compatibility." );
 		y += 8;
 
 		DrawReadonlyStatusRow( ref y, pad, w, "Export Format", "YAML Source Only", true );

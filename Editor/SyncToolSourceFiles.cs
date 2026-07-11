@@ -63,13 +63,19 @@ public static partial class SyncToolConfig
 			return new List<JsonElement>();
 
 		var typed = Directory.GetFiles( absoluteDir, $"*.{kind}.yml" )
-			.Concat( Directory.GetFiles( absoluteDir, $"*.{kind}.yaml" ) );
+			.Concat( Directory.GetFiles( absoluteDir, $"*.{kind}.yaml" ) )
+			.Concat( Directory.GetFiles( absoluteDir, $"*.{kind}.json" ) );
 		var plain = Directory.GetFiles( absoluteDir, "*.yml" )
 			.Concat( Directory.GetFiles( absoluteDir, "*.yaml" ) )
+			.Concat( Directory.GetFiles( absoluteDir, "*.json" ) )
 			.Where( path => !Path.GetFileName( path ).Contains( $".{kind}.", StringComparison.OrdinalIgnoreCase ) );
 
 		return typed.Concat( plain )
 			.Distinct( StringComparer.OrdinalIgnoreCase )
+			.OrderBy( path => Path.GetExtension( path ).Equals( ".json", StringComparison.OrdinalIgnoreCase ) ? 1 : 0 )
+			.ThenBy( path => path, StringComparer.OrdinalIgnoreCase )
+			.GroupBy( path => ResourceIdFromFilePath( path, kind ), StringComparer.OrdinalIgnoreCase )
+			.Select( files => files.First() )
 			.OrderBy( path => path, StringComparer.OrdinalIgnoreCase )
 			.Select( path => TryLoadSourcePayloadResource( kind, path, out var resource, includeDeprecated ) ? resource : default )
 			.Where( resource => resource.ValueKind != JsonValueKind.Undefined )
@@ -107,6 +113,28 @@ public static partial class SyncToolConfig
 
 	private static bool IsDeprecatedSourceText( string sourceText )
 	{
+		var trimmed = (sourceText ?? "").TrimStart();
+		if ( trimmed.StartsWith( "{" ) )
+		{
+			try
+			{
+				using var document = JsonDocument.Parse( sourceText );
+				var root = document.RootElement;
+				foreach ( var key in new[] { "deprecated", "_deprecated", "depreciated", "depricated" } )
+				{
+					if ( root.TryGetProperty( key, out var value )
+						&& (value.ValueKind == JsonValueKind.True
+							|| value.ValueKind == JsonValueKind.String && IsTruthyString( value.GetString() )) )
+						return true;
+				}
+				return false;
+			}
+			catch ( JsonException )
+			{
+				return false;
+			}
+		}
+
 		foreach ( var raw in (sourceText ?? "").Replace( "\r\n", "\n" ).Replace( '\r', '\n' ).Split( '\n' ) )
 		{
 			var line = raw.Trim();
@@ -358,7 +386,8 @@ public static partial class SyncToolConfig
 		var absoluteDir = Abs( relativeFolder );
 		return Directory.Exists( absoluteDir )
 			&& (Directory.GetFiles( absoluteDir, "*.yaml" ).Length > 0
-				|| Directory.GetFiles( absoluteDir, "*.yml" ).Length > 0);
+				|| Directory.GetFiles( absoluteDir, "*.yml" ).Length > 0
+				|| Directory.GetFiles( absoluteDir, "*.json" ).Length > 0);
 	}
 
 	public static string ResourceIdFromFilePath( string filePath, string kind )
