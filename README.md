@@ -4,7 +4,7 @@ Persistent cloud storage, server-side endpoints, and an editor sync tool for s&b
 ## Useful Links
 - Network Storage: https://sbox.cool/tools/network-storage
 - Documentation & Tutorials: http://sbox.cool/wiki/network-storage-v3
-- s&box editor Library: https://sbox.game/sboxcool/networkstoragebysboxcool
+- s&box editor Library: [https://sbox.game/sboxcool/networkstoragebysboxcool](https://sbox.game/sboxcool/network-storage)
    - Search `Network Storage by sbox.cool` with author name: `sboxcool`
 - sbox.cool and sboxcool.com are both operated the same group. `SboxCool.com` is our LTS url, e.g. `api.sboxcool.com`.
 
@@ -23,7 +23,7 @@ Persistent cloud storage, server-side endpoints, and an editor sync tool for s&b
 
 Install directly from the s&box asset browser:
 
-**[sbox.game/sboxcool/networkstoragebysboxcool](https://sbox.game/sboxcool/networkstoragebysboxcool)**
+**https://sbox.game/sboxcool/network-storage**
 
 Or find it in the editor:
 
@@ -142,7 +142,7 @@ See the [Examples/](Examples/) folder for complete working patterns.
 ### NetworkStorage (static)
 
 | Method | Description |
-|————|——————-|
+| --- | --- |
 | `Configure(projectId, apiKey)` | Set credentials. Call once at startup. |
 | `CallEndpoint(slugOrUrl, input?)` | Call a server endpoint by slug or endpoint URL. Returns `JsonElement?`. |
 | `GetGameValues()` | Fetch all game values (constants + tables). Returns `JsonElement?`. |
@@ -287,7 +287,7 @@ python Libraries/sboxcool.network-storage/Editor/sync.py --project-root . --sour
 ### Status Indicators
 
 | Icon | Meaning |
-|———|————-|
+| --- | --- |
 | ✓ | In sync — local matches remote |
 | ▲ | Local only — exists locally but not on server |
 | ▼ | Remote only — exists on server but not locally |
@@ -362,7 +362,7 @@ Set the working directory to this repository root.
 ### Available Tools
 
 | Tool | Description |
-|———|——————-|
+| --- | --- |
 | `get_documentation` | Retrieve docs by topic (collections, endpoints, workflows, setup, errors, etc.) |
 | `validate_collection` | Validate a collection definition for correct schema and naming |
 | `validate_endpoint` | Validate an endpoint definition — steps, operators, templates, constraints |
