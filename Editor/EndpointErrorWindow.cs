@@ -8,7 +8,7 @@ using Editor;
 /// Modal window that displays endpoint validation errors with full response JSON.
 /// Shows when network-storage endpoints fail validation.
 /// </summary>
-public class EndpointErrorWindow : DockWindow
+public class EndpointErrorWindow : PaintedWindow
 {
 	private readonly string _slug;
 	private readonly string _code;
@@ -109,9 +109,9 @@ public class EndpointErrorWindow : DockWindow
 		}
 	}
 
-	protected override void OnPaint()
+	protected override void OnContentPaint()
 	{
-		base.OnPaint();
+		base.OnContentPaint();
 
 		var pad = 20f;
 		var w = Width - pad * 2;
@@ -250,9 +250,9 @@ public class EndpointErrorWindow : DockWindow
 		return result.ToArray();
 	}
 
-	protected override void OnMousePress( MouseEvent e )
+	protected override void OnContentMousePress( MouseEvent e )
 	{
-		base.OnMousePress( e );
+		base.OnContentMousePress(e);
 
 		if ( _copyRect.IsInside( e.LocalPosition ) )
 		{
@@ -269,16 +269,16 @@ public class EndpointErrorWindow : DockWindow
 			Close();
 	}
 
-	protected override void OnMouseMove( MouseEvent e )
+	protected override void OnContentMouseMove( MouseEvent e )
 	{
-		base.OnMouseMove( e );
+		base.OnContentMouseMove(e);
 		_mousePos = e.LocalPosition;
 		Update();
 	}
 
-	protected override void OnMouseWheel( WheelEvent e )
+	protected override void OnContentMouseWheel( WheelEvent e )
 	{
-		base.OnMouseWheel( e );
+		base.OnContentMouseWheel(e);
 		_scrollY = Math.Clamp( _scrollY - e.Delta * 30, 0, Math.Max( 0, _contentHeight - 200 ) );
 		Update();
 	}

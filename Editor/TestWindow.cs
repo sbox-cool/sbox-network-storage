@@ -11,8 +11,7 @@ using System.Threading;
 /// Editor window for testing Network Storage endpoints via dry-run.
 /// Proper dropdown for endpoint selection, smart input generation from game values.
 /// </summary>
-[Dock( "Editor", "Network Storage Endpoint Tests", "bug_report" )]
-public class TestWindow : DockWindow
+public class TestWindow : PaintedWindow
 {
 	private bool _busy;
 	private string _status = "";
@@ -89,7 +88,7 @@ public class TestWindow : DockWindow
 
 		if ( _inputJson == null )
 		{
-			_inputJson = new TextEdit( this );
+			_inputJson = new TextEdit( Content );
 			_inputJson.PlaceholderText = "Select an endpoint to auto-generate input";
 			_inputJson.PlainText = "{}";
 		}
@@ -221,9 +220,9 @@ public class TestWindow : DockWindow
 	//  Paint
 	// ──────────────────────────────────────────────────────
 
-	protected override void OnPaint()
+	protected override void OnContentPaint()
 	{
-		base.OnPaint();
+		base.OnContentPaint();
 		_buttons.Clear();
 		var pad = 20f;
 		var w = Width - pad * 2;
@@ -1100,7 +1099,7 @@ public class TestWindow : DockWindow
 	//  Input
 	// ──────────────────────────────────────────────────────
 
-	protected override void OnMousePress( MouseEvent e )
+	protected override void OnContentMousePress( MouseEvent e )
 	{
 		foreach ( var btn in _buttons )
 		{
@@ -1112,13 +1111,13 @@ public class TestWindow : DockWindow
 		}
 	}
 
-	protected override void OnMouseMove( MouseEvent e )
+	protected override void OnContentMouseMove( MouseEvent e )
 	{
 		_mousePos = e.LocalPosition;
 		Update();
 	}
 
-	protected override void OnMouseWheel( WheelEvent e )
+	protected override void OnContentMouseWheel( WheelEvent e )
 	{
 		var maxScroll = Math.Max( 0, _contentHeight - (Height - _scrollAreaTop) );
 		_scrollY = Math.Clamp( _scrollY + (e.Delta > 0 ? -40 : 40), 0, maxScroll );

@@ -5,7 +5,7 @@ using System.IO;
 using Sandbox;
 using Editor;
 
-public class PullPreviewWindow : DockWindow
+public class PullPreviewWindow : PaintedWindow
 {
 	private readonly string _name;
 	private readonly string _localText;
@@ -31,9 +31,9 @@ public class PullPreviewWindow : DockWindow
 		MouseTracking = true;
 	}
 
-	protected override void OnPaint()
+	protected override void OnContentPaint()
 	{
-		base.OnPaint();
+		base.OnContentPaint();
 		var pad = 14f;
 		var y = 16f;
 		var w = Width - pad * 2;
@@ -104,7 +104,7 @@ public class PullPreviewWindow : DockWindow
 		Paint.DrawText( rect, label, TextFlag.Center );
 	}
 
-	protected override void OnMousePress( MouseEvent e )
+	protected override void OnContentMousePress( MouseEvent e )
 	{
 		if ( _cancelRect.IsInside( e.LocalPosition ) ) Close();
 		else if ( _copyRect.IsInside( e.LocalPosition ) ) TryCopy( _remoteText );
@@ -128,6 +128,6 @@ public class PullPreviewWindow : DockWindow
 		}
 	}
 
-	protected override void OnMouseMove( MouseEvent e ) { _mousePos = e.LocalPosition; Update(); }
-	protected override void OnMouseWheel( WheelEvent e ) { _scroll = Math.Max( 0, _scroll + (e.Delta > 0 ? -45 : 45) ); Update(); e.Accept(); }
+	protected override void OnContentMouseMove( MouseEvent e ) { _mousePos = e.LocalPosition; Update(); }
+	protected override void OnContentMouseWheel( WheelEvent e ) { _scroll = Math.Max( 0, _scroll + (e.Delta > 0 ? -45 : 45) ); Update(); e.Accept(); }
 }

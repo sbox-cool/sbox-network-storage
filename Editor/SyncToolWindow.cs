@@ -15,8 +15,7 @@ using Editor;
 /// Push warns if remote is newer. Pull buttons only appear when remote differs.
 /// After push or pull, re-checks and clears stale state.
 /// </summary>
-[Dock( "Editor", "Network Storage Sync", "cloud" )]
-public partial class SyncToolWindow : DockWindow
+public partial class SyncToolWindow : PaintedWindow
 {
 	private static readonly JsonSerializerOptions _readOptions = new()
 	{
@@ -394,9 +393,9 @@ public partial class SyncToolWindow : DockWindow
 	//  Rendering
 	// ──────────────────────────────────────────────────────
 
-	protected override void OnPaint()
+	protected override void OnContentPaint()
 	{
-		base.OnPaint();
+		base.OnContentPaint();
 		_buttons.Clear();
 
 		var y = 38f;
@@ -1627,9 +1626,9 @@ public partial class SyncToolWindow : DockWindow
 	//  Mouse + Scroll
 	// ──────────────────────────────────────────────────────
 
-	protected override void OnMousePress( MouseEvent e )
+	protected override void OnContentMousePress( MouseEvent e )
 	{
-		base.OnMousePress( e );
+		base.OnContentMousePress(e);
 		if ( _busy ) return;
 
 		foreach ( var btn in _buttons )
@@ -1642,14 +1641,14 @@ public partial class SyncToolWindow : DockWindow
 		}
 	}
 
-	protected override void OnMouseMove( MouseEvent e )
+	protected override void OnContentMouseMove( MouseEvent e )
 	{
-		base.OnMouseMove( e );
+		base.OnContentMouseMove(e);
 		_mousePos = e.LocalPosition;
 		Update();
 	}
 
-	protected override void OnMouseWheel( WheelEvent e )
+	protected override void OnContentMouseWheel( WheelEvent e )
 	{
 		var direction = e.Delta > 0 ? -1 : 1;
 		_scrollY = Math.Clamp( _scrollY + direction * RowH * 3, 0, MaxScroll );
@@ -1657,7 +1656,7 @@ public partial class SyncToolWindow : DockWindow
 		e.Accept();
 	}
 
-	protected override void OnKeyPress( KeyEvent e )
+	protected override void OnContentKeyPress( KeyEvent e )
 	{
 		var handled = true;
 		switch ( e.Key )
@@ -1672,7 +1671,7 @@ public partial class SyncToolWindow : DockWindow
 		}
 
 		if ( handled ) Update();
-		else base.OnKeyPress( e );
+		else base.OnContentKeyPress(e);
 	}
 
 	/// <summary>Scroll to show the bottom of the content.</summary>

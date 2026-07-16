@@ -8,7 +8,7 @@ using Editor;
 /// Shows additive remote-only fields after a push or remote check so the user can
 /// review and pull those semantics into their local files.
 /// </summary>
-public class MergeViewWindow : DockWindow
+public class MergeViewWindow : PaintedWindow
 {
 	public struct FieldDiff
 	{
@@ -93,9 +93,9 @@ public class MergeViewWindow : DockWindow
 	private float ContentHeight => 180 + ( _addedFields.Count + _changedFields.Count ) * FieldBlockH + 80;
 	private float MaxScroll => Math.Max( 0, ContentHeight - Height + 40 );
 
-	protected override void OnPaint()
+	protected override void OnContentPaint()
 	{
-		base.OnPaint();
+		base.OnContentPaint();
 
 		var pad = 20f;
 		var w = Width - pad * 2;
@@ -262,9 +262,9 @@ public class MergeViewWindow : DockWindow
 		}
 	}
 
-	protected override void OnMousePress( MouseEvent e )
+	protected override void OnContentMousePress( MouseEvent e )
 	{
-		base.OnMousePress( e );
+		base.OnContentMousePress(e);
 
 		if ( _cancelRect.IsInside( e.LocalPosition ) )
 		{
@@ -283,14 +283,14 @@ public class MergeViewWindow : DockWindow
 		}
 	}
 
-	protected override void OnMouseMove( MouseEvent e )
+	protected override void OnContentMouseMove( MouseEvent e )
 	{
-		base.OnMouseMove( e );
+		base.OnContentMouseMove(e);
 		_mousePos = e.LocalPosition;
 		Update();
 	}
 
-	protected override void OnMouseWheel( WheelEvent e )
+	protected override void OnContentMouseWheel( WheelEvent e )
 	{
 		var direction = e.Delta > 0 ? -1 : 1;
 		_scroll = Math.Clamp( _scroll + direction * LineH * 3, 0, MaxScroll );
@@ -298,7 +298,7 @@ public class MergeViewWindow : DockWindow
 		e.Accept();
 	}
 
-	protected override void OnKeyPress( KeyEvent e )
+	protected override void OnContentKeyPress( KeyEvent e )
 	{
 		switch ( e.Key )
 		{
@@ -307,7 +307,7 @@ public class MergeViewWindow : DockWindow
 			case KeyCode.Down: _scroll = Math.Min( MaxScroll, _scroll + LineH ); Update(); break;
 			case KeyCode.PageUp: _scroll = Math.Max( 0, _scroll - LineH * 10 ); Update(); break;
 			case KeyCode.PageDown: _scroll = Math.Min( MaxScroll, _scroll + LineH * 10 ); Update(); break;
-			default: base.OnKeyPress( e ); break;
+			default: base.OnContentKeyPress(e); break;
 		}
 	}
 

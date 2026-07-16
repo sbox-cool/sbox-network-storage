@@ -12,8 +12,7 @@ using Editor;
 ///
 /// Access via Editor menu → Network Storage → Setup, or the Setup button in the Sync Tool.
 /// </summary>
-[Dock( "Editor", "Network Storage Setup", "key" )]
-public class SetupWindow : DockWindow
+public class SetupWindow : PaintedWindow
 {
 	// ── Real input widgets (native text selection, copy/paste, any length) ──
 	private LineEdit _projectIdInput;
@@ -77,7 +76,7 @@ public class SetupWindow : DockWindow
 
 	private LineEdit CreateLineEdit( string value, string placeholder )
 	{
-		var input = new LineEdit( this );
+		var input = new LineEdit( Content );
 		input.Text = value ?? "";
 		input.PlaceholderText = placeholder;
 		input.Visible = true;
@@ -97,9 +96,9 @@ public class SetupWindow : DockWindow
 	//  Rendering (Paint for chrome, real widgets for inputs)
 	// ──────────────────────────────────────────────────────
 
-	protected override void OnPaint()
+	protected override void OnContentPaint()
 	{
-		base.OnPaint();
+		base.OnContentPaint();
 		_buttons.Clear();
 
 		var y = 38f;
@@ -348,9 +347,9 @@ public class SetupWindow : DockWindow
 	//  Input handling
 	// ──────────────────────────────────────────────────────
 
-	protected override void OnMousePress( MouseEvent e )
+	protected override void OnContentMousePress( MouseEvent e )
 	{
-		base.OnMousePress( e );
+		base.OnContentMousePress(e);
 
 		foreach ( var btn in _buttons )
 		{
@@ -362,9 +361,9 @@ public class SetupWindow : DockWindow
 		}
 	}
 
-	protected override void OnMouseMove( MouseEvent e )
+	protected override void OnContentMouseMove( MouseEvent e )
 	{
-		base.OnMouseMove( e );
+		base.OnContentMouseMove(e);
 		_mousePos = e.LocalPosition;
 		Update();
 	}

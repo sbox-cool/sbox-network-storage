@@ -11,7 +11,7 @@ using System.Threading;
 /// Modal window showing live test results as they come in.
 /// Shows each endpoint with pass/fail status, and a "View All Logs" button when done.
 /// </summary>
-public class TestResultsWindow : DockWindow
+public class TestResultsWindow : PaintedWindow
 {
 	private List<TestEntry> _entries = new();
 	private bool _finished;
@@ -269,9 +269,9 @@ public class TestResultsWindow : DockWindow
 	//  Paint
 	// ──────────────────────────────────────────────────────
 
-	protected override void OnPaint()
+	protected override void OnContentPaint()
 	{
-		base.OnPaint();
+		base.OnContentPaint();
 		_buttons.Clear();
 		var pad = 20f;
 		var w = Width - pad * 2;
@@ -813,7 +813,7 @@ public class TestResultsWindow : DockWindow
 	//  Input
 	// ──────────────────────────────────────────────────────
 
-	protected override void OnMousePress( MouseEvent e )
+	protected override void OnContentMousePress( MouseEvent e )
 	{
 		foreach ( var btn in _buttons )
 			if ( btn.Rect.IsInside( e.LocalPosition ) )
@@ -823,13 +823,13 @@ public class TestResultsWindow : DockWindow
 			}
 	}
 
-	protected override void OnMouseMove( MouseEvent e )
+	protected override void OnContentMouseMove( MouseEvent e )
 	{
 		_mousePos = e.LocalPosition;
 		Update();
 	}
 
-	protected override void OnMouseWheel( WheelEvent e )
+	protected override void OnContentMouseWheel( WheelEvent e )
 	{
 		var maxScroll = Math.Max( 0, _contentHeight - (Height - _scrollAreaTop) );
 		_scrollY = Math.Clamp( _scrollY + (e.Delta > 0 ? -40 : 40), 0, maxScroll );

@@ -10,7 +10,7 @@ using Editor;
 /// Input is rendered upstream as sorted YAML by <see cref="SyncToolYamlRenderer"/>
 /// so this window only needs to do a line-by-line diff.
 /// </summary>
-public class DiffViewWindow : DockWindow
+public class DiffViewWindow : PaintedWindow
 {
 	private readonly string _name;
 	private readonly string[] _localLines;
@@ -66,9 +66,9 @@ public class DiffViewWindow : DockWindow
 
 	private float MaxScroll => Math.Max( 0, _diffLines.Length * LineH - ( Height - HeaderH - 20 ) );
 
-	protected override void OnPaint()
+	protected override void OnContentPaint()
 	{
-		base.OnPaint();
+		base.OnContentPaint();
 
 		var y = 38f;
 		var pad = 12f;
@@ -204,7 +204,7 @@ public class DiffViewWindow : DockWindow
 
 	// ── Scrolling via keyboard, mouse wheel, and drag ──
 
-	protected override void OnMouseWheel( WheelEvent e )
+	protected override void OnContentMouseWheel( WheelEvent e )
 	{
 		var direction = e.Delta > 0 ? -1 : 1;
 		_scroll = Math.Clamp( _scroll + direction * LineH * 3, 0, MaxScroll );
@@ -213,7 +213,7 @@ public class DiffViewWindow : DockWindow
 		e.Accept();
 	}
 
-	protected override void OnKeyPress( KeyEvent e )
+	protected override void OnContentKeyPress( KeyEvent e )
 	{
 		_dragging = false;
 		var handled = true;
@@ -229,12 +229,12 @@ public class DiffViewWindow : DockWindow
 		}
 
 		if ( handled ) Update();
-		else base.OnKeyPress( e );
+		else base.OnContentKeyPress(e);
 	}
 
-	protected override void OnMousePress( MouseEvent e )
+	protected override void OnContentMousePress( MouseEvent e )
 	{
-		base.OnMousePress( e );
+		base.OnContentMousePress(e);
 		if ( _dragging )
 		{
 			_dragging = false;
@@ -247,9 +247,9 @@ public class DiffViewWindow : DockWindow
 		}
 	}
 
-	protected override void OnMouseMove( MouseEvent e )
+	protected override void OnContentMouseMove( MouseEvent e )
 	{
-		base.OnMouseMove( e );
+		base.OnContentMouseMove(e);
 		if ( _dragging )
 		{
 			var delta = _dragStartY - e.LocalPosition.y;

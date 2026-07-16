@@ -6,7 +6,7 @@ using Editor;
 /// Modal-style confirmation dialog with Overwrite/Cancel buttons.
 /// Use ConfirmDialog.Show(title, message, onConfirm) to display.
 /// </summary>
-public class ConfirmDialog : DockWindow
+public class ConfirmDialog : PaintedWindow
 {
 	private readonly string _title;
 	private readonly string _message;
@@ -33,9 +33,9 @@ public class ConfirmDialog : DockWindow
 		dialog.Show();
 	}
 
-	protected override void OnPaint()
+	protected override void OnContentPaint()
 	{
-		base.OnPaint();
+		base.OnContentPaint();
 
 		var pad = 20f;
 		var w = Width - pad * 2;
@@ -117,9 +117,9 @@ public class ConfirmDialog : DockWindow
 	private Rect _cancelRect;
 	private Rect _overwriteRect;
 
-	protected override void OnMousePress( MouseEvent e )
+	protected override void OnContentMousePress( MouseEvent e )
 	{
-		base.OnMousePress( e );
+		base.OnContentMousePress(e);
 
 		if ( _cancelRect.IsInside( e.LocalPosition ) )
 		{
@@ -132,9 +132,9 @@ public class ConfirmDialog : DockWindow
 		}
 	}
 
-	protected override void OnMouseMove( MouseEvent e )
+	protected override void OnContentMouseMove( MouseEvent e )
 	{
-		base.OnMouseMove( e );
+		base.OnContentMouseMove(e);
 		_mousePos = e.LocalPosition;
 		Update();
 	}

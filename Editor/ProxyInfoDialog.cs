@@ -4,7 +4,7 @@ using Editor;
 /// <summary>
 /// Info popup explaining the Multiplayer Auth Proxy feature.
 /// </summary>
-public class ProxyInfoDialog : DockWindow
+public class ProxyInfoDialog : PaintedWindow
 {
 	private Vector2 _mousePos;
 	private Rect _closeRect;
@@ -21,9 +21,9 @@ public class ProxyInfoDialog : DockWindow
 		dialog.Show();
 	}
 
-	protected override void OnPaint()
+	protected override void OnContentPaint()
 	{
-		base.OnPaint();
+		base.OnContentPaint();
 
 		var pad = 20f;
 		var w = Width - pad * 2;
@@ -151,16 +151,16 @@ public class ProxyInfoDialog : DockWindow
 		}
 	}
 
-	protected override void OnMousePress( MouseEvent e )
+	protected override void OnContentMousePress( MouseEvent e )
 	{
-		base.OnMousePress( e );
+		base.OnContentMousePress(e);
 		if ( _closeRect.IsInside( e.LocalPosition ) )
 			Close();
 	}
 
-	protected override void OnMouseMove( MouseEvent e )
+	protected override void OnContentMouseMove( MouseEvent e )
 	{
-		base.OnMouseMove( e );
+		base.OnContentMouseMove(e);
 		_mousePos = e.LocalPosition;
 		Update();
 	}
