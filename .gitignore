@@ -1,0 +1,33 @@
+# s&box auto-generated
+.vs/
+.vscode/
+*.csproj
+obj/
+bin/
+.bin/
+Properties/
+*.generated.*
+*.*_c
+!*.shader_c
+*.los
+*.vpk
+*launchSettings.json
+*.sln
+*.slnx
+.sbox/
+*idea/
+Exports/
+
+# Network Storage credentials (NEVER commit)
+**/.env
+
+# MCP server dependencies
+mcp/node_modules/
+
+# Other common development artifacts
+__pycache__/
+*.pyc
+*.pyo
+*.log
+.DS_Store
+Thumbs.db
