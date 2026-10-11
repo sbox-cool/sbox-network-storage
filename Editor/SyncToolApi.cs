@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Globalization;
+using System.IO;
 using System.Net.Http;
 using System.Text;
 using System.Text.Json;
@@ -17,6 +19,32 @@ public static class SyncToolApi
 	private static readonly HttpClient _http = new() { Timeout = TimeSpan.FromSeconds( 30 ) };
 	private static readonly ConcurrentDictionary<string, string> _lastErrorMessagesByPath = new( StringComparer.OrdinalIgnoreCase );
 	private static readonly ConcurrentDictionary<string, ConcurrentDictionary<string, string>> _lastResourceErrorMessagesByPath = new( StringComparer.OrdinalIgnoreCase );
+	private static readonly Lazy<string> _libraryRevision = new( ReadLibraryRevision );
+
+	private static void AddLibraryHeaders( HttpRequestMessage request )
+	{
+		request.Headers.Add( "x-ns-library-version", NetworkStorage.LibraryVersion );
+		request.Headers.Add( "x-ns-client-type", "editor" );
+		if ( _libraryRevision.Value is { } libraryRevision )
+			request.Headers.Add( "x-ns-library-revision", libraryRevision );
+	}
+
+	private static string ReadLibraryRevision()
+	{
+		try
+		{
+			var path = Path.Combine( SyncToolConfig.ProjectRoot, "Libraries", "sboxcool.network-storage", ".version" );
+			var version = File.ReadAllText( path ).Trim();
+			const string prefix = "1.0.";
+			if ( version.StartsWith( prefix, StringComparison.Ordinal )
+				&& long.TryParse( version[prefix.Length..], NumberStyles.None, CultureInfo.InvariantCulture, out var revision )
+				&& revision > 0 )
+				return revision.ToString( CultureInfo.InvariantCulture );
+		}
+		catch ( IOException ) { }
+		catch ( UnauthorizedAccessException ) { }
+		return null;
+	}
 	private static readonly JsonSerializerOptions _readOptions = new()
 	{
 		AllowTrailingCommas = true,
@@ -108,6 +136,7 @@ public static class SyncToolApi
 		request.Headers.Add( "x-api-key", sk );
 		request.Headers.Add( "x-public-key", pk );
 		request.Headers.Add( "User-Agent", "SyncTool-sbox/2.0" );
+		AddLibraryHeaders( request );
 
 		if ( extraHeaders != null )
 		{
@@ -404,6 +433,7 @@ public static class SyncToolApi
 		var request = new HttpRequestMessage( HttpMethod.Get, url );
 		request.Headers.Add( "x-api-key", sk );
 		request.Headers.Add( "User-Agent", "SyncTool-sbox/2.0" );
+		AddLibraryHeaders( request );
 
 		if ( !string.IsNullOrEmpty( publicKey ) )
 			request.Headers.Add( "x-public-key", publicKey );

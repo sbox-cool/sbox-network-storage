@@ -100,6 +100,8 @@ public static partial class NetworkStorage
 
 	private static void AddRuntimeTargetHeaders( Dictionary<string, string> headers )
 	{
+		headers["x-ns-library-version"] = LibraryVersion;
+
 		var revisionId = NetworkStoragePackageInfo.RuntimeRevisionId;
 		if ( revisionId.HasValue )
 			headers["x-ns-revision-id"] = revisionId.Value.ToString();

@@ -62,6 +62,60 @@ Use **Library Manager** to update; it replaces the library folder. For a manual 
 
 Library versions before `1.0.309133` do not start on s&box editor 26.10 or later (`Constructor on type 'SyncToolWindow' not found`). Update the library.
 
+### Library identity and release process
+
+`NetworkStorage.LibraryVersion` is the library SemVer (`1.1.0`), not the
+s&box package revision in `.version` or a game's published revision.
+`NetworkStorage.MinServerVersion` is `0.4.0`, the self-hosted baseline;
+it is metadata, not a runtime rejection or a claim of editor certification.
+The existing public `PackageVersion` property reports the same SemVer.
+
+Runtime, Sync Tool and Python sync requests send `x-ns-library-version`.
+Sync Tool and Python additionally send `x-ns-client-type: editor` and
+`x-ns-library-revision` when the installed package's `.version` contains a
+positive 64-bit revision (`1.0.<revision>`). A missing/unreadable/malformed
+revision is omitted. The editor reads the standard
+`Libraries/sboxcool.network-storage/.version` path; a differently named manual
+checkout omits that optional header. Python reads its own library directory.
+Restart the editor after replacing a library, because its package metadata is
+cached for the session.
+
+Runtime does **not** read the library checkout's `.version`: game filesystem
+mounts expose assets, not a reliable library source-directory path. Its
+availability in published bundles has not been verified, so runtime omits the
+package-revision header rather than guessing or reporting the game's revision.
+No credential, authentication, publish-target or game-revision behavior changes.
+Servers without compatibility metadata continue to work; these headers are
+self-reported diagnostics, not authentication.
+
+Maintainer release sequence:
+
+1. Bump `LibraryVersion` in `Code/Core/NetworkStorageClient.cs`; Python reads
+   that constant, so there is no second SemVer to update.
+2. Record exact-source editor/game evidence against both the current server and
+   `0.4.0`, including public/authenticated requests and Sync Tool connect/push.
+   Follow [compatibility certification](docs/compatibility-certification.md).
+3. Tag the tested source `vX.Y.Z`, then publish on sbox.game.
+4. Create GitHub Release `vX.Y.Z` recording the assigned s&box package revision,
+   `MinServerVersion`, included PRs/issues and tested server/engine/provider
+   pairings with evidence links.
+5. Submit the published-library entry and tested evidence to the server's
+   [`compat/library-matrix.json`](https://github.com/sbox-cool/sbox-network-storage-server/blob/main/compat/library-matrix.json)
+   ([server #59](https://github.com/sbox-cool/sbox-network-storage-server/issues/59)).
+
+Before releasing `1.1.0`, retain the last legacy source `0532c00`
+(package `1.0.309133`) with a maintainer-created `v1.0.309133` tag. No tag or
+package publication is implied by this source change. For rollback, replace the
+**whole library folder** with a supported tagged release, then republish the game.
+
+Tracking: [L1 #7](https://github.com/sbox-cool/sbox-network-storage/issues/7)
+↔ [server #58](https://github.com/sbox-cool/sbox-network-storage-server/issues/58).
+`pending-sbox-editor-test`: interactive Play mode and Sync Tool against the
+version-aware server and released `0.4.0`; record library source commit/SemVer,
+assigned package revision, server commit/version, engine build, database and
+evidence URLs. Headless-engine/dedicated-server smoke checks alone do not certify
+this pairing or close that gate.
+
 
 ## Setup
 

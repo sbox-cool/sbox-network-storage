@@ -34,6 +34,28 @@ from urllib.error import HTTPError
 from sync_api_errors import SyncApiError, print_api_error
 from sync_sources import load_source_definitions, source_id_from_filename
 
+# Read the runtime constant rather than maintaining a second release version.
+_library_root = Path(__file__).resolve().parent.parent
+_version_source = (_library_root / "Code/Core/NetworkStorageClient.cs").read_text(encoding="utf-8")
+LIBRARY_VERSION = re.search(r'public const string LibraryVersion = "([^"]+)";', _version_source).group(1)
+
+
+def read_library_revision():
+    """The package revision is optional, positive Int64 metadata, not SemVer."""
+    try:
+        value = (_library_root / ".version").read_text(encoding="utf-8").strip()
+    except (OSError, UnicodeError):
+        return None
+    match = re.fullmatch(r"1\.0\.([0-9]+)", value)
+    if match:
+        digits = match[1].lstrip("0") or "0"
+        if len(digits) <= 19 and 0 < int(digits) <= 9223372036854775807:
+            return str(int(digits))
+    return None
+
+
+LIBRARY_REVISION = read_library_revision()
+
 # ── Paths (set in main() from --project-root) ────────────────────
 
 PROJECT_ROOT = None
@@ -114,12 +136,17 @@ def api_url(config, path):
 
 
 def api_headers(config):
-    return {
+    headers = {
         "x-api-key": config["secretKey"],
         "x-public-key": config["publicKey"],
         "Content-Type": "application/json",
         "User-Agent": "sbox-network-storage-sync/1.0",
+        "x-ns-library-version": LIBRARY_VERSION,
+        "x-ns-client-type": "editor",
     }
+    if LIBRARY_REVISION is not None:
+        headers["x-ns-library-revision"] = LIBRARY_REVISION
+    return headers
 
 
 def api_request(config, method, path, body=None):

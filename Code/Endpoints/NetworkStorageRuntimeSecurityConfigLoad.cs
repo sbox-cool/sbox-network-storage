@@ -14,7 +14,9 @@ public static partial class NetworkStorage
 
 		try
 		{
-			var raw = await Http.RequestStringAsync( url, "GET", null, null );
+			var headers = new System.Collections.Generic.Dictionary<string, string>();
+			AddRuntimeTargetHeaders( headers );
+			var raw = await Http.RequestStringAsync( url, "GET", null, headers );
 			if ( !TryParseRuntimeSecurityConfig( raw, out var loaded, out var error ) )
 				return UseSyncedSecurityConfig( reason, error );
 

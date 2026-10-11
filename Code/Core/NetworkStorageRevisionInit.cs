@@ -65,7 +65,7 @@ public static class NetworkStorageRevisionInit
 		{
 			{ "projectId", NetworkStorage.ProjectId },
 			{ "clientType", clientType },
-			{ "networkStorageVersion", "1.0" },
+			{ "networkStorageVersion", NetworkStorage.LibraryVersion },
 			{ "isPublishedGameBundle", NetworkStoragePackageInfo.IsPublishedGameBundle }
 		};
 
@@ -78,7 +78,8 @@ public static class NetworkStorageRevisionInit
 		// ── Build headers ──
 		var headers = new Dictionary<string, string>
 		{
-			{ "x-public-key", NetworkStorage.ApiKey ?? "" }
+			{ "x-public-key", NetworkStorage.ApiKey ?? "" },
+			{ "x-ns-library-version", NetworkStorage.LibraryVersion }
 		};
 
 		if ( revisionId.HasValue )
