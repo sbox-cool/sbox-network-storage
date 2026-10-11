@@ -797,31 +797,38 @@ public static partial class SyncToolConfig
 			JsonSerializer.Deserialize<Dictionary<string, object>>( sampleCollection, _readOptions ) );
 
 		// ── Sample endpoint ──
+		// Documented v3 shape: condition uses check {field, op, value} + onFail {status, error, message}.
+		// Verified against the self-hosted server: first call creates the player, second returns 409 PLAYER_EXISTS.
 		var sampleEndpoint = @"{
   ""slug"": ""init-player"",
+  ""method"": ""POST"",
   ""description"": ""Initialize a new player with default values"",
   ""steps"": [
     {
+      ""id"": ""player"",
       ""type"": ""read"",
       ""collection"": ""players"",
-      ""as"": ""player""
+      ""key"": ""{{steamId}}""
     },
     {
+      ""id"": ""is_new_player"",
       ""type"": ""condition"",
-      ""field"": ""player"",
-      ""operator"": ""is_null"",
-      ""onFail"": ""return""
+      ""check"": { ""field"": ""{{player}}"", ""op"": ""not_exists"" },
+      ""onFail"": { ""status"": 409, ""error"": ""PLAYER_EXISTS"", ""message"": ""Player is already initialized."" }
     },
     {
+      ""id"": ""create"",
       ""type"": ""write"",
       ""collection"": ""players"",
-      ""data"": {
-        ""currency"": 0,
-        ""xp"": 0,
-        ""level"": 1
-      }
+      ""key"": ""{{steamId}}"",
+      ""ops"": [
+        { ""op"": ""set"", ""path"": ""currency"", ""value"": 0 },
+        { ""op"": ""set"", ""path"": ""xp"", ""value"": 0 },
+        { ""op"": ""set"", ""path"": ""level"", ""value"": 1 }
+      ]
     }
-  ]
+  ],
+  ""response"": { ""status"": 200, ""body"": { ""ok"": true } }
 }";
 		SyncToolPullWriter.WriteSource( "endpoint", "init-player",
 			JsonSerializer.Deserialize<Dictionary<string, object>>( sampleEndpoint, _readOptions ) );

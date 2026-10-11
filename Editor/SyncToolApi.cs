@@ -36,6 +36,12 @@ public static class SyncToolApi
 	public static string LastErrorMessage { get; private set; }
 
 	/// <summary>
+	/// One-line summary of the most recent management request, e.g. "PUT sync -> 200 (42 ms)".
+	/// Shown in the Sync Tool window so the user can see which request just went to which server.
+	/// </summary>
+	public static string LastRequestSummary { get; private set; }
+
+	/// <summary>
 	/// Last error message for a specific management API path.
 	/// Push All runs resource groups in parallel, so the global message can be
 	/// cleared by a sibling request before the UI reads it.
@@ -96,6 +102,7 @@ public static class SyncToolApi
 		var sk = SyncToolConfig.SecretKey ?? "";
 		var pk = SyncToolConfig.PublicApiKey ?? "";
 		Log.Info( $"[SyncTool] {method} {path}" );
+		var requestTimer = System.Diagnostics.Stopwatch.StartNew();
 
 		var request = new HttpRequestMessage( new HttpMethod( method ), url );
 		request.Headers.Add( "x-api-key", sk );
@@ -118,6 +125,7 @@ public static class SyncToolApi
 		{
 			var response = await _http.SendAsync( request );
 			var text = await response.Content.ReadAsStringAsync();
+			LastRequestSummary = $"{method} {path.Split( '?' )[0]} -> {(int)response.StatusCode} ({requestTimer.ElapsedMilliseconds} ms)";
 
 			if ( !response.IsSuccessStatusCode )
 			{
@@ -209,6 +217,7 @@ public static class SyncToolApi
 		catch ( Exception ex )
 		{
 			LastErrorMessage = ex.Message;
+			LastRequestSummary = $"{method} {path.Split( '?' )[0]} -> failed ({requestTimer.ElapsedMilliseconds} ms)";
 			_lastErrorMessagesByPath[path] = ex.Message;
 			Log.Warning( $"[SyncTool] {method} {path}: {ex.Message}" );
 			return null;

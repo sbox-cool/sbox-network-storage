@@ -97,6 +97,7 @@ public partial class SyncToolWindow : PaintedWindow
 		public string Name;
 		public string Type;   // "Endpoint", "Collection", "Workflow"
 		public bool Ok;
+		public bool Warn;     // Non-blocking diagnostic (preflight warning): shown in orange, not counted as pushed/failed
 		public string Detail; // "Pushed", "Created (new)", "Failed", "Verified ✓", "Mismatch — see diff", etc.
 	}
 
@@ -380,10 +381,26 @@ public partial class SyncToolWindow : PaintedWindow
 
 	private static string[] FindResourceFiles( string directory, string kind )
 	{
-		return Directory.GetFiles( directory, $"*.{kind}.yml" )
-			.Concat( Directory.GetFiles( directory, $"*.{kind}.yaml" ) )
-			.OrderBy( f => f, StringComparer.OrdinalIgnoreCase )
-			.ToArray();
+		return SyncToolConfig.FindPayloadSourceFiles( kind, directory ).ToArray();
+	}
+
+	/// <summary>Shows which server this window talks to and the last request, so a non-default Base URL is never silent.</summary>
+	private static void DrawServerLines( float pad, float w, ref float y )
+	{
+		var baseUrl = SyncToolConfig.BaseUrl ?? "";
+		var isHosted = baseUrl.Contains( "api.sboxcool.com", StringComparison.OrdinalIgnoreCase );
+
+		Paint.SetDefaultFont( size: 9 );
+		Paint.SetPen( isHosted ? Color.White.WithAlpha( 0.72f ) : Color.Orange.WithAlpha( 0.95f ) );
+		Paint.DrawText( new Rect( pad, y, w, 14 ), isHosted ? $"Server: {baseUrl}" : $"Server: {baseUrl} (self-hosted)", TextFlag.LeftCenter );
+		y += 18;
+
+		if ( !string.IsNullOrEmpty( SyncToolApi.LastRequestSummary ) )
+		{
+			Paint.SetPen( Color.White.WithAlpha( 0.55f ) );
+			Paint.DrawText( new Rect( pad, y, w, 14 ), $"Last request: {SyncToolApi.LastRequestSummary}", TextFlag.LeftCenter );
+			y += 18;
+		}
 	}
 
 	private static string ResourceIdFromFile( string filePath, string kind )
@@ -433,6 +450,7 @@ public partial class SyncToolWindow : PaintedWindow
 			Paint.SetPen( Color.Green.WithAlpha( 0.8f ) );
 			Paint.DrawText( new Rect( pad, y, w, 14 ), $"Connected — {SyncToolConfig.ProjectId}", TextFlag.LeftCenter );
 			y += 18;
+			DrawServerLines( pad, w, ref y );
 
 			Paint.SetDefaultFont( size: 9 );
 			Paint.SetPen( Color.White.WithAlpha( 0.72f ) );
@@ -816,10 +834,12 @@ public partial class SyncToolWindow : PaintedWindow
 					var isMismatch = entry.Detail != null && entry.Detail.Contains( "Mismatch" );
 					var isVerified = entry.Detail != null && entry.Detail.Contains( "Verified" );
 					var isMergeAvail = entry.Detail != null && entry.Detail.Contains( "Remote semantics available" );
-					var icon = isMergeAvail ? "⇄"
+					var icon = entry.Warn ? "⚠"
+						: isMergeAvail ? "⇄"
 						: entry.Ok ? ( isVerified ? "●" : "✓" )
 						: ( isMismatch ? "▲" : "✗" );
-					var iconColor = isMergeAvail ? Color.Green.WithAlpha( 0.7f )
+					var iconColor = entry.Warn ? Color.Orange.WithAlpha( 0.9f )
+						: isMergeAvail ? Color.Green.WithAlpha( 0.7f )
 						: entry.Ok ? ( isVerified ? Color.Cyan.WithAlpha( 0.7f ) : Color.Green.WithAlpha( 0.6f ) )
 						: ( isMismatch ? Color.Orange.WithAlpha( 0.8f ) : Color.Red.WithAlpha( 0.7f ) );
 
@@ -834,7 +854,8 @@ public partial class SyncToolWindow : PaintedWindow
 
 					// Detail
 					var detailText = entry.Detail ?? ( entry.Ok ? "Pushed" : "Failed" );
-					var detailColor = isMismatch ? Color.Orange.WithAlpha( 0.8f )
+					var detailColor = entry.Warn ? Color.Orange.WithAlpha( 0.8f )
+						: isMismatch ? Color.Orange.WithAlpha( 0.8f )
 						: isVerified ? Color.Cyan.WithAlpha( 0.6f )
 						: entry.Ok ? Color.Green.WithAlpha( 0.5f )
 						: Color.Red.WithAlpha( 0.6f );
@@ -917,6 +938,7 @@ public partial class SyncToolWindow : PaintedWindow
 			Paint.SetPen( Color.Green.WithAlpha( 0.8f ) );
 			Paint.DrawText( new Rect( pad, y, w, 14 ), $"Connected — {SyncToolConfig.ProjectId}", TextFlag.LeftCenter );
 			y += 18;
+			DrawServerLines( pad, w, ref y );
 
 			Paint.SetDefaultFont( size: 9 );
 			Paint.SetPen( Color.White.WithAlpha( 0.72f ) );
