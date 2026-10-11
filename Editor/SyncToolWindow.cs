@@ -97,6 +97,7 @@ public partial class SyncToolWindow : PaintedWindow
 		public string Name;
 		public string Type;   // "Endpoint", "Collection", "Workflow"
 		public bool Ok;
+		public bool Warn;     // Non-blocking diagnostic (preflight warning): shown in orange, not counted as pushed/failed
 		public string Detail; // "Pushed", "Created (new)", "Failed", "Verified ✓", "Mismatch — see diff", etc.
 	}
 
@@ -833,10 +834,12 @@ public partial class SyncToolWindow : PaintedWindow
 					var isMismatch = entry.Detail != null && entry.Detail.Contains( "Mismatch" );
 					var isVerified = entry.Detail != null && entry.Detail.Contains( "Verified" );
 					var isMergeAvail = entry.Detail != null && entry.Detail.Contains( "Remote semantics available" );
-					var icon = isMergeAvail ? "⇄"
+					var icon = entry.Warn ? "⚠"
+						: isMergeAvail ? "⇄"
 						: entry.Ok ? ( isVerified ? "●" : "✓" )
 						: ( isMismatch ? "▲" : "✗" );
-					var iconColor = isMergeAvail ? Color.Green.WithAlpha( 0.7f )
+					var iconColor = entry.Warn ? Color.Orange.WithAlpha( 0.9f )
+						: isMergeAvail ? Color.Green.WithAlpha( 0.7f )
 						: entry.Ok ? ( isVerified ? Color.Cyan.WithAlpha( 0.7f ) : Color.Green.WithAlpha( 0.6f ) )
 						: ( isMismatch ? Color.Orange.WithAlpha( 0.8f ) : Color.Red.WithAlpha( 0.7f ) );
 
@@ -851,7 +854,8 @@ public partial class SyncToolWindow : PaintedWindow
 
 					// Detail
 					var detailText = entry.Detail ?? ( entry.Ok ? "Pushed" : "Failed" );
-					var detailColor = isMismatch ? Color.Orange.WithAlpha( 0.8f )
+					var detailColor = entry.Warn ? Color.Orange.WithAlpha( 0.8f )
+						: isMismatch ? Color.Orange.WithAlpha( 0.8f )
 						: isVerified ? Color.Cyan.WithAlpha( 0.6f )
 						: entry.Ok ? Color.Green.WithAlpha( 0.5f )
 						: Color.Red.WithAlpha( 0.6f );

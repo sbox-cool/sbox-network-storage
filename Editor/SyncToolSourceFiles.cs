@@ -178,15 +178,7 @@ public static partial class SyncToolConfig
 		if ( !Directory.Exists( absoluteDir ) )
 			return new List<JsonElement>();
 
-		var typed = Directory.GetFiles( absoluteDir, $"*.{kind}.yml" )
-			.Concat( Directory.GetFiles( absoluteDir, $"*.{kind}.yaml" ) );
-		var plain = Directory.GetFiles( absoluteDir, "*.yml" )
-			.Concat( Directory.GetFiles( absoluteDir, "*.yaml" ) )
-			.Where( path => !Path.GetFileName( path ).Contains( $".{kind}.", StringComparison.OrdinalIgnoreCase ) );
-
-		return typed.Concat( plain )
-			.Distinct( StringComparer.OrdinalIgnoreCase )
-			.OrderBy( path => path, StringComparer.OrdinalIgnoreCase )
+		return FindPayloadSourceFiles( kind, absoluteDir )
 			.Select( path => TryLoadSourceCanonicalResource( kind, path, out var resource ) ? resource : default )
 			.Where( resource => resource.ValueKind != JsonValueKind.Undefined )
 			.ToList();
@@ -212,9 +204,23 @@ public static partial class SyncToolConfig
 	{
 		resource = default;
 
-		var lines = sourceText.Replace( "\r\n", "\n" ).Replace( '\r', '\n' ).Split( '\n' );
-		var index = 0;
-		var root = ParseYamlMap( sourcePath, lines, ref index, 0 );
+		var isJson = sourceText.TrimStart().StartsWith( '{' );
+		Dictionary<string, object> root;
+		if ( isJson )
+		{
+			// Legacy resource JSON (*.json) is listed and pushed like YAML, so read it here too
+			// instead of failing with "Invalid YAML mapping entry".
+			using var json = JsonDocument.Parse( sourceText, new JsonDocumentOptions { CommentHandling = JsonCommentHandling.Skip, AllowTrailingCommas = true } );
+			root = json.RootElement.ValueKind == JsonValueKind.Object
+				? (Dictionary<string, object>)JsonElementToObject( json.RootElement )
+				: new Dictionary<string, object>( StringComparer.OrdinalIgnoreCase );
+		}
+		else
+		{
+			var lines = sourceText.Replace( "\r\n", "\n" ).Replace( '\r', '\n' ).Split( '\n' );
+			var index = 0;
+			root = ParseYamlMap( sourcePath, lines, ref index, 0 );
+		}
 
 		if ( root.TryGetValue( "sourceText", out var embeddedSourceTextValue )
 			&& embeddedSourceTextValue is string embeddedSourceText
@@ -263,7 +269,7 @@ public static partial class SyncToolConfig
 		}
 
 		canonical["authoringMode"] = "source";
-		canonical["sourceFormat"] = "yaml";
+		canonical["sourceFormat"] = isJson ? "json" : "yaml";
 		canonical["sourcePath"] = Path.GetFileName( sourcePath );
 		canonical["sourceText"] = sourceText;
 		if ( root.TryGetValue( "sourceVersion", out var sourceVersionValue ) )
@@ -285,6 +291,30 @@ public static partial class SyncToolConfig
 
 		resource = JsonSerializer.Deserialize<JsonElement>( JsonSerializer.Serialize( canonical ) );
 		return resource.ValueKind == JsonValueKind.Object;
+	}
+
+	private static object JsonElementToObject( JsonElement element )
+	{
+		switch ( element.ValueKind )
+		{
+			case JsonValueKind.Object:
+				var map = new Dictionary<string, object>( StringComparer.OrdinalIgnoreCase );
+				foreach ( var property in element.EnumerateObject() )
+					map[property.Name] = JsonElementToObject( property.Value );
+				return map;
+			case JsonValueKind.Array:
+				return element.EnumerateArray().Select( JsonElementToObject ).ToList();
+			case JsonValueKind.String:
+				return element.GetString();
+			case JsonValueKind.Number:
+				return element.TryGetInt64( out var integer ) ? integer : element.GetDouble();
+			case JsonValueKind.True:
+				return true;
+			case JsonValueKind.False:
+				return false;
+			default:
+				return null;
+		}
 	}
 
 	private static Dictionary<string, object> UnwrapSourceBody( string kind, Dictionary<string, object> source )

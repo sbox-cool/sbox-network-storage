@@ -140,6 +140,25 @@ public partial class SyncToolWindow
 			var total = summary.TryGetProperty( "total", out var t ) && t.TryGetInt32( out var tn ) ? tn : 0;
 			_syncLog.Add( new SyncLogEntry { Name = "Preflight", Type = "Validation", Ok = failed == 0, Detail = failed == 0 ? $"Ready to push ({total})" : $"{failed}/{total} failed" } );
 		}
+
+		// Warnings never block a push, but they are real problems the server will hit at run time
+		// (for example MISSING_CHECK), so show them next to the preflight result.
+		var seen = new HashSet<string>();
+		foreach ( var diagnostic in EnumerateDiagnostics( preflight ) )
+		{
+			if ( diagnostic.ValueKind != JsonValueKind.Object ) continue;
+			var severity = diagnostic.TryGetProperty( "severity", out var sev ) && sev.ValueKind == JsonValueKind.String ? sev.GetString() : null;
+			if ( !string.Equals( severity, "warning", StringComparison.OrdinalIgnoreCase ) ) continue;
+
+			var code = diagnostic.TryGetProperty( "code", out var c ) && c.ValueKind == JsonValueKind.String ? c.GetString() : "WARNING";
+			var message = diagnostic.TryGetProperty( "message", out var m ) && m.ValueKind == JsonValueKind.String ? m.GetString() : "";
+			var resource = diagnostic.TryGetProperty( "resourceId", out var r ) && r.ValueKind == JsonValueKind.String ? r.GetString() : "";
+			var path = diagnostic.TryGetProperty( "sourcePath", out var p ) && p.ValueKind == JsonValueKind.String ? p.GetString() : "";
+			if ( !seen.Add( $"{resource}|{code}|{path}" ) ) continue;
+
+			Log.Warning( $"[SyncTool] Preflight warning {code} in {resource}{path}: {message}" );
+			_syncLog.Add( new SyncLogEntry { Name = string.IsNullOrEmpty( resource ) ? "Preflight warning" : resource, Type = "Validation", Ok = true, Warn = true, Detail = $"{code}: {message}" } );
+		}
 	}
 
 	private static bool IsResourceSyncLog( SyncLogEntry entry ) => entry.Type == "Endpoint" || entry.Type == "Collection" || entry.Type == "Workflow";
