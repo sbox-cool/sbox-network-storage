@@ -7,7 +7,7 @@ then held until a fundamental change forces re-testing.
 Tracking: [library tracker #6](https://github.com/sbox-cool/sbox-network-storage/issues/6),
 [server epic #57](https://github.com/sbox-cool/sbox-network-storage-server/issues/57).
 Backend rules: [server docs/compatibility.md](https://github.com/sbox-cool/sbox-network-storage-server/blob/main/docs/compatibility.md).
-Backend PR: [server #68](https://github.com/sbox-cool/sbox-network-storage-server/pull/68).
+Backend PRs: [server #66](https://github.com/sbox-cool/sbox-network-storage-server/pull/66), [#67](https://github.com/sbox-cool/sbox-network-storage-server/pull/67), [#70](https://github.com/sbox-cool/sbox-network-storage-server/pull/70).
 
 ## Certify once
 
