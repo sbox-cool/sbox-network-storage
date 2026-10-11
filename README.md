@@ -374,6 +374,16 @@ Set the working directory to this repository root.
 | `validate_env_config` | Validate `.env` credential file format |
 | `diagnose_error` | Diagnose s&box console errors and suggest fixes |
 
+
+## Compatibility (LTS)
+
+The library and server release independently and both are LTS. Certify each
+library/server/engine/provider pairing once with real evidence; a fundamental
+wire/semantic change invalidates affected certifications and must be re-tested
+before release. Public methods and endpoints are LTS surface: no silent
+rename, removal or narrowing. See
+[docs/compatibility-certification.md](docs/compatibility-certification.md).
+
 ## License
 
 MIT — see [LICENSE](LICENSE).
