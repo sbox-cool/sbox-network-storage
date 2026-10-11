@@ -62,6 +62,19 @@ public static partial class SyncToolConfig
 		if ( !Directory.Exists( absoluteDir ) )
 			return new List<JsonElement>();
 
+		return FindPayloadSourceFiles( kind, absoluteDir )
+			.Select( path => TryLoadSourcePayloadResource( kind, path, out var resource, includeDeprecated ) ? resource : default )
+			.Where( resource => resource.ValueKind != JsonValueKind.Undefined )
+			.ToList();
+	}
+
+	/// <summary>
+	/// Source files that Push sends for a resource kind: typed (*.endpoint.yml/.yaml/.json) and plain
+	/// (*.yml/.yaml/.json) files, one per resource id, YAML preferred over JSON. The Sync window uses
+	/// the same list so what it shows is exactly what Push sends.
+	/// </summary>
+	public static List<string> FindPayloadSourceFiles( string kind, string absoluteDir )
+	{
 		var typed = Directory.GetFiles( absoluteDir, $"*.{kind}.yml" )
 			.Concat( Directory.GetFiles( absoluteDir, $"*.{kind}.yaml" ) )
 			.Concat( Directory.GetFiles( absoluteDir, $"*.{kind}.json" ) );
@@ -77,8 +90,6 @@ public static partial class SyncToolConfig
 			.GroupBy( path => ResourceIdFromFilePath( path, kind ), StringComparer.OrdinalIgnoreCase )
 			.Select( files => files.First() )
 			.OrderBy( path => path, StringComparer.OrdinalIgnoreCase )
-			.Select( path => TryLoadSourcePayloadResource( kind, path, out var resource, includeDeprecated ) ? resource : default )
-			.Where( resource => resource.ValueKind != JsonValueKind.Undefined )
 			.ToList();
 	}
 

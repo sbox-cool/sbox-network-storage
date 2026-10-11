@@ -233,6 +233,20 @@ public class TestResultsWindow : PaintedWindow
 		}
 		entry.Reason = reasons.Count > 0 ? string.Join( "; ", reasons ) : null;
 
+		// The generic "Endpoint returned HTTP 400." hides the real cause; the server puts it in result.body.error.
+		if ( !entry.Passed && test.TryGetProperty( "result", out var failedResult ) && failedResult.ValueKind == JsonValueKind.Object
+			&& failedResult.TryGetProperty( "body", out var failedBody ) && failedBody.ValueKind == JsonValueKind.Object
+			&& failedBody.TryGetProperty( "error", out var bodyError ) && bodyError.ValueKind == JsonValueKind.Object )
+		{
+			var code = ReadString( bodyError, "code" );
+			var message = ReadString( bodyError, "message" );
+			var docs = ReadString( bodyError, "docsUrl" );
+			var detail = string.Join( ": ", new[] { code, message }.Where( s => !string.IsNullOrEmpty( s ) ) );
+			if ( !string.IsNullOrEmpty( docs ) ) detail += $" ({docs})";
+			if ( !string.IsNullOrEmpty( detail ) )
+				entry.Reason = string.IsNullOrEmpty( entry.Reason ) ? detail : $"{entry.Reason} {detail}";
+		}
+
 		if ( test.TryGetProperty( "warnings", out var ws ) && ws.ValueKind == JsonValueKind.Array )
 		{
 			entry.Warnings = ws.EnumerateArray()
