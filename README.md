@@ -1,6 +1,8 @@
-# Network Storage for s&box
-Install via s&box editor -> https://sbox.game/sboxcool/network-storage
-Self host -> https://github.com/sbox-cool/sbox-network-storage-server
+# Server-side endpoints & database for s&box
+- Install via s&box editor -> https://sbox.game/sboxcool/network-storage
+- Self host -> https://github.com/sbox-cool/sbox-network-storage-server
+
+
 Persistent cloud storage, server-side endpoints, and an editor sync tool for s&box games — [sboxns.com](https://sboxns.com) by sbox.cool.
 
 ## Useful Links
