@@ -60,6 +60,7 @@ public static partial class NetworkStorage
 			["x-api-key"] = secretKey,
 			["x-public-key"] = ApiKey ?? ""
 		};
+		AddRuntimeTargetHeaders( headers );
 
 		try
 		{

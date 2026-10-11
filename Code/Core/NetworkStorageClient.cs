@@ -17,8 +17,14 @@ public static partial class NetworkStorage
 	/// <summary>API version prefix.</summary>
 	public static string ApiVersion { get; private set; } = "v3";
 
-	/// <summary>Network Storage library package version reported to analytics.</summary>
-	public static string PackageVersion { get; private set; } = "1.0";
+	/// <summary>Library SemVer, independent of the s&amp;box package and game revisions.</summary>
+	public const string LibraryVersion = "1.1.0";
+
+	/// <summary>Oldest self-hosted server baseline; newer features require capability checks.</summary>
+	public const string MinServerVersion = "0.4.0";
+
+	/// <summary>Library version reported to analytics. Retained as an LTS public API.</summary>
+	public static string PackageVersion => LibraryVersion;
 
 	/// <summary>Your project ID from the sboxcool.com dashboard.</summary>
 	public static string ProjectId { get; private set; }
