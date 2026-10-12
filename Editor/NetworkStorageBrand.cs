@@ -2,19 +2,19 @@ using Sandbox;
 using Editor;
 
 /// <summary>
-/// Approved brand mark for s&amp;box Network Storage (P5 Sky).
+/// Approved brand mark for s&amp;box Network Storage (Demo green).
 /// Vector redraw of <c>Assets/Branding/icon.svg</c> using only the supported
 /// <c>Paint</c> rect APIs, so editor headers never depend on texture imports.
-/// Tile is P5 primary (#0f6a86), glyph is white (#ffffff); all glyph data is
+/// Tile is demo green (#10b981), glyph is dark ink (#04120c); all glyph data is
 /// static: painting allocates nothing per frame.
 /// </summary>
 public static class NetworkStorageBrand
 {
-	/// <summary>P5 primary tile (#0f6a86).</summary>
-	private static readonly Color TileColor = new Color( 0.0588f, 0.4157f, 0.5255f );
+	/// <summary>Demo green primary tile (#10b981).</summary>
+	private static readonly Color TileColor = new Color( 16f / 255f, 185f / 255f, 129f / 255f );
 
-	/// <summary>White glyph (#ffffff).</summary>
-	private static readonly Color GlyphColor = Color.White;
+	/// <summary>Dark ink glyph (#04120c).</summary>
+	private static readonly Color GlyphColor = new Color( 4f / 255f, 18f / 255f, 12f / 255f );
 
 	// Glyph bars in 64x64 icon space (x, y, w, h). Their union reproduces the
 	// approved path exactly; overlaps share one brush so seams are invisible.
@@ -30,7 +30,7 @@ public static class NetworkStorageBrand
 	};
 
 	/// <summary>
-	/// Draw the sky tile plus white glyph at the given position and size.
+	/// Draw the green tile plus dark ink glyph at the given position and size.
 	/// Only allocation-free <c>Paint</c> rect calls; leaves the pen transparent,
 	/// so callers must set their own pen before drawing text afterwards.
 	/// </summary>
