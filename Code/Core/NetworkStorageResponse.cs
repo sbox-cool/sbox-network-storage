@@ -149,6 +149,8 @@ public static partial class NetworkStorage
 			return;
 
 		var safeCode = string.IsNullOrWhiteSpace( code ) ? "UNKNOWN" : code;
+		if ( safeCode == "LIBRARY_UNSUPPORTED" ) ObserveLibraryStatus( "unsupported" );
+		else if ( safeCode == "LIBRARY_BLOCKED" ) ObserveLibraryStatus( "blocked" );
 		var safeMessage = message ?? "";
 		_lastEndpointErrors[slug] = new EndpointErrorInfo
 		{

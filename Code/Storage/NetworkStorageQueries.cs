@@ -27,6 +27,7 @@ public static partial class NetworkStorage
 		}
 
 		var tag = $"query:{queryId}";
+		if ( !await RequireCapabilityAsync( "queries", tag ) ) return null;
 		var path = $"/queries/{EscapeRouteSegment( ProjectId )}/{EscapeRouteSegment( queryId )}";
 		string url = null;
 
@@ -53,7 +54,7 @@ public static partial class NetworkStorage
 				Log.Info( $"[NetworkStorage] {tag} request: GET {ApiRoot}{path}{suffix}" );
 			}
 
-			var raw = await Http.RequestStringAsync( url, "GET", null, headers );
+			var raw = await RequestStringAsync(url, "GET", null, headers);
 			if ( NetworkStorageLogConfig.LogResponses )
 				Log.Info( $"[NetworkStorage] {tag} → {TruncateJson( raw, 300 )}" );
 

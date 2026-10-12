@@ -72,6 +72,7 @@ public static partial class NetworkStorage
 		CdnUrl = string.IsNullOrEmpty( cdnUrl ) ? null : cdnUrl.TrimEnd( '/' );
 		PublishTarget = NormalizePublishTarget( publishTarget ?? PublishTarget );
 		_autoConfigAttempted = true;
+		InitializeServerCompatibility();
 		NetworkStorageRevisionHandler.Initialize();
 		NetworkStorageAnalyticsRuntime.EnsureCreated( "configure" );
 		if ( NetworkStorageLogConfig.LogConfig )

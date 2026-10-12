@@ -143,6 +143,40 @@ public partial class SyncToolWindow : PaintedWindow
 		// shows immediately without waiting for "Pull from Web".
 		if ( SyncToolConfig.IsValid )
 			_ = DetectPackageInfoAsync();
+		_ = RefreshCompatibilityAsync();
+	}
+
+	private async Task RefreshCompatibilityAsync()
+	{
+		try
+		{
+			await EditorCompatibility.RefreshAsync();
+			Update();
+			if ( EditorCompatibility.TakeModal() is { } modal )
+				MessageDialog.Show( modal.Title, modal.Message, "" );
+		}
+		catch ( Exception ex )
+		{
+			Log.Info( $"[SyncTool] Compatibility check: {ex.Message}" );
+		}
+	}
+
+	/// <summary>One dismissible notice under the server line. Errors cannot be dismissed because they block Push All.</summary>
+	private void DrawCompatBanner( float pad, float w, ref float y )
+	{
+		var notice = EditorCompatibility.Banner;
+		if ( notice is null ) return;
+		var color = notice.Level == "error" ? Color.Red : notice.Level == "warning" ? Color.Orange : Color.Cyan;
+		Paint.SetDefaultFont( size: 9 );
+		Paint.SetPen( color.WithAlpha( 0.95f ) );
+		foreach ( var line in EditorCompatibility.Wrap( $"{notice.Title}: {notice.Message}", w - 70 ) )
+		{
+			Paint.DrawText( new Rect( pad, y, w - 70, 14 ), line, TextFlag.LeftCenter );
+			y += 14;
+		}
+		if ( notice.Level != "error" )
+			DrawSmallButton( new Rect( pad + w - 64, y - 16, 64, 18 ), "Dismiss", Color.White, "compat_dismiss", () => { EditorCompatibility.DismissBanner(); Update(); } );
+		y += 6;
 	}
 
 	private async Task DetectPackageInfoAsync()
@@ -452,6 +486,7 @@ public partial class SyncToolWindow : PaintedWindow
 			Paint.DrawText( new Rect( pad, y, w, 14 ), $"Connected — {SyncToolConfig.ProjectId}", TextFlag.LeftCenter );
 			y += 18;
 			DrawServerLines( pad, w, ref y );
+			DrawCompatBanner( pad, w, ref y );
 
 			Paint.SetDefaultFont( size: 9 );
 			Paint.SetPen( Color.White.WithAlpha( 0.72f ) );
@@ -940,6 +975,7 @@ public partial class SyncToolWindow : PaintedWindow
 			Paint.DrawText( new Rect( pad, y, w, 14 ), $"Connected — {SyncToolConfig.ProjectId}", TextFlag.LeftCenter );
 			y += 18;
 			DrawServerLines( pad, w, ref y );
+			DrawCompatBanner( pad, w, ref y );
 
 			Paint.SetDefaultFont( size: 9 );
 			Paint.SetPen( Color.White.WithAlpha( 0.72f ) );
@@ -2471,6 +2507,11 @@ public partial class SyncToolWindow : PaintedWindow
 	private async Task PushAll()
 	{
 		if ( _busy || !SyncToolConfig.IsValid ) return;
+		if ( EditorCompatibility.PushBlocked )
+		{
+			MessageDialog.Show( "Push All refused", EditorCompatibility.PushBlockedSteps, "" );
+			return;
+		}
 		_scrollY = 0;
 		_busy = true;
 		_busyItem = "push_all";
