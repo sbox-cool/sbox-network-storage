@@ -1,9 +1,10 @@
-# Server-side endpoints & database for s&box
-- Install via s&box editor -> https://sbox.game/sboxcool/network-storage
-- Self host -> https://github.com/sbox-cool/sbox-network-storage-server
+# <img src="Assets/Branding/icon-512.png" width="48" height="48" alt="s&box Network Storage icon: white step-block glyph on a sky-blue tile" /> s&box Network Storage
 
+Client library and editor tools for an open-source s&box game backend.
 
-Persistent cloud storage, server-side endpoints, and an editor sync tool for s&box games — [sboxns.com](https://sboxns.com) by sbox.cool.
+**Open-source, self-hosted game backend for s&box**: player saves, inventory, purchases, reward logic, and server-side endpoints — for player-hosted/P2P sessions **and** dedicated servers.
+
+This repo is the **client library + editor Sync Tool** — install via the s&box editor at https://sbox.game/sboxcool/network-storage. The backend API is open-source and self-hostable: https://github.com/sbox-cool/sbox-network-storage-server — start at [sboxns.com](https://sboxns.com), the self-hosting landing site.
 
 ## Useful Links
 - Network Storage: https://sbox.cool/tools/network-storage

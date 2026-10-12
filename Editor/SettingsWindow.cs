@@ -104,15 +104,16 @@ public class SettingsWindow : PaintedWindow
 		// Scrollable content — offset all y by -_scrollY
 		var y = 38f - _scrollY;
 
-		// ── Title ──
-		Paint.SetDefaultFont( size: 14, weight: 700 );
+		// ── Brand header: approved icon + short title (never clips at minimum width) ──
+		NetworkStorageBrand.DrawIcon( pad, y, 24f );
+		Paint.SetDefaultFont( size: 13, weight: 700 );
 		Paint.SetPen( Color.White );
-		Paint.DrawText( new Rect( pad, y, w, 24 ), "Network Storage Settings", TextFlag.LeftCenter );
+		Paint.DrawText( new Rect( pad + 32f, y, w - 32f, 24f ), Title, TextFlag.LeftCenter );
 		y += 32;
 
 		Paint.SetDefaultFont( size: 9 );
 		Paint.SetPen( Color.White.WithAlpha( 0.5f ) );
-		Paint.DrawText( new Rect( pad, y, w, 14 ), "Runtime behavior — these settings ship with your game", TextFlag.LeftCenter );
+		Paint.DrawText( new Rect( pad, y, w, 14 ), "Settings — runtime behavior; these settings ship with your game", TextFlag.LeftCenter );
 		y += 22;
 
 		DrawSeparator( ref y, w, pad );
