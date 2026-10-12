@@ -1,7 +1,8 @@
 using Sandbox;
 using Editor;
 
-/// Approved brand mark for s&box Network Storage (P5 Sky).
+/// <summary>
+/// Approved brand mark for s&amp;box Network Storage (P5 Sky).
 /// Vector redraw of <c>Assets/Branding/icon.svg</c> using only the supported
 /// <c>Paint</c> rect APIs, so editor headers never depend on texture imports.
 /// Tile is P5 primary (#0f6a86), glyph is white (#ffffff); all glyph data is
@@ -28,6 +29,7 @@ public static class NetworkStorageBrand
 		new Rect( 26, 50, 32, 8 ), // bottom bar
 	};
 
+	/// <summary>
 	/// Draw the sky tile plus white glyph at the given position and size.
 	/// Only allocation-free <c>Paint</c> rect calls; leaves the pen transparent,
 	/// so callers must set their own pen before drawing text afterwards.
