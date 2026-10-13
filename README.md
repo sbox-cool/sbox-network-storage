@@ -1,4 +1,4 @@
-# <img src="Assets/Branding/icon-512.png" width="48" height="48" alt="s&box Network Storage icon: dark interlocking ns glyph on a green tile" /> s&box Network Storage
+# <img src="Assets/Branding/icon-512.png" width="48" height="48" alt="Network Storage icon: shaded lime cube with a smug face and storage port" /> s&box Network Storage
 
 Client library and editor tools for an open-source s&box game backend.
 
