@@ -1,0 +1,86 @@
+# This library, as changed in the pull request, inside the s&box engine on windows-latest:
+# the newest Facepunch/sbox-public built from source (no pin), a dedicated server started with
+# -mcp, and sbox-ns built from the server repository's main branch, all driven through sbox-cli by
+# the server repo's tools/sbox-cli-e2e runner. Evidence is uploaded as an artifact.
+#
+# The editor cannot run on hosted runners (it needs a logged-in Steam client), so this covers
+# runtime calls only; Sync Tool/editor changes still need the editor test (pending-sbox-editor-test).
+name: sbox-cli e2e
+
+on:
+  pull_request:
+    paths:
+      - "Code/**"
+      - "Editor/**"
+      - "network-storage.sbproj"
+      - ".github/workflows/sbox-cli-e2e.yml"
+  push:
+    branches: [main]
+    paths:
+      - "Code/**"
+      - "Editor/**"
+  schedule:
+    - cron: "41 4 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sbox-cli-e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  dedicated:
+    name: Dedicated server + sbox-cli (Windows)
+    runs-on: windows-latest
+    timeout-minutes: 90
+    env:
+      GITHUB_TOKEN: ${{ github.token }}
+      DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: library
+
+      - uses: actions/checkout@v4
+        with:
+          repository: sbox-cool/sbox-network-storage-server
+          ref: feat/sbox-cli-e2e
+          path: server
+          persist-credentials: false
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: server/global.json
+
+      - name: Build s&box from source
+        shell: pwsh
+        run: |
+          $engine = Join-Path $env:RUNNER_TEMP 'sbox-public'
+          git clone -q --filter=blob:none https://github.com/Facepunch/sbox-public.git $engine
+          "ENGINE=$engine/game" | Add-Content $env:GITHUB_ENV
+          Write-Host "engine $(git -C $engine log -1 --format='%H %cs %s')"
+          Push-Location $engine
+          cmd /c Setup.bat
+          $code = $LASTEXITCODE
+          Pop-Location
+          if ($code -ne 0) { throw "Setup.bat failed ($code)" }
+
+      - name: Library from this change on the dedicated server
+        shell: pwsh
+        working-directory: server
+        run: dotnet run tools/sbox-cli-e2e/run.cs -- --engine $env:ENGINE --targets dedicated --library "$env:GITHUB_WORKSPACE/library" --startup-timeout 600 --out "$env:GITHUB_WORKSPACE/e2e-out"
+
+      - name: Summary
+        if: always()
+        shell: pwsh
+        run: if (Test-Path e2e-out/summary.md) { Get-Content e2e-out/summary.md -Raw | Add-Content $env:GITHUB_STEP_SUMMARY }
+
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbox-cli-e2e
+          path: e2e-out
+          if-no-files-found: warn
