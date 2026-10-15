@@ -19,4 +19,4 @@ A maintainer must independently review meaningful source/CI changes and comment 
 
 `/compatibility-review FULL_HEAD_SHA none|additive-default-off|changed|library-code`
 
-This acknowledges the exact head; it does not waive removed APIs or missing native/editor evidence. New pushes invalidate review and certification. See [compatibility policy](https://github.com/sbox-cool/sboxns.com/tree/9dd4d2e324a671abbcde96081519c94edf2f152e/tools/compatibility).
+This acknowledges the exact head; it does not waive removed APIs or missing native/editor evidence. New pushes invalidate review and certification. See [compatibility policy](https://github.com/sbox-cool/sboxns.com/tree/ca71493c0617e675a99bfbcdbd0251c6fb86e7c9/tools/compatibility).

@@ -30,7 +30,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: sbox-cool/sboxns.com
-          ref: 9dd4d2e324a671abbcde96081519c94edf2f152e
+          ref: ca71493c0617e675a99bfbcdbd0251c6fb86e7c9
           persist-credentials: false
       - uses: actions/setup-node@v4
         with:
@@ -49,7 +49,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: sbox-cool/sboxns.com
-          ref: 9dd4d2e324a671abbcde96081519c94edf2f152e
+          ref: ca71493c0617e675a99bfbcdbd0251c6fb86e7c9
           persist-credentials: false
       - uses: actions/setup-node@v4
         with:

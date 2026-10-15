@@ -82,7 +82,10 @@ source/CI changes, a write/maintain/admin collaborator must comment:
 
 Use the single matching classification, not the literal pipe-separated list.
 The acknowledgement is head-specific and cannot waive public API removal,
-generated binary changes or missing native/editor validation.
+generated binary/build metadata changes or missing native/editor validation.
+Candidate project settings are deliberately not executed by the trusted source
+harness, so its pass cannot approve changed compiler/build flags. Authoring-schema
+changes also require editor evidence, not just runtime tests.
 
 `Native compatibility` is manually dispatched only after that acknowledgement,
 for an open same-repository PR. It compares the published baseline's runtime
