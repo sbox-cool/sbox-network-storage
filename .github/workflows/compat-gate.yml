@@ -336,7 +336,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        server: [latest-release, main]
+        # latest-release: what most owners run. oldest-supported: the release named by the library's
+        # own NetworkStorage.MinServerVersion, for owners who never update. main: the next server.
+        server: [latest-release, oldest-supported, main]
     permissions:
       contents: read
     steps:
@@ -360,16 +362,25 @@ jobs:
         with:
           global-json-file: server/global.json
 
-      - name: Download latest server release (verified)
-        if: matrix.server == 'latest-release'
+      - name: Download server release (verified)
+        if: matrix.server != 'main'
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
+          SERVER_LEG: ${{ matrix.server }}
         run: |
           $ErrorActionPreference = 'Stop'
           $dir = Join-Path $env:RUNNER_TEMP 'server-release'
           New-Item -ItemType Directory -Force -Path $dir | Out-Null
-          gh release download --repo $env:SERVER_REPO --pattern '*-win-x64.zip' --pattern SHA256SUMS --dir $dir
+          $tag = @()
+          if ($env:SERVER_LEG -eq 'oldest-supported') {
+            $min = (Get-ChildItem -Path (Join-Path $env:GITHUB_WORKSPACE 'library/Code') -Recurse -Filter *.cs |
+              Select-String -Pattern 'MinServerVersion\s*=\s*"([^"]+)"' | Select-Object -First 1).Matches.Groups[1].Value
+            if (-not $min) { throw 'the library declares no NetworkStorage.MinServerVersion' }
+            Write-Host "Library MinServerVersion: $min"
+            $tag = @("v$min")
+          }
+          gh release download @tag --repo $env:SERVER_REPO --pattern '*-win-x64.zip' --pattern SHA256SUMS --dir $dir
           if ($LASTEXITCODE -ne 0) { throw "gh release download failed" }
           $zips = @(Get-ChildItem -Path $dir -Filter '*-win-x64.zip')
           if ($zips.Count -ne 1) { throw "expected one win-x64 zip, found $($zips.Count)" }
@@ -410,7 +421,7 @@ jobs:
           $out = Join-Path $env:GITHUB_WORKSPACE "e2e-out/$env:SERVER_LEG"
           $library = Join-Path $env:GITHUB_WORKSPACE 'library'
           $cliArgs = @('--', '--engine', $env:ENGINE, '--targets', 'dedicated', '--library', $library, '--startup-timeout', '600', '--out', $out)
-          if ($env:SERVER_LEG -eq 'latest-release') {
+          if ($env:SERVER_LEG -ne 'main') {
             $cliArgs += @('--server-binary', $env:SERVER_BINARY)
           }
           dotnet run tools/sbox-cli-e2e/run.cs @cliArgs
@@ -574,6 +585,7 @@ jobs:
             case "$job" in
               "Engine (server latest-release)") title="Nightly compat failure: library main x server $server_tag" ;;
               "Engine (server main)") title="Nightly compat failure: library main x server main" ;;
+              "Engine (server oldest-supported)") title="Nightly compat failure: library main x oldest supported server" ;;
               "Engine (published revision)") title="Nightly compat failure: library r$rev x server $server_tag" ;;
               *) continue ;;
             esac
