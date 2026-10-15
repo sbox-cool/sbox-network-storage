@@ -124,7 +124,7 @@ public static partial class NetworkStorage
 		OnLibraryStatusChanged?.Invoke( status );
 	}
 
-	private static async Task<string> RequestStringAsync( string url, string method = "GET", HttpContent content = null,
+	internal static async Task<string> RequestStringAsync( string url, string method = "GET", HttpContent content = null,
 		Dictionary<string, string> headers = null )
 	{
 		var generation = _compatibilityGeneration;
