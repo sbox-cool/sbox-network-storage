@@ -20,9 +20,8 @@ on:
         required: false
         type: string
       server_ref:
-        description: Server ref for the main leg and run.cs (sbox-cool/sbox-network-storage-server).
+        description: Server ref to test (sbox-cool/sbox-network-storage-server). Empty uses SERVER_REF (env at the top of this file).
         required: false
-        default: main
         type: string
 
 permissions:
