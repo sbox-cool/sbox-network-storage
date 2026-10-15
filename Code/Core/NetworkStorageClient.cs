@@ -87,10 +87,4 @@ public static partial class NetworkStorage
 
 	private static string NormalizePublishTarget( string publishTarget )
 		=> string.Equals( publishTarget, "next", StringComparison.OrdinalIgnoreCase ) ? "next" : "live";
-
-	/// <summary>Reset the auto-configure guard so AutoConfigure() can retry.</summary>
-	public static void ResetAutoConfigureFlag()
-	{
-		_autoConfigAttempted = false;
-	}
 }
