@@ -56,6 +56,8 @@ Or add it as a git submodule:
 git submodule add https://github.com/sbox-cool/sbox-network-storage "Libraries/Network Storage by sboxcool"
 ```
 
+The editor does not pick up a library folder added while it is running: restart the editor (or reopen the project) after cloning. Checked on s&box 26.10.13.
+
 ### Updating
 
 Use **Library Manager** to update; it replaces the library folder. For a manual install, `git pull` inside the library folder, or delete the old `Libraries/<library folder>` completely and install again. **Do not copy new files over an old install**: files moved between versions (for example `JsonHelpers.cs`, `NetLog.cs`, `NetworkStorageClient.cs` now live under `Code/Core/`) would exist twice and the project fails to compile with duplicate-type errors (CS0121).
