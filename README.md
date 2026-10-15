@@ -11,6 +11,7 @@ This repo is the **client library + editor Sync Tool** — install via the s&box
 - Documentation & Tutorials: http://sbox.cool/wiki/network-storage-v3
 - s&box editor Library: [https://sbox.game/sboxcool/network-storage](https://sbox.game/sboxcool/network-storage)
    - Search `Network Storage by sbox.cool` with author name: `sboxcool`
+- Community Discord (sboxns.com and sbox.cool): https://sboxns.com/discord-invite
 - sbox.cool and sboxcool.com are both operated the same group. `SboxCool.com` is our LTS url, e.g. `api.sboxcool.com`.
 
 ## Features
