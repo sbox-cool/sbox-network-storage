@@ -99,6 +99,7 @@ Configure an approved `self-hosted, sbox-native` runner, `SBOX_GAME` and
 `SBOX_CERTIFICATION_RUNNER_ENABLED=true` before dispatching. Never execute fork
 code on that persistent runner. The native job has read-only repository
 permissions; only a separate hosted job publishes its result.
+Windows native runners also need Git Bash for the portable command steps.
 
 The workflows pin shared tooling to an immutable commit in `sbox-cool/sboxns.com`.
 Policy details and limitations live in its `tools/compatibility/README.md`.

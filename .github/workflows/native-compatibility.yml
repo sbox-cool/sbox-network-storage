@@ -48,6 +48,9 @@ jobs:
     needs: preflight
     runs-on: [self-hosted, sbox-native]
     timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v4
         with:
