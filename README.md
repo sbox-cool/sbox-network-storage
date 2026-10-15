@@ -1,4 +1,4 @@
-# <img src="Assets/Branding/icon-512.png" width="48" height="48" alt="s&box Network Storage icon: dark interlocking ns glyph on a green tile" /> s&box Network Storage
+# <img src="Assets/Branding/icon-512.png" width="48" height="48" alt="Network Storage icon: shaded lime cube with a smug face and storage port" /> s&box Network Storage
 
 Client library and editor tools for an open-source s&box game backend.
 
@@ -11,6 +11,7 @@ This repo is the **client library + editor Sync Tool** — install via the s&box
 - Documentation & Tutorials: http://sbox.cool/wiki/network-storage-v3
 - s&box editor Library: [https://sbox.game/sboxcool/network-storage](https://sbox.game/sboxcool/network-storage)
    - Search `Network Storage by sbox.cool` with author name: `sboxcool`
+- Community Discord (sboxns.com and sbox.cool): https://sboxns.com/discord-invite
 - sbox.cool and sboxcool.com are both operated the same group. `SboxCool.com` is our LTS url, e.g. `api.sboxcool.com`.
 
 ## Features
@@ -95,13 +96,21 @@ Maintainer release sequence:
 
 1. Bump `LibraryVersion` in `Code/Core/NetworkStorageClient.cs`; Python reads
    that constant, so there is no second SemVer to update.
-2. Record exact-source editor/game evidence against both the current server and
-   `0.4.0`, including public/authenticated requests and Sync Tool connect/push.
+2. Publish only a `main` commit whose **Compat gate** is green: the public API
+   check, and this library running inside s&box against the latest server
+   release, the oldest supported one (`MinServerVersion`) and server `main`
+   ([docs/compat-gate.md](docs/compat-gate.md)). Every
+   `Code/`/`Editor/` change since the last published revision must carry
+   `editor-tested` evidence. If `main` moved since its last run, run the gate on
+   that commit by hand (Actions > Compat gate > Run workflow) before publishing.
    Follow [compatibility certification](docs/compatibility-certification.md).
-3. Tag the tested source `vX.Y.Z`, then publish on sbox.game.
-4. Create GitHub Release `vX.Y.Z` recording the assigned s&box package revision,
-   `MinServerVersion`, included PRs/issues and tested server/engine/provider
-   pairings with evidence links.
+3. Tag the tested source `vX.Y.Z`, then publish on sbox.game from that commit.
+4. Within about 30 minutes the revision sync tags the matching commit
+   `r<revision>` and creates its GitHub Release (see "Versions and sbox.game
+   revisions"); add the tested server/engine/provider pairings with evidence
+   links to its notes. From then on the server's Compat gate runs this revision
+   against every server change and release, and this repo's nightly gate runs it
+   against the latest server release, opening a `compat` issue if it breaks.
 5. Submit the published-library entry and tested evidence to the server's
    [`compat/library-matrix.json`](https://github.com/sbox-cool/sbox-network-storage-server/blob/main/compat/library-matrix.json)
    ([server #59](https://github.com/sbox-cool/sbox-network-storage-server/issues/59)).
@@ -118,6 +127,28 @@ version-aware server and released `0.4.0`; record library source commit/SemVer,
 assigned package revision, server commit/version, engine build, database and
 evidence URLs. Headless-engine/dedicated-server smoke checks alone do not certify
 this pairing or close that gate.
+
+### Versions and sbox.game revisions
+
+`LibraryVersion` (SemVer) and the sbox.game package revision are separate.
+sbox.game assigns each publish a global revision; no committed file predicts it,
+and `.version` is only the Library Manager install marker.
+
+`.github/workflows/sbox-revisions.yml` maps every published revision to the
+commit whose shipped files match the revision's public manifest by size and CRC64
+(line endings normalized), then creates a lightweight tag `r<revision>` and a
+GitHub Release `<LibraryVersion> · sbox.game r<revision>`. Only the current
+revision is marked latest. Existing tags are never moved. Revisions published from
+a commit that is on a remote branch only are reported as such.
+
+To check one revision locally:
+
+```sh
+node .github/scripts/sbox-revisions.mjs --revision <id>
+```
+
+Publish only from a committed and pushed tree; the mapping can only find commits
+that exist on the remote.
 
 
 ## Setup
