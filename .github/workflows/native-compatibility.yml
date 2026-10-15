@@ -21,6 +21,9 @@ concurrency:
 jobs:
   preflight:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
     outputs:
       head: ${{ steps.prepare.outputs.head }}
       pr: ${{ steps.prepare.outputs.pr }}
