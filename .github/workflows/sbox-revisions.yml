@@ -1,0 +1,52 @@
+name: sbox.game revisions
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"
+  push:
+    branches: [main]
+    paths:
+      - ".github/scripts/sbox-revisions*.mjs"
+      - ".github/workflows/sbox-revisions.yml"
+      - "Code/**"
+      - "Editor/**"
+      - "Assets/**"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: sbox-revisions
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Unit tests
+        run: node --test .github/scripts/sbox-revisions.test.mjs
+
+      - name: Link sbox.game revisions to source
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: node .github/scripts/sbox-revisions.mjs --apply --json "$RUNNER_TEMP/revisions.json"
+
+      - name: Upload revision report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbox-revisions-report
+          path: ${{ runner.temp }}/revisions.json
+          if-no-files-found: ignore
