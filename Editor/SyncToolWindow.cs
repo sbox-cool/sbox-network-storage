@@ -3921,7 +3921,8 @@ public partial class SyncToolWindow : PaintedWindow
 
 			if ( NormalizeCollectionField( local, "collectionType", "per-steamid" ) != NormalizeCollectionField( remote, "collectionType", "per-steamid" ) ) return false;
 			if ( NormalizeCollectionField( local, "accessMode", "public" ) != NormalizeCollectionField( remote, "accessMode", "public" ) ) return false;
-			if ( NormalizeCollectionField( local, "visibility", "" ) != NormalizeCollectionField( remote, "visibility", "" ) ) return false;
+			// An unset visibility means the server default (it reports e.g. "private" for user collections).
+			if ( local.TryGetProperty( "visibility", out _ ) && NormalizeCollectionField( local, "visibility", "" ) != NormalizeCollectionField( remote, "visibility", "" ) ) return false;
 			if ( NormalizeCollectionField( local, "maxRecords", 1 ) != NormalizeCollectionField( remote, "maxRecords", 1 ) ) return false;
 			if ( NormalizeCollectionField( local, "allowRecordDelete", false ) != NormalizeCollectionField( remote, "allowRecordDelete", false ) ) return false;
 			if ( NormalizeCollectionField( local, "requireSaveVersion", false ) != NormalizeCollectionField( remote, "requireSaveVersion", false ) ) return false;
