@@ -34,6 +34,8 @@ concurrency:
 
 env:
   SERVER_REPO: sbox-cool/sbox-network-storage-server
+  # Server ref for the main leg and run.cs. Flip to "main" once server PR #97 lands.
+  SERVER_REF: feat/sbox-cli-e2e
   SBOXNS_REPO: sbox-cool/sboxns.com
   # sboxns.com tools/compatibility/ContractInspector (pinned; Microsoft.CodeAnalysis.CSharp 4.14.0).
   SBOXNS_REF: ca71493c0617e675a99bfbcdbd0251c6fb86e7c9
@@ -169,7 +171,7 @@ jobs:
           reason="No public API removed or changed."
           if [ "$inspector" -ne 0 ] || [ "$errors" -gt 0 ]; then
             result=fail
-            reason="ContractInspector could not parse $errors file(s); see the errors list. Fix the parse error before the API can be checked."
+            reason="ContractInspector reported $errors parse error(s); see the errors list. Fix them before the API can be checked."
           elif [ "$removed" -gt 0 ] && [ "$approved" != "true" ]; then
             result=fail
             reason="$removed public symbol(s) removed or changed without the compat: breaking-approved label. Keep the old form (see docs/compatibility-certification.md) or get the label approved."
@@ -350,7 +352,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ${{ env.SERVER_REPO }}
-          ref: ${{ inputs.server_ref || 'main' }}
+          ref: ${{ inputs.server_ref || env.SERVER_REF }}
           path: server
           persist-credentials: false
 
@@ -461,7 +463,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ${{ env.SERVER_REPO }}
-          ref: ${{ inputs.server_ref || 'main' }}
+          ref: ${{ inputs.server_ref || env.SERVER_REF }}
           path: server
           persist-credentials: false
 
