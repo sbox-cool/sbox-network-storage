@@ -251,6 +251,10 @@ public static class SyncToolTransforms
 			local["description"] = desc.GetString();
 		if ( source.TryGetProperty( "notes", out var notes ) && !string.IsNullOrEmpty( notes.GetString() ) )
 			local["notes"] = notes.GetString();
+		// Push verification (CollectionSemanticsMatch) compares visibility; without it every collection
+		// that sets `visibility:` reported SYNC_VERIFICATION_MISMATCH after a successful push.
+		if ( source.TryGetProperty( "visibility", out var visibility ) && visibility.ValueKind == JsonValueKind.String && !string.IsNullOrEmpty( visibility.GetString() ) )
+			local["visibility"] = visibility.GetString();
 
 		if ( source.TryGetProperty( "rateLimits", out var rl ) )
 			local["rateLimits"] = rl;
