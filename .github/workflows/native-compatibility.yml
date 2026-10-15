@@ -1,0 +1,102 @@
+name: Native compatibility
+run-name: 'Native PR #${{ inputs.pr }} @${{ inputs.head }}'
+on:
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: Reviewed same-repository PR number
+        required: true
+      head:
+        description: Exact reviewed 40-character Git head
+        required: true
+      server_ref:
+        description: Released server tag to compare against
+        required: true
+        default: v0.5.4
+permissions:
+  contents: read
+concurrency:
+  group: native-compatibility
+  cancel-in-progress: false
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    outputs:
+      head: ${{ steps.prepare.outputs.head }}
+      pr: ${{ steps.prepare.outputs.pr }}
+      baseline: ${{ steps.prepare.outputs.baseline }}
+      server_ref: ${{ steps.prepare.outputs.server_ref }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: sbox-cool/sboxns.com
+          ref: 9dd4d2e324a671abbcde96081519c94edf2f152e
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - id: prepare
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          SBOX_GAME: ${{ vars.SBOX_GAME }}
+          SBOX_CERTIFICATION_RUNNER_ENABLED: ${{ vars.SBOX_CERTIFICATION_RUNNER_ENABLED }}
+        run: node tools/compatibility/prepare-native-pr.mjs
+  native:
+    needs: preflight
+    runs-on: [self-hosted, sbox-native]
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: sbox-cool/sboxns.com
+          ref: 9dd4d2e324a671abbcde96081519c94edf2f152e
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.100'
+      - name: Compare published baseline and reviewed candidate
+        env:
+          SBOX_GAME: ${{ vars.SBOX_GAME }}
+          NATIVE_HEAD: ${{ needs.preflight.outputs.head }}
+          NATIVE_PR: ${{ needs.preflight.outputs.pr }}
+          NATIVE_BASELINE: ${{ needs.preflight.outputs.baseline }}
+          SERVER_REF: ${{ needs.preflight.outputs.server_ref }}
+        run: |
+          node tools/docs/run-native.mjs --engine "$SBOX_GAME" --server-ref "$SERVER_REF" --revision "$NATIVE_BASELINE" --output "$RUNNER_TEMP/compatibility-$GITHUB_RUN_ID/baseline"
+          node tools/docs/run-native.mjs --engine "$SBOX_GAME" --server-ref "$SERVER_REF" --library-commit "$NATIVE_HEAD" --library-pr "$NATIVE_PR" --output "$RUNNER_TEMP/compatibility-$GITHUB_RUN_ID/candidate"
+      - name: Require full coverage of both exact builds
+        env:
+          NATIVE_HEAD: ${{ needs.preflight.outputs.head }}
+          NATIVE_BASELINE: ${{ needs.preflight.outputs.baseline }}
+          NATIVE_EVIDENCE_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: node tools/compatibility/gate-native-pr.mjs "$RUNNER_TEMP/compatibility-$GITHUB_RUN_ID"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: native-compatibility-${{ github.run_id }}
+          path: ${{ runner.temp }}/compatibility-${{ github.run_id }}
+  publish-status:
+    if: always()
+    needs: [preflight, native]
+    runs-on: ubuntu-latest
+    permissions:
+      statuses: write
+    steps:
+      - uses: actions/github-script@v7
+        env:
+          NATIVE_RESULT: ${{ needs.native.result }}
+          NATIVE_HEAD: ${{ inputs.head }}
+        with:
+          script: |
+            if (!/^[a-f0-9]{40}$/.test(process.env.NATIVE_HEAD ?? '')) throw new Error('Invalid exact head');
+            await github.rest.repos.createCommitStatus({
+              ...context.repo,
+              sha: process.env.NATIVE_HEAD,
+              context: 'Network Storage / native compatibility',
+              state: process.env.NATIVE_RESULT === 'success' ? 'success' : 'failure',
+              description: process.env.NATIVE_RESULT === 'success' ? 'Published baseline and exact candidate passed all methods' : 'Native comparison missing, failed or incomplete',
+              target_url: `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`
+            });

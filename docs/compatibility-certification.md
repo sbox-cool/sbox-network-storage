@@ -56,3 +56,51 @@ invalidate certification, but still require `UnitTests/` and
   changes without new certification rows. When in doubt, keep the old form
   and add side-by-side. Players cannot update the library inside a published
   game; only a game republish delivers a fix.
+
+## Automated issue tracking and PR gate
+
+`Monitor untested builds` checks main pushes and runs every 15 minutes. It
+observes the actual GitHub head, published s&box revision and latest stable
+server release. Missing exact-build validation updates a stable owned issue,
+not a new issue on every poll. Partial coverage, old heads, HTTP-only tests,
+source recompilation and different providers do not certify a published pair.
+Human investigation notes and labels are preserved.
+
+`Compatibility` compares the PR's C# declarations and meaningful source tokens
+against its merge base using trusted Roslyn tooling. It never executes PR build
+files in a write-token job. Existing public declaration removal/change blocks
+the check; additions, defaults, body/private helper changes and editor changes
+require appropriate review and evidence. Static analysis cannot prove wire or
+behavior compatibility, so it cannot replace LTS review or native tests.
+
+Select one compatibility classification in the PR template. For meaningful
+source/CI changes, a write/maintain/admin collaborator must comment:
+
+```text
+/compatibility-review FULL_HEAD_SHA none|additive-default-off|changed|library-code
+```
+
+Use the single matching classification, not the literal pipe-separated list.
+The acknowledgement is head-specific and cannot waive public API removal,
+generated binary changes or missing native/editor validation.
+
+`Native compatibility` is manually dispatched only after that acknowledgement,
+for an open same-repository PR. It compares the published baseline's runtime
+source and exact candidate runtime source against the same tagged server source,
+engine and SQLite provider. Both must exercise every inventoried method before
+the native status passes. This is not a signed server binary, loaded package
+archive, PostgreSQL, dedicated-auth or editor certificate. Editor changes require
+separate reviewed canonical editor evidence or a trusted editor workflow.
+
+Configure an approved `self-hosted, sbox-native` runner, `SBOX_GAME` and
+`SBOX_CERTIFICATION_RUNNER_ENABLED=true` before dispatching. Never execute fork
+code on that persistent runner. The native job has read-only repository
+permissions; only a separate hosted job publishes its result.
+
+The workflows pin shared tooling to an immutable commit in `sbox-cool/sboxns.com`.
+Policy details and limitations live in its `tools/compatibility/README.md`.
+Library main requires `Network Storage / compatibility` with up-to-date branches,
+including administrators; force pushes and deletion are disabled. The bootstrap
+workflow PR still needs a real maintainer exact-head acknowledgement before its
+check can pass. Scheduled/event automation starts only after the workflows merge
+to main. No native runner is configured by adding these files alone.

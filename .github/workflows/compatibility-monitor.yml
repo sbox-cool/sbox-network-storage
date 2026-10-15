@@ -1,0 +1,36 @@
+name: Monitor untested builds
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+  issues: write
+concurrency:
+  group: compatibility-issue-writer
+  cancel-in-progress: false
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: sbox-cool/sboxns.com
+          ref: 9dd4d2e324a671abbcde96081519c94edf2f152e
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node tools/compatibility/monitor-builds.mjs --output build-findings.json
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: node tools/compatibility/sync-issues.mjs --repo "$GITHUB_REPOSITORY" --findings build-findings.json --apply
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: build-findings
+          path: build-findings.json

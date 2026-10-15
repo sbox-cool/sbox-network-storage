@@ -1,0 +1,66 @@
+name: Compatibility
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, edited, ready_for_review, closed]
+  issue_comment:
+    types: [created, edited, deleted]
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: Pull request number to recheck
+        required: true
+  workflow_run:
+    workflows: [Native compatibility, Editor compatibility]
+    types: [completed]
+permissions:
+  contents: read
+  issues: write
+  statuses: write
+  actions: read
+concurrency:
+  group: compatibility-issue-writer
+  cancel-in-progress: false
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: sbox-cool/sboxns.com
+          ref: 9dd4d2e324a671abbcde96081519c94edf2f152e
+          path: ci-tools
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.100'
+      - id: event
+        run: node ci-tools/tools/compatibility/pr-event.mjs
+      # Never check out a PR tree in this write-token job. The inspector reads C# blobs as data.
+      - uses: actions/checkout@v4
+        if: steps.event.outputs.pr != ''
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          path: library
+          persist-credentials: false
+          fetch-depth: 0
+      - id: guard
+        if: steps.event.outputs.pr != ''
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ steps.event.outputs.pr }}
+        run: node ci-tools/tools/compatibility/check-pr.mjs --repo "$GITHUB_REPOSITORY" --pr "$PR_NUMBER" --git library --output compatibility-result --apply-status
+      - if: always() && steps.event.outputs.pr != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node ci-tools/tools/compatibility/sync-issues.mjs --repo "$GITHUB_REPOSITORY" --findings compatibility-result/findings.json --apply
+      - uses: actions/upload-artifact@v4
+        if: always() && steps.event.outputs.pr != ''
+        with:
+          name: compatibility-${{ steps.event.outputs.pr }}
+          path: compatibility-result
+      - if: always() && steps.guard.outcome == 'failure'
+        run: exit 1
