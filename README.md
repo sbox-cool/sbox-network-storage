@@ -118,6 +118,28 @@ assigned package revision, server commit/version, engine build, database and
 evidence URLs. Headless-engine/dedicated-server smoke checks alone do not certify
 this pairing or close that gate.
 
+### Versions and sbox.game revisions
+
+`LibraryVersion` (SemVer) and the sbox.game package revision are separate.
+sbox.game assigns each publish a global revision; no committed file predicts it,
+and `.version` is only the Library Manager install marker.
+
+`.github/workflows/sbox-revisions.yml` maps every published revision to the
+commit whose shipped files match the revision's public manifest by size and CRC64
+(line endings normalized), then creates a lightweight tag `r<revision>` and a
+GitHub Release `<LibraryVersion> · sbox.game r<revision>`. Only the current
+revision is marked latest. Existing tags are never moved. Revisions published from
+a commit that is on a remote branch only are reported as such.
+
+To check one revision locally:
+
+```sh
+node .github/scripts/sbox-revisions.mjs --revision <id>
+```
+
+Publish only from a committed and pushed tree; the mapping can only find commits
+that exist on the remote.
+
 
 ## Setup
 
