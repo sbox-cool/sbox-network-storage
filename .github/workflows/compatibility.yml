@@ -18,12 +18,33 @@ permissions:
   issues: write
   statuses: write
   actions: read
-concurrency:
-  group: compatibility-issue-writer
-  cancel-in-progress: false
 jobs:
-  check:
+  resolve:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      pr: ${{ steps.event.outputs.pr }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: sbox-cool/sboxns.com
+          ref: ca71493c0617e675a99bfbcdbd0251c6fb86e7c9
+          path: ci-tools
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - id: event
+        run: node ci-tools/tools/compatibility/pr-event.mjs
+  check:
+    needs: resolve
+    if: needs.resolve.outputs.pr != ''
+    runs-on: ubuntu-latest
+    # Serialize the same issue key, not unrelated PRs (GitHub coalesces pending jobs).
+    concurrency:
+      group: compatibility-pr-${{ needs.resolve.outputs.pr }}
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@v4
         with:
@@ -37,31 +58,27 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.100'
-      - id: event
-        run: node ci-tools/tools/compatibility/pr-event.mjs
       # Never check out a PR tree in this write-token job. The inspector reads C# blobs as data.
       - uses: actions/checkout@v4
-        if: steps.event.outputs.pr != ''
         with:
           ref: ${{ github.event.repository.default_branch }}
           path: library
           persist-credentials: false
           fetch-depth: 0
       - id: guard
-        if: steps.event.outputs.pr != ''
         continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
-          PR_NUMBER: ${{ steps.event.outputs.pr }}
+          PR_NUMBER: ${{ needs.resolve.outputs.pr }}
         run: node ci-tools/tools/compatibility/check-pr.mjs --repo "$GITHUB_REPOSITORY" --pr "$PR_NUMBER" --git library --output compatibility-result --apply-status
-      - if: always() && steps.event.outputs.pr != ''
+      - if: always()
         env:
           GH_TOKEN: ${{ github.token }}
         run: node ci-tools/tools/compatibility/sync-issues.mjs --repo "$GITHUB_REPOSITORY" --findings compatibility-result/findings.json --apply
       - uses: actions/upload-artifact@v4
-        if: always() && steps.event.outputs.pr != ''
+        if: always()
         with:
-          name: compatibility-${{ steps.event.outputs.pr }}
+          name: compatibility-${{ needs.resolve.outputs.pr }}
           path: compatibility-result
       - if: always() && steps.guard.outcome == 'failure'
         run: exit 1
