@@ -18,7 +18,7 @@ and the server's [docs/compatibility.md](https://github.com/sbox-cool/sbox-netwo
 | API surface comment | same-repo pull requests | Posts or updates the sticky comment (`<!-- compat-gate:api-surface -->`) | never (informational) |
 | Editor evidence | pull requests | Whether `Code/` or `Editor/` changed; if so, whether a real s&box editor run is recorded | `Code/` or `Editor/` changed without `editor-tested` |
 | Engine (server latest-release) | pushes to `main`, nightly, dispatch, and pull requests that touch engine-relevant paths | The library under test runs in a real s&box dedicated server with the **latest published server release** (`sbox-ns.exe` from the release zip, SHA256 checked against `SHA256SUMS`) | `sbox-cli-e2e` fails |
-| Engine (server main) | same as above | The same library runs against the server ref in `SERVER_REF` (currently `feat/sbox-cli-e2e`, which carries `run.cs` and `--server-binary` until server PR #97 merges; then `main`), built from source | `sbox-cli-e2e` fails |
+| Engine (server main) | same as above | The same library runs against the server ref in `SERVER_REF` (`main`, which carries `run.cs` and `--server-binary` since server PR #97), built from source | `sbox-cli-e2e` fails |
 | Engine (published revision) | pushes to `main` and nightly | The newest published library revision (`r<revision>` release tag) runs against the latest server release. Skipped while the library has no `r<revision>` release | `sbox-cli-e2e` fails |
 | Nightly failure issue | pushes and nightly, on engine failure | Opens or updates one `compat` issue per failing leg | never (informational) |
 | Compat gate | always | Aggregates every job above | any job failed or was cancelled |

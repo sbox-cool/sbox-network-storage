@@ -33,8 +33,8 @@ concurrency:
 
 env:
   SERVER_REPO: sbox-cool/sbox-network-storage-server
-  # Server ref for the main leg and run.cs. Flip to "main" once server PR #97 lands.
-  SERVER_REF: feat/sbox-cli-e2e
+  # Server ref for the source-built leg and run.cs (server PR #97 merged into main).
+  SERVER_REF: main
   SBOXNS_REPO: sbox-cool/sboxns.com
   # sboxns.com tools/compatibility/ContractInspector (pinned; Microsoft.CodeAnalysis.CSharp 4.14.0).
   SBOXNS_REF: ca71493c0617e675a99bfbcdbd0251c6fb86e7c9
