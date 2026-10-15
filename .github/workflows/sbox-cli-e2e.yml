@@ -46,7 +46,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: sbox-cool/sbox-network-storage-server
-          ref: feat/sbox-cli-e2e
+          ref: main
           path: server
           persist-credentials: false
 
