@@ -64,7 +64,10 @@ public class NetworkStorageCompatibilityTests
 		StringAssert.Contains( deprecated.Message, "2027-04-01" );
 
 		Assert.AreEqual( "warning", EditorCompatibility.Evaluate( "outdated", "1.1.0", 100, 100, null, "0.5.0", all, null ).Level );
-		Assert.AreEqual( "warning", EditorCompatibility.Evaluate( "unknown", "1.1.0", 100, 200, null, "0.5.0", all, null ).Level );
+		// A server that reports no status (0.4.0) says nothing about this library: only the newer package is news.
+		var unknownNewer = EditorCompatibility.Evaluate( "unknown", "1.1.0", 100, 200, null, "0.5.0", all, null );
+		Assert.AreEqual( "info", unknownNewer.Level );
+		Assert.IsFalse( unknownNewer.Message.Contains( "outdated" ) );
 		Assert.IsNull( EditorCompatibility.Evaluate( "supported", "1.1.0", 100, 100, null, "0.5.0", all, null ) );
 		// No server metadata at all (older server, offline) stays silent.
 		Assert.IsNull( EditorCompatibility.Evaluate( "unknown", "1.1.0", null, null, null, null, null, null ) );

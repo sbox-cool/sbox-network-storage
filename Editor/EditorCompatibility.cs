@@ -171,10 +171,7 @@ public static class EditorCompatibility
 				return new Notice( "modal", "Library deprecated",
 					$"Library {libraryVersion} still works but is deprecated and stops being supported on {date}. Update 'Network Storage' in Library Manager.{update}" );
 			case "outdated":
-			case "unknown":
-				if ( status == "outdated" || packageNewer )
-					return new Notice( "warning", "Library update available", $"Library {libraryVersion} is outdated for this server.{update}{( serverWarning is null ? "" : " " + serverWarning )}" );
-				break;
+				return new Notice( "warning", "Library update available", $"Library {libraryVersion} is outdated for this server.{update}{( serverWarning is null ? "" : " " + serverWarning )}" );
 		}
 
 		if ( packageNewer )
