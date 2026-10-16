@@ -69,6 +69,21 @@ Use **Library Manager** to update; it replaces the library folder. For a manual 
 
 Library versions before `1.0.309133` do not start on s&box editor 26.10 or later (`Constructor on type 'SyncToolWindow' not found`). Update the library.
 
+### Server compatibility status
+
+The library reads `x-ns-server-version` and `x-ns-library-status` from server responses and `capabilities` from `/v3/server-info`, then exposes:
+
+| Member | Meaning |
+| --- | --- |
+| `NetworkStorage.ServerVersion` | Last version the server reported, or `null` on servers without the header. |
+| `NetworkStorage.LibraryStatus` | `supported`, `outdated`, `deprecated`, `unsupported`, `blocked` or `unknown`. |
+| `NetworkStorage.OnLibraryStatusChanged` | Raised when the status changes (not on repeats). No player-facing UI is shown. |
+| `NetworkStorage.HasCapability(name)` | `true` unless the server lists its capabilities and the name is missing. Servers without capability metadata (0.4.0) keep every feature. |
+
+A `426 LIBRARY_UNSUPPORTED` or `LIBRARY_BLOCKED` response is surfaced through `TryGetLastEndpointError` with the server's message, and logged once. In the editor, Setup and the Sync Tool show a dismissible banner for `outdated`/`unknown` (or a newer published package revision), a once-per-session dialog for `deprecated`, and refuse **Push All** for `unsupported`/`blocked` with update steps; Pull and Test Live keep working. Editor lookups that fail (offline, older server, no package) show nothing. Nothing here runs in play mode or published games.
+
+Open questions recorded from the L2 spike: no documented editor API was found to open Library Manager or start the update from code, so the prompts link to the sbox.game page and tell the developer to replace the **whole folder**. Whether Library Manager's version dropdown allows selecting older revisions is **not verified**; the supported rollback path stays a tagged release folder replacement (above).
+
 ### Library identity and release process
 
 `NetworkStorage.LibraryVersion` is the library SemVer (`1.1.0`), not the

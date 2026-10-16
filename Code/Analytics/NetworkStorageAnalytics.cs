@@ -43,6 +43,8 @@ public static partial class NetworkStorage
 		try
 		{
 			EnsureConfigured();
+			await _serverInfoTask;
+			if ( !HasCapability( "analytics" ) ) return;
 			await EnsureRuntimeSecurityConfigAsync( "analytics-session" );
 			if ( !EnablePlayerAnalytics || !AnalyticsCaptureSessions ) return;
 
@@ -63,7 +65,7 @@ public static partial class NetworkStorage
 			var headers = await BuildAuthHeaders();
 			var url = BuildUrl( $"/storage/{Uri.EscapeDataString( ProjectId )}/stats/heartbeat" );
 			var content = Http.CreateJsonContent( body );
-			await Http.RequestStringAsync( url, "POST", content, headers );
+			await RequestStringAsync(url, "POST", content, headers);
 			if ( NetworkStorageLogConfig.LogRequests )
 			{
 				var logLine = $"Reported session:{eventType} session={sessionId ?? "manual"} seconds={sessionSeconds:0}s";
@@ -83,6 +85,8 @@ public static partial class NetworkStorage
 		try
 		{
 			EnsureConfigured();
+			await _serverInfoTask;
+			if ( !HasCapability( "analytics" ) ) return;
 			await EnsureRuntimeSecurityConfigAsync( "analytics" );
 			if ( !EnablePlayerAnalytics ) return;
 
@@ -116,7 +120,7 @@ public static partial class NetworkStorage
 			var headers = await BuildAuthHeaders();
 			var url = BuildUrl( $"/storage/{Uri.EscapeDataString( ProjectId )}/analytics/events" );
 			var content = Http.CreateJsonContent( body );
-			await Http.RequestStringAsync( url, "POST", content, headers );
+			await RequestStringAsync(url, "POST", content, headers);
 			if ( NetworkStorageLogConfig.LogRequests )
 				NetLog.Info( "analytics", $"Reported {severity}:{normalized}" );
 		}
