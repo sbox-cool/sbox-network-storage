@@ -2509,7 +2509,7 @@ public partial class SyncToolWindow : PaintedWindow
 		if ( _busy || !SyncToolConfig.IsValid ) return;
 		if ( EditorCompatibility.PushBlocked )
 		{
-			MessageDialog.Show( "Push All refused", EditorCompatibility.PushBlockedSteps, "" );
+			MessageDialog.Show( "Push All refused", EditorCompatibility.PushBlockedMessage, EditorCompatibility.PushBlockedSteps );
 			return;
 		}
 		_scrollY = 0;

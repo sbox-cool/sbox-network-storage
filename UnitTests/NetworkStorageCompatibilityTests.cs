@@ -79,4 +79,13 @@ public class NetworkStorageCompatibilityTests
 		StringAssert.Contains( warning, "auth sessions" );
 		Assert.IsNull( EditorCompatibility.ServerWarning( null, null ) );
 	}
+
+	[TestMethod]
+	public void EditorServerWarning_FlagsOldReleasesButNotUnversionedSourceBuilds()
+	{
+		StringAssert.Contains( EditorCompatibility.ServerWarning( "0.3.9", null ), "older than" );
+		// A server built from source reports the placeholder 0.1.0-dev, not its real feature level.
+		Assert.IsNull( EditorCompatibility.ServerWarning( "0.1.0-dev", null ) );
+		Assert.IsNull( EditorCompatibility.ServerWarning( "0.5.4", null ) );
+	}
 }

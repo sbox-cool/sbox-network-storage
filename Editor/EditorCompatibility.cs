@@ -29,7 +29,7 @@ public static class EditorCompatibility
 
 	private static readonly HttpClient _http = new() { Timeout = TimeSpan.FromSeconds( 5 ) };
 	private static bool _deprecatedShown;
-	private static bool _bannerDismissed;
+	private static Notice _dismissedBanner;
 	private static int _generation;
 	private static string _lastRoot;
 
@@ -60,19 +60,23 @@ public static class EditorCompatibility
 		return lines;
 	}
 
+	/// <summary>Why Push All is refused; <see cref="PushBlockedSteps"/> says how to fix it.</summary>
+	public static string PushBlockedMessage =>
+		$"This library ({NetworkStorage.LibraryVersion}) is {Status} for this server, so Push All is disabled. Pull and Test Live still work.";
 
 	public static string PushBlockedSteps =>
-		$"This library ({NetworkStorage.LibraryVersion}) is {Status} for this server, so Push All is disabled. " +
-		"Pull and Test Live still work.\n\n" +
 		"1. Open Library Manager and update 'Network Storage' (sbox.game/sboxcool/network-storage).\n" +
 		"2. If Library Manager cannot update it, delete the whole Libraries/sboxcool.network-storage folder and install the library again. " +
 		"Replacing only some files causes duplicate-definition errors (CS0121).\n" +
 		"3. Restart the editor and reopen the Sync Tool.";
 
-	/// <summary>The banner to draw, or null when there is nothing to say or it was dismissed.</summary>
-	public static Notice Banner => _bannerDismissed || Current is null || Current.Level == "modal" ? null : Current;
+	/// <summary>
+	/// The banner to draw, or null when there is nothing to say. Dismissing hides only the notice that was
+	/// on screen: a different one (for example outdated turning into unsupported) shows again.
+	/// </summary>
+	public static Notice Banner => Current is null || Current.Level == "modal" || Current == _dismissedBanner ? null : Current;
 
-	public static void DismissBanner() => _bannerDismissed = true;
+	public static void DismissBanner() => _dismissedBanner = Current;
 
 	/// <summary>The once-per-session modal for a deprecated library, then null.</summary>
 	public static Notice TakeModal()
@@ -90,7 +94,7 @@ public static class EditorCompatibility
 		if ( root != _lastRoot )
 		{
 			_lastRoot = root;
-			_bannerDismissed = false;
+			_dismissedBanner = null;
 		}
 
 		var generation = ++_generation;
@@ -193,8 +197,13 @@ public static class EditorCompatibility
 		return parts.Count == 0 ? null : string.Join( " ", parts );
 	}
 
+	/// <summary>
+	/// True when <paramref name="version"/> is below <paramref name="baseline"/>. A server built from source reports
+	/// the placeholder <c>0.1.0-dev</c>, which says nothing about its features, so it is never "older".
+	/// </summary>
 	private static bool IsOlder( string version, string baseline )
-		=> TryParse( version, out var a ) && TryParse( baseline, out var b ) && a < b;
+		=> !version.EndsWith( "-dev", StringComparison.OrdinalIgnoreCase )
+			&& TryParse( version, out var a ) && TryParse( baseline, out var b ) && a < b;
 
 	private static bool TryParse( string text, out Version version )
 	{
