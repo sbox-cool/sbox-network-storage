@@ -19,7 +19,7 @@ public static class NetworkStorageMcpTools
 	/// <summary>
 	/// Reports library and configuration state for Network Storage in this runtime. Never returns keys.
 	/// Check httpAllowed first: game code can only reach loopback on ports 80/443/8080/8443 and refuses IP-literal hosts.
-	/// Next: ns_configure if IsConfigured is false, otherwise ns_call_endpoint or ns_get_document.
+	/// Next: ns_configure if isConfigured is false, otherwise ns_call_endpoint or ns_get_document.
 	/// </summary>
 	[McpTool.ReadOnly( "ns_status" )]
 	public static object ns_status()
@@ -132,19 +132,19 @@ public static class NetworkStorageMcpTools
 
 		return new
 		{
-			LibraryVersion = NetworkStorage.LibraryVersion,
-			MinServerVersion = NetworkStorage.MinServerVersion,
-			IsConfigured = NetworkStorage.IsConfigured,
-			ProjectId = NetworkStorage.ProjectId,
-			BaseUrl = RedactUrl( NetworkStorage.BaseUrl ),
-			ApiVersion = NetworkStorage.ApiVersion,
-			PublishTarget = NetworkStorage.PublishTarget,
-			IsEditor = Application.IsEditor,
-			IsDedicatedServer = Application.IsDedicatedServer,
+			libraryVersion = NetworkStorage.LibraryVersion,
+			minServerVersion = NetworkStorage.MinServerVersion,
+			isConfigured = NetworkStorage.IsConfigured,
+			projectId = NetworkStorage.ProjectId,
+			baseUrl = RedactUrl( NetworkStorage.BaseUrl ),
+			apiVersion = NetworkStorage.ApiVersion,
+			publishTarget = NetworkStorage.PublishTarget,
+			isEditor = Application.IsEditor,
+			isDedicatedServer = Application.IsDedicatedServer,
 			httpAllowed,
 			hint = httpAllowed
 				? null
-				: "Game code HTTP is limited to loopback on ports 80/443/8080/8443 (no IP-literal hosts) or to domains on any port. Point BaseUrl at a domain, or run the server on an allowed port."
+				: "Game code HTTP is limited to loopback on ports 80/443/8080/8443 (no IP-literal hosts) or to domains on any port. Point baseUrl at a domain, or run the server on an allowed port."
 		};
 	}
 

@@ -61,11 +61,12 @@ public static class NetworkStorageEditorMcpTools
 				hasPublicKey = SyncToolConfig.HasPublicKey,
 				isValid = SyncToolConfig.IsValid,
 			},
+			// The files Push sends (typed and plain .yml/.yaml/.json), not only the YAML ones.
 			localSources = new
 			{
-				endpoints = SyncToolConfig.LoadSourceSummaries( "endpoint" ).Count(),
-				collections = SyncToolConfig.LoadSourceSummaries( "collection" ).Count(),
-				workflows = SyncToolConfig.LoadSourceSummaries( "workflow" ).Count(),
+				endpoints = SyncToolConfig.LoadSourcePayloadResources( "endpoint", includeDeprecated: false ).Count,
+				collections = SyncToolConfig.LoadSourcePayloadResources( "collection" ).Count,
+				workflows = SyncToolConfig.LoadSourcePayloadResources( "workflow" ).Count,
 				tests = SyncToolConfig.LoadTests().Count(),
 			},
 			libraryVersion = NetworkStorage.LibraryVersion,
