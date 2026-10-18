@@ -118,7 +118,7 @@ public static partial class NetworkStorage
 	}
 
 	private static bool IsApiVersionSegment( string segment )
-		=> !string.IsNullOrWhiteSpace( segment ) && segment.Length >= 2 && segment[0] == 'v' && char.IsDigit( segment[1] );
+		=> !string.IsNullOrWhiteSpace( segment ) && (string.Equals( segment, "api", StringComparison.OrdinalIgnoreCase ) || (segment.Length >= 2 && segment[0] == 'v' && char.IsDigit( segment[1] )));
 
 	private static string NormalizeSecretKey( string secretKey )
 		=> string.IsNullOrWhiteSpace( secretKey ) ? null : secretKey.Trim();
