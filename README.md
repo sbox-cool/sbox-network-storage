@@ -1,8 +1,10 @@
 # <img src="Assets/Branding/icon-512.png" width="48" height="48" alt="Network Storage icon: shaded lime cube with a smug face and storage port" /> s&box Network Storage
 
+![s&box Network Storage: game values, server-side checks and versioned builds](https://sboxns.com/images/marketing/card-hero.png)
+
 Client library and editor tools for an open-source s&box game backend.
 
-**Open-source, self-hosted game backend for s&box**: player saves, inventory, purchases, reward logic, and server-side endpoints — for player-hosted/P2P sessions **and** dedicated servers.
+**Open-source, self-hosted game backend for s&box.** Your server owns saves, rewards and the shared game values, and checks every claim a client makes. It works for player-hosted sessions and dedicated servers.
 
 This repo is the **client library + editor Sync Tool** — install via the s&box editor at https://sbox.game/sboxcool/network-storage. The backend API is open-source and self-hostable: https://github.com/sbox-cool/sbox-network-storage-server — start at [sboxns.com](https://sboxns.com), the self-hosting landing site.
 
@@ -17,7 +19,8 @@ This repo is the **client library + editor Sync Tool** — install via the s&box
 ## Features
 
 - **Runtime Client** — Call server endpoints, fetch game values, read/write documents from your game code
-- **Editor Sync Tool** — Push and pull collections and endpoints between local YAML source files and the sboxcool.com dashboard
+- **Game values** — One call loads every group and table; endpoints read the same numbers on the server, and each published build keeps its own
+- **Editor Sync Tool** — Push and pull collections and endpoints between local YAML source files and your Network Storage server (the `baseUrl` in `projectConfig.json`)
 - **Setup Wizard** — Editor window for entering and validating your API credentials
 - **Diff Viewer** — Side-by-side comparison of local vs remote data before syncing
 - **Network Logger** — Ring buffer that captures all API traffic for in-game debug panels
@@ -259,6 +262,54 @@ if ( result.HasValue )
 
 See the [Examples/](Examples/) folder for complete working patterns.
 
+## Game values
+
+Game values are the shared numbers your game and server both read: tuning
+constants, named groups and typed tables. Author them once in the owner console
+of your server (or over its API), and every published build keeps the values it
+shipped with. Sync Tool publishes use **Push Staged** (ships with the next build)
+or **Push Live** (every build now). YAML `game_values` collections pushed by the
+Sync Tool are not served by self-hosted 0.5.4 yet
+([server #107](https://github.com/sbox-cool/sbox-network-storage-server/issues/107)).
+
+![Game values: shared numbers the game and server both read](https://sboxns.com/images/marketing/card-game-values.png)
+
+```csharp
+var gv = (await NetworkStorage.GetGameValues()).Value;
+var combat = gv.GetProperty( "groups" ).GetProperty( "combat" ).GetProperty( "values" );
+int zombieHp = combat.Int( "zombie_hp_per_level" ) * zombieLevel;
+var weapons = gv.GetProperty( "tables" ).GetProperty( "weapons" )
+    .ReadList( "rows", r => (Id: r.Str( "weapon_id" ), Damage: r.Int( "damage" ), Model: r.Str( "model" )) );
+```
+
+`GetGameValues()` loads every group and table in one request
+(`GET /v3/values/{projectId}`). The library is API-only and keeps no offline
+copy: load once when the game starts, then lookups in your code are local. The
+game still calls the server for that load, and game code cannot write game values.
+
+Endpoints on the server read the same numbers with
+`{{values.combat.zombie_hp_per_level}}` and `lookup` steps with `source: values`.
+The [game values guide](https://github.com/sbox-cool/sbox-network-storage-server/blob/main/docs/game-values.md)
+covers authoring, revisions and a worked combat example that checks each claim on the server.
+
+## Owner console
+
+The owner console runs on your own Network Storage server. It has guided editors
+with raw YAML, dry-run endpoint tests, the **Game values** page, version history
+and live server monitoring. The read-only [demo](https://demo.sboxns.com) shows
+the same screens with sample data.
+
+<table>
+<tr>
+<td><a href="https://raw.githubusercontent.com/sbox-cool/sbox-network-storage-server/main/docs/images/console-game-values.png"><img src="https://raw.githubusercontent.com/sbox-cool/sbox-network-storage-server/main/docs/images/console-game-values.png" width="400" alt="Game values page in the owner console"></a><br>Game values</td>
+<td><a href="https://raw.githubusercontent.com/sbox-cool/sbox-network-storage-server/main/docs/images/console-endpoint-test.png"><img src="https://raw.githubusercontent.com/sbox-cool/sbox-network-storage-server/main/docs/images/console-endpoint-test.png" width="400" alt="Endpoint test in the owner console"></a><br>Endpoint test (dry run)</td>
+</tr>
+<tr>
+<td><a href="https://raw.githubusercontent.com/sbox-cool/sbox-network-storage-server/main/docs/images/console-endpoint-pipeline.png"><img src="https://raw.githubusercontent.com/sbox-cool/sbox-network-storage-server/main/docs/images/console-endpoint-pipeline.png" width="400" alt="Endpoint pipeline in the owner console"></a><br>Endpoint pipeline</td>
+<td><a href="https://raw.githubusercontent.com/sbox-cool/sbox-network-storage-server/main/docs/images/console-version-history.png"><img src="https://raw.githubusercontent.com/sbox-cool/sbox-network-storage-server/main/docs/images/console-version-history.png" width="400" alt="Version history in the owner console"></a><br>Version history</td>
+</tr>
+</table>
+
 ## Runtime API Reference
 
 ### NetworkStorage (static)
@@ -440,6 +491,10 @@ Editor/
 - **Public key** (`sbox_ns_`) is safe to include in your game code — it can only be used with Steam authentication
 - The `.env` file is gitignored by default — never commit it to version control
 - See `.env.example` for the expected format
+- **Anti-exploit checks run on the server.** Endpoints recompute each claim from game values and the server clock, and reject impossible results. The checks bound what a client can claim; they cannot prove that a hit landed.
+- **Clients reach collections through endpoints.** New collections start in `accessMode: endpoint`. Direct document calls from game clients get `403 ENDPOINT_ONLY`.
+
+![Anti-exploit checks: endpoints recompute claims on the server](https://sboxns.com/images/marketing/card-anti-exploit.png)
 
 ## Data Source Mode
 
