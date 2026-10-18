@@ -251,11 +251,15 @@ See the [Examples/](Examples/) folder for complete working patterns.
 
 Game values are the shared numbers your game and server both read: tuning
 constants, named groups and typed tables. Author them once in the owner console
-of your server (or over its API), and every published build keeps the values it
-shipped with. Sync Tool publishes use **Push Staged** (ships with the next build)
-or **Push Live** (every build now). YAML `game_values` collections pushed by the
-Sync Tool are not served by self-hosted 0.5.4 yet
+of your server (or over its API). Publishing a package revision snapshots its game
+values, but a build keeps that snapshot only when the project has an explicit
+revision policy and its revision is retained within the support window; otherwise
+it reads live values. Sync Tool publishes use **Push Staged** (the next package
+revision) or **Push Live** (the live target now). YAML `game_values` collections
+pushed by the Sync Tool are not served by self-hosted 0.5.4 yet
 ([server #107](https://github.com/sbox-cool/sbox-network-storage-server/issues/107)).
+See the server's [game values guide](https://github.com/sbox-cool/sbox-network-storage-server/blob/main/docs/game-values.md#versions-and-publishing)
+for revision policy, retention and support windows.
 
 ![Game values: shared numbers the game and server both read](https://sboxns.com/images/marketing/card-game-values.png)
 

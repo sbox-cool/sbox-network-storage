@@ -7,6 +7,6 @@ Copy what you need into your game project's `Code/` directory and adapt to your 
 | File | What it shows |
 |———|———————|
 | `BasicSetup.cs` | Configure the library and call your first endpoint |
-| `GameValuesExample.cs` | Fetch and parse game config (constants + tables) |
+| `GameValuesExample.cs` | Fetch and parse game values (`groups.<id>.values` and `tables.<id>.rows`), with failed loads reported |
 | `PlayerDataExample.cs` | Load player data, mine ore, sell ore pattern |
 | `SaveStateTrackerExample.cs` | Optimistic updates with automatic state tracking |
