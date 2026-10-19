@@ -69,6 +69,24 @@ Use **Library Manager** to update; it replaces the library folder. For a manual 
 
 Library versions before `1.0.309133` do not start on s&box editor 26.10 or later (`Constructor on type 'SyncToolWindow' not found`). Update the library.
 
+### Using unreleased features (main)
+
+The `main` branch can contain fixes and features that are merged but not yet published on sbox.game. The owner dashboard of the self-hosted server lists them, with how long they have waited and how far the published library lags the latest s&box engine release.
+
+To try them now, replace the library folder with the `main` branch:
+
+1. Close the editor.
+2. Delete the existing library folder in `Libraries/`, or keep a copy of it.
+3. Download `https://github.com/sbox-cool/sbox-network-storage/archive/refs/heads/main.zip`, extract it into `Libraries/`, and rename the extracted `sbox-network-storage-main` folder to `sboxcool.network-storage`. Alternatively, `git clone` the repository into that folder and check out `main`.
+4. Start the editor again.
+
+To return to the released library, delete that folder and install it from [sbox.game](https://sbox.game/sboxcool/network-storage) as described above.
+
+Caveats:
+
+- Unreleased code has passed the GitHub Actions compat gate, but not the native Windows editor run that a published release requires. Expect changes, and do not ship games built on it.
+- `main` can need a newer server than the published library. Since `LibraryVersion` 1.2.0 the default API root is `/api`, which servers before 0.5.5 do not serve; set `apiVersion` to `v3` in `projectConfig.json` for those servers (see [Setup](#setup)).
+
 ### Server compatibility status
 
 The library reads `x-ns-server-version` and `x-ns-library-status` from server responses and `capabilities` from `/v3/server-info`, then exposes:
