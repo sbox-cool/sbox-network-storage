@@ -14,11 +14,11 @@ public static partial class NetworkStorage
 	/// <summary>Base API URL (no trailing slash).</summary>
 	public static string BaseUrl { get; private set; } = "https://api.sboxcool.com";
 
-	/// <summary>API version prefix.</summary>
-	public static string ApiVersion { get; private set; } = "v3";
+	/// <summary>API root segment. Defaults to <c>api</c> (uniform routes; older servers need <c>v3</c>, see Configure).</summary>
+	public static string ApiVersion { get; private set; } = "api";
 
 	/// <summary>Library SemVer, independent of the s&amp;box package and game revisions.</summary>
-	public const string LibraryVersion = "1.1.0";
+	public const string LibraryVersion = "1.2.0";
 
 	/// <summary>Oldest self-hosted server baseline; newer features require capability checks.</summary>
 	public const string MinServerVersion = "0.4.0";
@@ -38,7 +38,7 @@ public static partial class NetworkStorage
 	/// <summary>Optional CDN URL for storage reads.</summary>
 	public static string CdnUrl { get; private set; }
 
-	/// <summary>The full versioned API root, e.g. https://api.sboxcool.com/v3.</summary>
+	/// <summary>The full API root, e.g. https://api.sboxcool.com/api (or /v3 when configured).</summary>
 	public static string ApiRoot => $"{BaseUrl}/{ApiVersion}";
 
 	/// <summary>Whether non-host clients route API calls through the game host.</summary>
