@@ -1,0 +1,359 @@
+{
+  "schema": 1,
+  "generatedAt": "2026-10-19T06:29:09.835Z",
+  "library": {
+    "published": {
+      "revision": 423774,
+      "version": "1.1.0",
+      "commit": "780d09cd12b7ac624f02246165564267ad77627f",
+      "publishedAt": "2026-10-15T08:12:25.000Z",
+      "url": "https://sbox.game/sboxcool/network-storage"
+    },
+    "main": {
+      "version": "1.2.0",
+      "commit": "9b6ec5d41d99afd1756293d958be1f1330aa73b7",
+      "committedAt": "2026-10-19T06:29:00Z",
+      "ci": {
+        "conclusion": "pending",
+        "runUrl": "https://github.com/sbox-cool/sbox-network-storage/actions/runs/39210170561",
+        "engine": null
+      }
+    },
+    "pending": [
+      {
+        "number": 44,
+        "title": "release-status: publish snapshot with plumbing",
+        "mergedAt": "2026-10-19T06:29:00Z",
+        "url": "https://github.com/sbox-cool/sbox-network-storage/pull/44"
+      },
+      {
+        "number": 43,
+        "title": "release-status: match the exact release-status ref",
+        "mergedAt": "2026-10-19T06:25:11Z",
+        "url": "https://github.com/sbox-cool/sbox-network-storage/pull/43"
+      },
+      {
+        "number": 42,
+        "title": "Publish release status for the owner dashboard",
+        "mergedAt": "2026-10-19T06:21:46Z",
+        "url": "https://github.com/sbox-cool/sbox-network-storage/pull/42"
+      },
+      {
+        "number": 41,
+        "title": "Compat gate: green engine legs certify Code/ and Editor/ changes",
+        "mergedAt": "2026-10-19T06:09:03Z",
+        "url": "https://github.com/sbox-cool/sbox-network-storage/pull/41"
+      },
+      {
+        "number": 27,
+        "title": "network_storage sbox-cli toolset (ns_* tools)",
+        "mergedAt": "2026-10-19T05:39:22Z",
+        "url": "https://github.com/sbox-cool/sbox-network-storage/pull/27"
+      },
+      {
+        "number": 12,
+        "title": "Library status, capability gating and editor compatibility prompts (L2, L3)",
+        "mergedAt": "2026-10-19T05:30:41Z",
+        "url": "https://github.com/sbox-cool/sbox-network-storage/pull/12"
+      },
+      {
+        "number": 37,
+        "title": "Default library API root to /api; LibraryVersion 1.2.0 (#36)",
+        "mergedAt": "2026-10-19T02:10:53Z",
+        "url": "https://github.com/sbox-cool/sbox-network-storage/pull/37"
+      },
+      {
+        "number": 38,
+        "title": "Fix GameValuesExample and qualify game values revision claims (#34)",
+        "mergedAt": "2026-10-19T01:52:36Z",
+        "url": "https://github.com/sbox-cool/sbox-network-storage/pull/38"
+      },
+      {
+        "number": 40,
+        "title": "Compat gate: editor evidence follows the code/GUI track policy",
+        "mergedAt": "2026-10-19T01:39:52Z",
+        "url": "https://github.com/sbox-cool/sbox-network-storage/pull/40"
+      },
+      {
+        "number": 33,
+        "title": "README: game values, anti-exploit checks, owner console screenshots",
+        "mergedAt": "2026-10-16T08:47:14Z",
+        "url": "https://github.com/sbox-cool/sbox-network-storage/pull/33"
+      },
+      {
+        "number": 32,
+        "title": "Compat gate: test against the oldest supported server (MinServerVersion); publish checklist",
+        "mergedAt": "2026-10-15T23:34:06Z",
+        "url": "https://github.com/sbox-cool/sbox-network-storage/pull/32"
+      },
+      {
+        "number": 13,
+        "title": "Use approved lime cube branding",
+        "mergedAt": "2026-10-15T23:24:49Z",
+        "url": "https://github.com/sbox-cool/sbox-network-storage/pull/13"
+      },
+      {
+        "number": 24,
+        "title": "Sync Tool visibility verification fix; stop tracking build output; manual-install restart note",
+        "mergedAt": "2026-10-15T23:10:40Z",
+        "url": "https://github.com/sbox-cool/sbox-network-storage/pull/24"
+      },
+      {
+        "number": 26,
+        "title": "Link sbox.game revisions to GitHub source (r<rev> releases)",
+        "mergedAt": "2026-10-15T22:59:36Z",
+        "url": "https://github.com/sbox-cool/sbox-network-storage/pull/26"
+      },
+      {
+        "number": 29,
+        "title": "README: Discord community link (sboxns.com/discord-invite)",
+        "mergedAt": "2026-10-15T22:49:38Z",
+        "url": "https://github.com/sbox-cool/sbox-network-storage/pull/29"
+      },
+      {
+        "number": 30,
+        "title": "Compat gate: public API diff, real-engine e2e vs server latest+main, editor-evidence hold",
+        "mergedAt": "2026-10-15T22:37:48Z",
+        "url": "https://github.com/sbox-cool/sbox-network-storage/pull/30"
+      }
+    ],
+    "pendingSince": "2026-10-15T22:37:48Z",
+    "installMain": {
+      "zipUrl": "https://github.com/sbox-cool/sbox-network-storage/archive/refs/heads/main.zip",
+      "docsUrl": "https://github.com/sbox-cool/sbox-network-storage#using-unreleased-features-main"
+    }
+  },
+  "engine": {
+    "latest": {
+      "version": "26.10.13",
+      "date": "2026-10-13T15:41:13Z",
+      "url": "https://github.com/Facepunch/sbox-public/tree/26.10.13"
+    },
+    "libraryBehind": false,
+    "daysBehind": 0
+  },
+  "server": {
+    "latestRelease": {
+      "version": "0.5.4",
+      "publishedAt": "2026-10-14T12:38:38Z",
+      "url": "https://github.com/sbox-cool/sbox-network-storage-server/releases/tag/v0.5.4"
+    },
+    "main": {
+      "commit": "65304053acaed6b13e9447015a7135eb864cd933",
+      "committedAt": "2026-10-19T05:58:07Z"
+    },
+    "pending": [
+      {
+        "number": 139,
+        "title": "docs: PRs and server releases are certified by green Compat engine legs",
+        "mergedAt": "2026-10-19T05:58:07Z",
+        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/139"
+      },
+      {
+        "number": 137,
+        "title": "Game logs: opt-in structured ingest and search (L1, L2 of #111)",
+        "mergedAt": "2026-10-19T02:17:16Z",
+        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/137"
+      },
+      {
+        "number": 136,
+        "title": "Media uploads behind single-use grants (off by default) — part of #111",
+        "mergedAt": "2026-10-19T02:01:49Z",
+        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/136"
+      },
+      {
+        "number": 138,
+        "title": "Canary verify: tolerate stable-feed 404 before the first promotion (#131)",
+        "mergedAt": "2026-10-19T01:57:51Z",
+        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/138"
+      },
+      {
+        "number": 135,
+        "title": "Endpoint webhook delivery outbox, opt-in per project (#111 W1)",
+        "mergedAt": "2026-10-19T01:39:30Z",
+        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/135"
+      },
+      {
+        "number": 134,
+        "title": "sbox-cli e2e: don't record engine 0000000 in tested rows",
+        "mergedAt": "2026-10-19T01:39:11Z",
+        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/134"
+      },
+      {
+        "number": 133,
+        "title": "Compat: knownFailures verdict for pinned library builds with documented never-working checks (#110)",
+        "mergedAt": "2026-10-19T01:39:04Z",
+        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/133"
+      },
+      {
+        "number": 132,
+        "title": "sbox-cli e2e: pin v3 root for /api-default libraries on servers without api-root",
+        "mergedAt": "2026-10-19T01:38:56Z",
+        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/132"
+      },
+      {
+        "number": 130,
+        "title": "Keep settings and refuse colliding definitions on module upgrade (#128)",
+        "mergedAt": "2026-10-19T01:38:49Z",
+        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/130"
+      },
+      {
+        "number": 127,
+        "title": "Add uniform /api routes with permanent legacy aliases and version-aware storage dispatch",
+        "mergedAt": "2026-10-17T09:59:53Z",
+        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/127"
+      },
+      {
+        "number": 126,
+        "title": "Plain-HTTP owner sign-in as an explicit setup opt-in, with a dismissable warning",
+        "mergedAt": "2026-10-17T08:30:42Z",
+        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/126"
+      },
+      {
+        "number": 125,
+        "title": "ci: live test server on a disposable Vultr VPS",
+        "mergedAt": "2026-10-17T08:30:38Z",
+        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/125"
+      },
+      {
+        "number": 124,
+        "title": "Detect and print bracketed IPv6 host URLs on IPv6-only machines",
+        "mergedAt": "2026-10-17T03:39:14Z",
+        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/124"
+      },
+      {
+        "number": 123,
+        "title": "Split compat evidence into GH-Actions code track and native-GUI track",
+        "mergedAt": "2026-10-17T02:49:01Z",
+        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/123"
+      },
+      {
+        "number": 122,
+        "title": "Update CodeQL actions together to v4.38.3",
+        "mergedAt": "2026-10-17T01:32:18Z",
+        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/122"
+      },
+      {
+        "number": 117,
+        "title": "Bump actions/attest-build-provenance from 3.0.0 to 4.2.2",
+        "mergedAt": "2026-10-17T01:20:19Z",
+        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/117"
+      },
+      {
+        "number": 116,
+        "title": "Bump actions/download-artifact from 8.0.1 to 8.0.2",
+        "mergedAt": "2026-10-17T01:20:10Z",
+        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/116"
+      },
+      {
+        "number": 115,
+        "title": "Bump sigstore/cosign-installer from 3.9.1 to 4.1.2",
+        "mergedAt": "2026-10-17T01:19:51Z",
+        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/115"
+      },
+      {
+        "number": 113,
+        "title": "Fix game values, endpoint concurrency, and dry-run response groundwork",
+        "mergedAt": "2026-10-16T22:48:24Z",
+        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/113"
+      },
+      {
+        "number": 119,
+        "title": "Bump Microsoft.AspNetCore.Mvc.Testing and 10 others",
+        "mergedAt": "2026-10-16T22:33:36Z",
+        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/119"
+      },
+      {
+        "number": 120,
+        "title": "Bump the test-tooling group with 1 update",
+        "mergedAt": "2026-10-16T22:03:19Z",
+        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/120"
+      },
+      {
+        "number": 121,
+        "title": "Bump JsonSchema.Net from 9.4.0 to 9.4.1",
+        "mergedAt": "2026-10-16T22:03:11Z",
+        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/121"
+      },
+      {
+        "number": 102,
+        "title": "Endpoint calls from older published libraries: accept _endpointSlug in the body",
+        "mergedAt": "2026-10-16T22:00:41Z",
+        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/102"
+      },
+      {
+        "number": 108,
+        "title": "Docs: game values guide, anti-exploit section, release 0.5.4 console screenshots",
+        "mergedAt": "2026-10-16T08:47:20Z",
+        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/108"
+      },
+      {
+        "number": 106,
+        "title": "Update watch: first database check after one interval, not at host start",
+        "mergedAt": "2026-10-16T00:01:04Z",
+        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/106"
+      },
+      {
+        "number": 105,
+        "title": "Docs: required checks on main, library gate legs, published-revision coverage",
+        "mergedAt": "2026-10-15T23:34:54Z",
+        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/105"
+      },
+      {
+        "number": 104,
+        "title": "Installer tests: 120 s bound for a cold powershell.exe on hosted Windows (flake)",
+        "mergedAt": "2026-10-15T23:34:48Z",
+        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/104"
+      },
+      {
+        "number": 96,
+        "title": "Compat gate: server x library compatibility on every PR, main, nightly and release",
+        "mergedAt": "2026-10-15T23:10:29Z",
+        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/96"
+      },
+      {
+        "number": 101,
+        "title": "Update safety: compat preflight, per-library post-update watch, one-step and automatic rollback",
+        "mergedAt": "2026-10-15T22:54:04Z",
+        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/101"
+      },
+      {
+        "number": 100,
+        "title": "Upgrade matrix from 0.5.4 and 0.4.0; service start restarts a stale binary; 0.5.3 ci-only row (#90)",
+        "mergedAt": "2026-10-15T22:49:27Z",
+        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/100"
+      },
+      {
+        "number": 99,
+        "title": "Owner console: Discord links via sboxns.com/discord-invite",
+        "mergedAt": "2026-10-15T22:49:24Z",
+        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/99"
+      },
+      {
+        "number": 98,
+        "title": "Owner export gate per server, not process-wide (#84)",
+        "mergedAt": "2026-10-15T22:49:19Z",
+        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/98"
+      },
+      {
+        "number": 97,
+        "title": "sbox-cli e2e: real library in s&box via sbox-cli, Windows CI",
+        "mergedAt": "2026-10-15T22:19:27Z",
+        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/97"
+      },
+      {
+        "number": 95,
+        "title": "Docs: measured client reachability in README, domain base URL examples; valid marketplace manifest",
+        "mergedAt": "2026-10-15T06:14:17Z",
+        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/95"
+      },
+      {
+        "number": 94,
+        "title": "Pair the MCP server with sbox-cli; read chunked heartbeat bodies; warn on URLs s&box game code refuses",
+        "mergedAt": "2026-10-15T05:21:57Z",
+        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/94"
+      }
+    ],
+    "pendingSince": "2026-10-15T05:21:57Z"
+  }
+}
