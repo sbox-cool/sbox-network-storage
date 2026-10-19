@@ -22,6 +22,7 @@ public static partial class NetworkStorage
 
 		EnsureConfigured();
 		ClearLastEndpointError( slug );
+		if ( !await RequireCapabilityAsync( "endpoints", slug ) ) return null;
 
 		// Same-machine shortcut: if the target is the host's own Steam ID (e.g. two
 		// editor instances on one machine share a Steam account), just call directly
@@ -66,7 +67,7 @@ public static partial class NetworkStorage
 					Log.Info( $"[NetworkStorage] {slug} request: POST (as {targetSteamId}) {ApiRoot}{routePath} body={bodyJson}" );
 				}
 				var content = Http.CreateJsonContent( input );
-				result = await Http.RequestStringAsync( url, "POST", content, headers );
+				result = await RequestStringAsync(url, "POST", content, headers);
 			}
 			else
 			{
@@ -75,7 +76,7 @@ public static partial class NetworkStorage
 					NetLog.Request( slug, $"GET (as {targetSteamId})" );
 					Log.Info( $"[NetworkStorage] {slug} request: GET (as {targetSteamId}) {ApiRoot}/endpoints/{ProjectId}/{slug}" );
 				}
-				result = await Http.RequestStringAsync( url, "GET", null, headers );
+				result = await RequestStringAsync(url, "GET", null, headers);
 			}
 
 			if ( NetworkStorageLogConfig.LogResponses )
@@ -95,7 +96,6 @@ public static partial class NetworkStorage
 				Log.Warning( $"[NetworkStorage]   Method: {( input is not null ? "POST" : "GET" )}" );
 				if ( bodyJson != null )
 					Log.Warning( $"[NetworkStorage]   Body: {bodyJson}" );
-				Log.Warning( $"[NetworkStorage]   Note: s&box Http API does not expose error response bodies — check server logs for details" );
 				NetLog.Error( slug, $"HTTP {status}" );
 			}
 			RecordEndpointError( slug, "HTTP_ERROR", $"HTTP {status}" );
@@ -126,6 +126,7 @@ public static partial class NetworkStorage
 	{
 		EnsureConfigured();
 		ClearLastEndpointError( "storage" );
+		if ( !await RequireCapabilityAsync( "records", "storage" ) ) return null;
 
 		// Same-machine shortcut: same Steam account as host, call directly
 		if ( targetSteamId == Game.SteamId.ToString() )
@@ -159,7 +160,7 @@ public static partial class NetworkStorage
 
 			if ( NetworkStorageLogConfig.LogRequests )
 				NetLog.Request( "storage", $"GET (as {targetSteamId}) {collectionId}/{docId}" );
-			var result = await Http.RequestStringAsync( url, "GET", null, headers );
+			var result = await RequestStringAsync(url, "GET", null, headers);
 			if ( NetworkStorageLogConfig.LogResponses )
 				Log.Info( $"[NetworkStorage] storage (as {targetSteamId}) → {TruncateJson( result, 300 )}" );
 			var parsed = ParseResponse( "storage", result );

@@ -131,7 +131,7 @@ public static partial class NetworkStorage
 		};
 		AddRuntimeTargetHeaders( headers );
 		var body = new Dictionary<string, object> { ["steamId"] = steamId };
-		var raw = await Http.RequestStringAsync( url, "POST", Http.CreateJsonContent( body ), headers );
+		var raw = await RequestStringAsync(url, "POST", Http.CreateJsonContent( body ), headers);
 		if ( NetworkStorageLogConfig.LogTokens )
 			Log.Info( $"[NetworkStorage] auth session create -> {TruncateForLog( raw, 500 )}" );
 		using var doc = JsonDocument.Parse( raw );

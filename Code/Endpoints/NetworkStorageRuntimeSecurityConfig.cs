@@ -12,7 +12,7 @@ public static partial class NetworkStorage
 	private static bool _securityConfigUnavailableLogged;
 
 	public static bool RuntimeSecurityConfigLoaded => _runtimeSecurityConfig?.Loaded == true;
-	public static bool RuntimeEnableAuthSessions => _runtimeSecurityConfig?.EnableAuthSessions ?? EnableAuthSessions;
+	public static bool RuntimeEnableAuthSessions => HasCapability( "auth-sessions" ) && (_runtimeSecurityConfig?.EnableAuthSessions ?? EnableAuthSessions);
 	public static bool RuntimeEnableEncryptedRequests => _runtimeSecurityConfig?.EnableEncryptedRequests ?? EnableEncryptedRequests;
 	public static string RuntimeSecurityConfigVersion => _runtimeSecurityConfig?.ConfigVersion ?? "";
 	public static string RuntimeSecurityClientMode => RuntimeEnableAuthSessions

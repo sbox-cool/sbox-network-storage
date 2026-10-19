@@ -51,6 +51,22 @@ public class SetupWindow : PaintedWindow
 
 		SyncToolConfig.Load();
 		CreateInputWidgets();
+		_ = RefreshCompatibilityAsync();
+	}
+
+	private async Task RefreshCompatibilityAsync()
+	{
+		try
+		{
+			await EditorCompatibility.RefreshAsync();
+			Update();
+			if ( EditorCompatibility.TakeModal() is { } modal )
+				MessageDialog.Show( modal.Title, modal.Message, "" );
+		}
+		catch ( Exception ex )
+		{
+			Log.Info( $"[SetupWindow] Compatibility check: {ex.Message}" );
+		}
 	}
 
 	[Menu( "Editor", "Network Storage/Setup" )]
@@ -118,6 +134,26 @@ public class SetupWindow : PaintedWindow
 		Paint.SetPen( Color.White.WithAlpha( 0.5f ) );
 		Paint.DrawText( new Rect( pad, y, w, 14 ), "Setup — credentials are stored in Editor/ config files (gitignored, never published)", TextFlag.LeftCenter );
 		y += 22;
+		if ( EditorCompatibility.Banner is { } notice )
+		{
+			var color = notice.Level == "error" ? Color.Red : notice.Level == "warning" ? Color.Orange : Color.Cyan;
+			Paint.SetDefaultFont( size: 9 );
+			Paint.SetPen( color.WithAlpha( 0.95f ) );
+			foreach ( var line in EditorCompatibility.Wrap( $"{notice.Title}: {notice.Message}", w ) )
+			{
+				Paint.DrawText( new Rect( pad, y, w, 14 ), line, TextFlag.LeftCenter );
+				y += 14;
+			}
+			if ( notice.Level != "error" )
+			{
+				var dismissRect = new Rect( pad, y, 64, 18 );
+				Paint.SetPen( Color.White.WithAlpha( 0.7f ) );
+				Paint.DrawText( dismissRect, "Dismiss", TextFlag.LeftCenter );
+				_buttons.Add( new ButtonRect { Rect = dismissRect, Id = "compat_dismiss", OnClick = () => { EditorCompatibility.DismissBanner(); Update(); } } );
+				y += 20;
+			}
+			y += 4;
+		}
 
 		DrawSeparator( ref y, w, pad );
 
@@ -510,6 +546,7 @@ public class SetupWindow : PaintedWindow
 		var allOk = result.TryGetProperty( "ok", out var okEl ) && okEl.ValueKind == JsonValueKind.True;
 		if ( allOk )
 		{
+			_ = RefreshCompatibilityAsync();
 			_status = "All credentials validated";
 			_statusColor = "green";
 		}

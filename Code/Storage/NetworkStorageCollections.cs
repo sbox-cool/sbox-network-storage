@@ -69,6 +69,7 @@ public static partial class NetworkStorage
 	{
 		EnsureConfigured();
 		ClearLastEndpointError( tag );
+		if ( !await RequireCapabilityAsync( "records", tag ) ) return null;
 
 		string url = null;
 		string bodyJson = null;
@@ -97,7 +98,7 @@ public static partial class NetworkStorage
 				Log.Info( $"[NetworkStorage] {tag} request: {method} {ApiRoot}{path}{suffix}" );
 			}
 
-			var raw = await Http.RequestStringAsync( url, method, content, headers );
+			var raw = await RequestStringAsync(url, method, content, headers);
 			if ( NetworkStorageLogConfig.LogResponses )
 				Log.Info( $"[NetworkStorage] {tag} → {TruncateJson( raw, 300 )}" );
 
