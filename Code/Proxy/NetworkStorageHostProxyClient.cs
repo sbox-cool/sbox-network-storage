@@ -98,7 +98,7 @@ public static partial class NetworkStorage
 					Log.Warning( $"[NetworkStorage]   Body: {bodyJson}" );
 				NetLog.Error( slug, $"HTTP {status}" );
 			}
-			RecordEndpointError( slug, "HTTP_ERROR", $"HTTP {status}" );
+			RecordEndpointError( slug, httpEx.StatusCode == System.Net.HttpStatusCode.TooManyRequests ? "RATE_LIMITED" : "HTTP_ERROR", $"HTTP {status}" );
 			return null;
 		}
 		catch ( Exception ex )

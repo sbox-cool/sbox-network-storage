@@ -359,6 +359,8 @@ the same screens with sample data.
 
 See [analytics.md](analytics.md) for Player Analytics setup, custom events, warnings, and error reporting examples.
 
+Rate-limited calls (HTTP 429) are retried at most twice, with the total wait capped at 5 seconds, using the server's `Retry-After`. GET requests always retry; other methods retry only when the server marks the response `retrySafe`. A call that still fails with 429 is reported as `RATE_LIMITED` through `TryGetLastEndpointError`.
+
 ### JsonHelpers (static)
 
 Safe extraction from API `JsonElement` payloads with caller-provided defaults. Handles missing keys and string-to-number coercion.
