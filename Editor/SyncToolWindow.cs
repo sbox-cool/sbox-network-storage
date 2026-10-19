@@ -8,6 +8,7 @@ using System.Text.Json;
 using System.Threading.Tasks;
 using Sandbox;
 using Editor;
+using static SyncToolVerification;
 
 /// <summary>
 /// Editor window for Network Storage sync operations.
@@ -1943,15 +1944,6 @@ public partial class SyncToolWindow : PaintedWindow
 			.ToArray();
 	}
 
-	private static bool IsGeneratedMappedCollectionId( string id )
-	{
-		if ( string.IsNullOrWhiteSpace( id ) || !id.StartsWith( "col_" ) )
-			return false;
-
-		var collection = id[4..];
-		return SyncToolConfig.SyncMappings.Any( mapping => string.Equals( mapping.Collection, collection, StringComparison.OrdinalIgnoreCase ) );
-	}
-
 	private int GetRemoteSemanticsCount()
 	{
 		return GetRemoteSemanticsIds().Length;
@@ -2361,67 +2353,6 @@ public partial class SyncToolWindow : PaintedWindow
 		_status = parts.Count > 0
 			? string.Join( ", ", parts )
 			: "Everything is in sync";
-	}
-
-	/// <summary>
-	/// Normalize JSON for comparison — sorts all object keys recursively so key order doesn't cause false diffs.
-	/// </summary>
-	private static string NormalizeSourceTextForVerification( string sourceText )
-	{
-		return (sourceText ?? "").Replace( "\r\n", "\n" ).Replace( '\r', '\n' ).Trim();
-	}
-
-	private static string NormalizeJson( string json )
-	{
-		try
-		{
-			var el = JsonSerializer.Deserialize<JsonElement>( json );
-			var sorted = SortJsonElement( el );
-			return JsonSerializer.Serialize( sorted, new JsonSerializerOptions { WriteIndented = false } );
-		}
-		catch { return json.Trim(); }
-	}
-
-	private static object SortJsonElement( JsonElement el )
-	{
-		switch ( el.ValueKind )
-		{
-			case JsonValueKind.Object:
-				var sorted = new SortedDictionary<string, object>();
-				foreach ( var prop in el.EnumerateObject() )
-				{
-					if ( IsIgnoredComparisonField( prop.Name ) )
-						continue;
-					sorted[prop.Name] = SortJsonElement( prop.Value );
-				}
-				return sorted.Count == 0 ? null : sorted;
-			case JsonValueKind.Array:
-				var arr = new List<object>();
-				foreach ( var item in el.EnumerateArray() )
-					arr.Add( SortJsonElement( item ) );
-				return arr;
-			case JsonValueKind.String:
-				return el.GetString();
-			case JsonValueKind.Number:
-				return el.TryGetInt64( out var l ) ? (object)l : el.GetDouble();
-			case JsonValueKind.True:
-				return true;
-			case JsonValueKind.False:
-				return false;
-			default:
-				return null;
-		}
-	}
-
-	private static string PrettyJson( string json )
-	{
-		if ( string.IsNullOrEmpty( json ) ) return "";
-		try
-		{
-			var el = JsonSerializer.Deserialize<JsonElement>( json );
-			return JsonSerializer.Serialize( el, new JsonSerializerOptions { WriteIndented = true } );
-		}
-		catch { return json; }
 	}
 
 	private (SyncStatus Status, string Summary, JsonDiffUtilities.ComparisonResult Analysis) ClassifyRemoteDifference(
@@ -2917,7 +2848,7 @@ public partial class SyncToolWindow : PaintedWindow
 					continue;
 				}
 
-				if ( EndpointVerificationMatches( slug, remoteEndpoint, localEpBySlug, localEpSourceTextBySlug ) )
+				if ( SyncToolVerification.MatchEndpoint( slug, remoteEndpoint, localEpBySlug, localEpSourceTextBySlug ) != SyncToolVerification.Match.None )
 				{
 					var logIdx = _syncLog.FindIndex( e => e.Name == $"{slug}.endpoint.yml" && e.Type == "Endpoint" );
 					if ( logIdx >= 0 )
@@ -2972,22 +2903,6 @@ public partial class SyncToolWindow : PaintedWindow
 				Log.Warning( $"[SyncTool] Verification re-push for {slug} failed: {ex.Message}" );
 			}
 		}
-	}
-
-	private bool EndpointVerificationMatches( string slug, JsonElement remoteEndpoint, Dictionary<string, string> localEpBySlug, Dictionary<string, string> localEpSourceTextBySlug )
-	{
-		var sourceTextMatches = localEpSourceTextBySlug.TryGetValue( slug, out var localSourceText )
-			&& SyncToolTransforms.TryGetSourceText( remoteEndpoint, out var remoteSourceText )
-			&& localSourceText == NormalizeSourceTextForVerification( remoteSourceText );
-		if ( sourceTextMatches )
-			return true;
-
-		if ( !localEpBySlug.TryGetValue( slug, out var localNorm ) )
-			return false;
-
-		var remoteLocal = SyncToolTransforms.ServerEndpointToLocal( remoteEndpoint );
-		var remoteNorm = NormalizeJson( JsonSerializer.Serialize( remoteLocal ) );
-		return localNorm == remoteNorm;
 	}
 
 	private void ShowVerificationMismatchWindow( int mismatchCount )
@@ -3511,25 +3426,6 @@ public partial class SyncToolWindow : PaintedWindow
 		return (await pushEpTask, await pushColTask, await pushWfTask);
 	}
 
-	private static bool IsIgnoredComparisonField( string name )
-	{
-		return name is "authoringMode"
-			or "sourceText"
-			or "sourceFormat"
-			or "sourceVersion"
-			or "sourcePath"
-			or "compilerFingerprint"
-			or "compilerFingerprintHash"
-			or "sourceHash"
-			or "dependencyHash"
-			or "canonicalHash"
-			or "executionPlanHash"
-			or "dependencies"
-			or "executionPlan"
-			or "diagnostics"
-			or "canonicalDefinition";
-	}
-
 	/// <summary>
 	/// Push a single endpoint by merging it into the remote list.
 	/// GETs remote endpoints, replaces the matching slug, PUTs the merged list.
@@ -3941,54 +3837,6 @@ public partial class SyncToolWindow : PaintedWindow
 		return el.TryGetProperty( key, out var v ) && v.ValueKind == JsonValueKind.String ? v.GetString() ?? "" : "";
 	}
 
-	/// <summary>
-	/// Compare two collection resources field-by-field.
-	/// Distinguishes schema (structural) from metadata (non-structural) changes.
-	/// </summary>
-	private static bool CollectionSemanticsMatch( string localJson, string remoteJson )
-	{
-		try
-		{
-			var local = JsonSerializer.Deserialize<JsonElement>( localJson );
-			var remote = JsonSerializer.Deserialize<JsonElement>( remoteJson );
-			var rateLimitDefault = new Dictionary<string, object> { ["mode"] = "none" };
-			var emptyObject = new Dictionary<string, object>();
-
-			foreach ( var field in new[] { "name", "description", "notes" } )
-			{
-				if ( NormalizeCollectionField( local, field, "" ) != NormalizeCollectionField( remote, field, "" ) )
-					return false;
-			}
-
-			if ( NormalizeCollectionField( local, "collectionType", "per-steamid" ) != NormalizeCollectionField( remote, "collectionType", "per-steamid" ) ) return false;
-			if ( NormalizeCollectionField( local, "accessMode", "public" ) != NormalizeCollectionField( remote, "accessMode", "public" ) ) return false;
-			// An unset visibility means the server default (it reports e.g. "private" for user collections).
-			if ( local.TryGetProperty( "visibility", out _ ) && NormalizeCollectionField( local, "visibility", "" ) != NormalizeCollectionField( remote, "visibility", "" ) ) return false;
-			if ( NormalizeCollectionField( local, "maxRecords", 1 ) != NormalizeCollectionField( remote, "maxRecords", 1 ) ) return false;
-			if ( NormalizeCollectionField( local, "allowRecordDelete", false ) != NormalizeCollectionField( remote, "allowRecordDelete", false ) ) return false;
-			if ( NormalizeCollectionField( local, "requireSaveVersion", false ) != NormalizeCollectionField( remote, "requireSaveVersion", false ) ) return false;
-			if ( NormalizeCollectionField( local, "webhookOnRateLimit", false ) != NormalizeCollectionField( remote, "webhookOnRateLimit", false ) ) return false;
-			if ( NormalizeCollectionField( local, "rateLimitAction", "reject" ) != NormalizeCollectionField( remote, "rateLimitAction", "reject" ) ) return false;
-			if ( NormalizeCollectionField( local, "rateLimits", rateLimitDefault ) != NormalizeCollectionField( remote, "rateLimits", rateLimitDefault ) ) return false;
-			if ( NormalizeCollectionField( local, "schema", emptyObject ) != NormalizeCollectionField( remote, "schema", emptyObject ) ) return false;
-			if ( NormalizeCollectionField( local, "constants", emptyObject ) != NormalizeCollectionField( remote, "constants", emptyObject ) ) return false;
-			if ( NormalizeCollectionField( local, "tables", emptyObject ) != NormalizeCollectionField( remote, "tables", emptyObject ) ) return false;
-
-			return true;
-		}
-		catch
-		{
-			return false;
-		}
-	}
-
-	private static string NormalizeCollectionField( JsonElement element, string field, object defaultValue )
-	{
-		var json = element.ValueKind == JsonValueKind.Object && element.TryGetProperty( field, out var value )
-			? value.GetRawText()
-			: JsonSerializer.Serialize( defaultValue );
-		return NormalizeJson( json );
-	}
 
 	private string DiffCollectionSchema( string localJson, string remoteJson )
 	{

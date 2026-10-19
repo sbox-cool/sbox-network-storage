@@ -557,6 +557,26 @@ Set the working directory to this repository root.
 | `validate_env_config` | Validate `.env` credential file format |
 | `diagnose_error` | Diagnose s&box console errors and suggest fixes |
 
+### In-Engine Tools (sbox-cli `network_storage` toolset)
+
+s&box's `sbox-cli` MCP bridge exposes these tools while the editor, or a game or dedicated server started with `-mcp`, is running. Start with `ns_status` (game code) or `ns_editor_status` (editor), then `ns_sync_preflight` before `ns_sync_push`.
+
+| Tool | Where | Description |
+| --- | --- | --- |
+| `ns_status` | Game code and editor | Library version, configuration state (no keys), and whether game code may reach the API |
+| `ns_configure` | Game code and editor | Configure project ID, API key and base URL, or auto-configure when all are empty |
+| `ns_call_endpoint` | Game code and editor | Call an endpoint; returns `ok`, `body`, `errorCode`, `errorMessage` |
+| `ns_get_document` | Game code and editor | Read a document from a collection |
+| `ns_game_values` | Game code and editor | Read game values |
+| `ns_editor_status` | Editor only | Sync Tool config (no keys), local source counts, optional server check |
+| `ns_sync_preflight` | Editor only | Dry-run the batch push; writes nothing |
+| `ns_sync_push` | Editor only | Validate, preflight and push all sources; `verify` reads back and compares each resource |
+| `ns_auto_test` | Editor only | Auto-generate and run tests for one endpoint, or for all endpoints |
+| `ns_run_tests` | Editor only | Run the saved test suite on the server |
+
+Endpoint and test failures come back as data, not tool errors. Tools that cannot run (for example, when the library is not configured) throw an error with a message saying what to fix.
+
+
 
 ## Compatibility (LTS)
 
