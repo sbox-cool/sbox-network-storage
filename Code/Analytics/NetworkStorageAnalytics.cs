@@ -94,6 +94,9 @@ public static partial class NetworkStorage
 			if ( string.IsNullOrWhiteSpace( normalized ) ) return;
 			if ( severity == "custom" && !IsAnalyticsEventAllowed( normalized ) )
 			{
+				// Owner-disabled analytics stays silent by design. A name missing from the allowlist is a developer
+				// mistake: count it and warn (throttled), so the refusal is visible in the log.
+				if ( AnalyticsManagedLibraryEvents ) RecordAnalyticsDrop( 1, $"custom event '{normalized}' is not in the project's allowed event list (Player analytics settings)" );
 				if ( NetworkStorageLogConfig.LogRequests )
 					NetLog.Info( "analytics", $"Suppressed disallowed event {normalized}" );
 				return;
