@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "generatedAt": "2026-10-19T06:29:31.496Z",
+  "generatedAt": "2026-10-19T14:40:04.689Z",
   "library": {
     "published": {
       "revision": 423774,
@@ -14,9 +14,9 @@
       "commit": "9b6ec5d41d99afd1756293d958be1f1330aa73b7",
       "committedAt": "2026-10-19T06:29:00Z",
       "ci": {
-        "conclusion": "pending",
-        "runUrl": "https://github.com/sbox-cool/sbox-network-storage/actions/runs/39210170561",
-        "engine": null
+        "conclusion": "success",
+        "runUrl": "https://github.com/sbox-cool/sbox-network-storage/actions/runs/39235642508",
+        "engine": "sbox-public@aecf62bd247648d5af1de9cb0108a6c4731befb3"
       }
     },
     "pending": [
@@ -139,10 +139,46 @@
       "url": "https://github.com/sbox-cool/sbox-network-storage-server/releases/tag/v0.5.4"
     },
     "main": {
-      "commit": "65304053acaed6b13e9447015a7135eb864cd933",
-      "committedAt": "2026-10-19T05:58:07Z"
+      "commit": "6b93bc37b66bcdf8d677b688d323d0357a5e4227",
+      "committedAt": "2026-10-19T11:21:52Z"
     },
     "pending": [
+      {
+        "number": 149,
+        "title": "docs: script endpoints intro (YAML and JavaScript/TypeScript, globals, sandbox)",
+        "mergedAt": "2026-10-19T11:21:52Z",
+        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/149"
+      },
+      {
+        "number": 147,
+        "title": "JavaScript and TypeScript endpoints (Jint): globals, workflows, typings, templates",
+        "mergedAt": "2026-10-19T10:47:21Z",
+        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/147"
+      },
+      {
+        "number": 146,
+        "title": "Retry atomic config writes that Windows briefly refuses",
+        "mergedAt": "2026-10-19T09:03:29Z",
+        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/146"
+      },
+      {
+        "number": 145,
+        "title": "Highlight unquoted YAML scalar values as strings",
+        "mergedAt": "2026-10-19T08:36:54Z",
+        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/145"
+      },
+      {
+        "number": 144,
+        "title": "Readable syntax colours across the owner console; fix dev-build update offer and load-average hint",
+        "mergedAt": "2026-10-19T08:07:22Z",
+        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/144"
+      },
+      {
+        "number": 141,
+        "title": "Show library and server release status on the owner dashboard",
+        "mergedAt": "2026-10-19T06:48:30Z",
+        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/141"
+      },
       {
         "number": 139,
         "title": "docs: PRs and server releases are certified by green Compat engine legs",
