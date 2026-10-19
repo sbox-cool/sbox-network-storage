@@ -16,6 +16,7 @@ public static partial class NetworkStorage
 	{
 		EnsureConfigured();
 		ClearLastEndpointError( "storage" );
+		if ( !await RequireCapabilityAsync( "records", "storage" ) ) return null;
 
 		// If proxy mode is active and we're not the host, route through the host
 		if ( ProxyEnabled && !IsHost && DocumentProxy != null )
@@ -37,7 +38,7 @@ public static partial class NetworkStorage
 
 			if ( NetworkStorageLogConfig.LogRequests )
 				NetLog.Request( "storage", $"GET {collectionId}/{docId}" );
-			var result = await Http.RequestStringAsync( url, "GET", null, headers );
+			var result = await RequestStringAsync(url, "GET", null, headers);
 			if ( NetworkStorageLogConfig.LogResponses )
 				Log.Info( $"[NetworkStorage] storage → {TruncateJson( result, 300 )}" );
 			var parsed = ParseResponse( "storage", result );

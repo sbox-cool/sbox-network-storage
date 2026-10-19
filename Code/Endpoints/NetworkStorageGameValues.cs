@@ -14,13 +14,14 @@ public static partial class NetworkStorage
 	public static async Task<JsonElement?> GetGameValues()
 	{
 		EnsureConfigured();
+		if ( !await RequireCapabilityAsync( "game-values", "game-values" ) ) return null;
 		try
 		{
 			var url = BuildUrl( $"/values/{ProjectId}" );
 			var headers = BuildPublicHeaders();
 			if ( NetworkStorageLogConfig.LogRequests )
 				NetLog.Request( "game-values", $"GET {ApiRoot}/values/{ProjectId}" );
-			var result = await Http.RequestStringAsync( url, "GET", null, headers );
+			var result = await RequestStringAsync(url, "GET", null, headers);
 			if ( NetworkStorageLogConfig.LogResponses )
 				Log.Info( $"[NetworkStorage] game-values → {TruncateJson( result, 300 )}" );
 			var parsed = ParseResponse( "game-values", result );

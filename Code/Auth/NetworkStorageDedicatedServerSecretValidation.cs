@@ -66,7 +66,7 @@ public static partial class NetworkStorage
 		{
 			Log.Info( $"[NetworkStorage] Validating dedicated server secret key source={DedicatedServerSecretKeySource} reason={reason}..." );
 
-			var raw = await Http.RequestStringAsync( url, "GET", null, headers );
+			var raw = await RequestStringAsync(url, "GET", null, headers);
 			using var doc = JsonDocument.Parse( raw );
 			var root = doc.RootElement;
 			if ( !DedicatedSecretValidationSucceeded( root, raw, out var detail ) )

@@ -23,6 +23,7 @@ public static partial class NetworkStorage
 
 		EnsureConfigured();
 		ClearLastEndpointError( slug );
+		if ( !await RequireCapabilityAsync( "endpoints", slug ) ) return null;
 
 		// If proxy mode is active and we're not the host, route through the host
 		if ( ProxyEnabled && !IsHost && RequestProxy != null )
@@ -57,7 +58,7 @@ public static partial class NetworkStorage
 					Log.Info( $"[NetworkStorage] {slug} request: POST {ApiRoot}{securityRequest.RouteLabel} mode={securityRequest.Mode} revision={NetworkStoragePackageInfo.RuntimeRevisionId?.ToString() ?? "unknown"} target={PublishTarget} body={bodyJson}" );
 				}
 				var content = Http.CreateJsonContent( securityRequest.Body );
-				result = await Http.RequestStringAsync( url, "POST", content, headers );
+				result = await RequestStringAsync(url, "POST", content, headers);
 			}
 			else
 			{
@@ -66,7 +67,7 @@ public static partial class NetworkStorage
 					NetLog.Request( slug, "GET" );
 					Log.Info( $"[NetworkStorage] {slug} request: GET {ApiRoot}/endpoints/{ProjectId}/{slug}" );
 				}
-				result = await Http.RequestStringAsync( url, "GET", null, headers );
+				result = await RequestStringAsync(url, "GET", null, headers);
 			}
 
 			if ( NetworkStorageLogConfig.LogResponses )
@@ -99,7 +100,6 @@ public static partial class NetworkStorage
 				Log.Warning( $"[NetworkStorage]   Method: {( input is not null ? "POST" : "GET" )}" );
 				if ( bodyJson != null )
 					Log.Warning( $"[NetworkStorage]   Body: {bodyJson}" );
-				Log.Warning( $"[NetworkStorage]   Note: s&box Http API does not expose error response bodies — check server logs for details" );
 				NetLog.Error( slug, $"HTTP {status}" );
 			}
 			RecordEndpointError( slug, "HTTP_ERROR", $"HTTP {status}" );

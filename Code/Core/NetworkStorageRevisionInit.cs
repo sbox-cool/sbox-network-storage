@@ -99,7 +99,7 @@ public static class NetworkStorageRevisionInit
 			if ( NetworkStorageLogConfig.LogRequests )
 				Log.Info( $"[NetworkStorage] {tag}: POST {NetworkStorage.ApiRoot}/manage/{NetworkStorage.ProjectId}/revision-init" );
 
-			var raw = await Http.RequestStringAsync( url, "POST", content, headers );
+			var raw = await NetworkStorage.RequestStringAsync( url, "POST", content, headers );
 
 			if ( NetworkStorageLogConfig.LogResponses )
 				Log.Info( $"[NetworkStorage] {tag} → {TruncateForLog( raw, 300 )}" );
