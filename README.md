@@ -117,11 +117,14 @@ Maintainer release sequence:
 2. Publish only a `main` commit whose **Compat gate** is green: the public API
    check, and this library running inside s&box against the latest server
    release, the oldest supported one (`MinServerVersion`) and server `main`
-   ([docs/compat-gate.md](docs/compat-gate.md)). Every
-   `Code/`/`Editor/` change since the last published revision must carry
-   `editor-tested` evidence. If `main` moved since its last run, run the gate on
-   that commit by hand (Actions > Compat gate > Run workflow) before publishing.
-   Follow [compatibility certification](docs/compatibility-certification.md).
+   ([docs/compat-gate.md](docs/compat-gate.md)). Green engine legs certify every
+   `Code/`/`Editor/` change; no native editor run or label is needed for that. If `main`
+   moved since its last run, run the gate on that commit by hand (Actions > Compat gate >
+   Run workflow) before publishing. Before publishing, also record a native run of the
+   exact version: one Windows PC with the Steam build of s&box runs `tools/sbox-cli-e2e`
+   against it and records a `pass` row in the server's `compat/library-matrix.json`
+   (see the server's `docs/editor-test-plan.md`). Follow
+   [compatibility certification](docs/compatibility-certification.md).
 3. Tag the tested source `vX.Y.Z`, then publish on sbox.game from that commit.
 4. Within about 30 minutes the revision sync tags the matching commit
    `r<revision>` and creates its GitHub Release (see "Versions and sbox.game
@@ -140,11 +143,10 @@ package publication is implied by this source change. For rollback, replace the
 
 Tracking: [L1 #7](https://github.com/sbox-cool/sbox-network-storage/issues/7)
 ↔ [server #58](https://github.com/sbox-cool/sbox-network-storage-server/issues/58).
-`pending-sbox-editor-test`: interactive Play mode and Sync Tool against the
-version-aware server and released `0.4.0`; record library source commit/SemVer,
-assigned package revision, server commit/version, engine build, database and
-evidence URLs. Headless-engine/dedicated-server smoke checks alone do not certify
-this pairing or close that gate.
+Native run for the library release that ships this (not a PR gate): interactive Play mode and Sync
+Tool against the version-aware server and released `0.4.0`. Record library source commit/SemVer,
+assigned package revision, server commit/version, engine build, database and evidence URLs as a
+`pass` row before that release. Green engine legs alone do not record this native run.
 
 ### Versions and sbox.game revisions
 

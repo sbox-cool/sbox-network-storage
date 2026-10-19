@@ -16,7 +16,7 @@ and the server's [docs/compatibility.md](https://github.com/sbox-cool/sbox-netwo
 | Classify changes | every event | Which paths changed (`Code/`, `Editor/`, `Assets/`, `*.sbproj`, the workflow) | never |
 | API surface | pull requests | Public declarations in `Code/` and `Editor/` compared with the merge-base, using the pinned [ContractInspector](https://github.com/sbox-cool/sboxns.com/tree/ca71493c0617e675a99bfbcdbd0251c6fb86e7c9/tools/compatibility/ContractInspector) from sboxns.com. The sticky PR comment lists removed, changed and added symbols with file and line | a public symbol is removed or changed without `compat: breaking-approved`, or a file cannot be parsed |
 | API surface comment | same-repo pull requests | Posts or updates the sticky comment (`<!-- compat-gate:api-surface -->`) | never (informational) |
-| Editor evidence | pull requests | Whether `Code/` or `Editor/` changed. `Code/`-only changes pass when every engine leg passes (ci-only evidence, run URL in the job summary). `Editor/` changes need `editor-tested` or the `code-track` label on a green engine run; otherwise the editor run is still required | `Editor/` changed without `editor-tested` or `code-track`, or any engine leg failed or was cancelled for a `Code/` or `Editor/` change |
+| Editor evidence | pull requests | Whether `Code/` or `Editor/` changed. When either did, it passes when every engine leg passes (ci-only evidence, run URL in the job summary). No native editor run and no label is needed | a `Code/` or `Editor/` change has an engine leg that failed, was cancelled, or was skipped |
 | Engine (server latest-release) | pushes to `main`, nightly, dispatch, and pull requests that touch engine-relevant paths | The library under test runs in a real s&box dedicated server with the **latest published server release** (`sbox-ns.exe` from the release zip, SHA256 checked against `SHA256SUMS`) | `sbox-cli-e2e` fails |
 | Engine (server oldest-supported) | same as above | The same library against the release named by its own `NetworkStorage.MinServerVersion` (`v0.4.0` today), the oldest server it promises to work with, for owners who never update | `sbox-cli-e2e` fails |
 | Engine (server main) | same as above | The same library runs against the server ref in `SERVER_REF` (`main`, which carries `run.cs` and `--server-binary` since server PR #97), built from source | `sbox-cli-e2e` fails |
@@ -25,46 +25,40 @@ and the server's [docs/compatibility.md](https://github.com/sbox-cool/sbox-netwo
 | Compat gate | always | Aggregates every job above | any job failed or was cancelled |
 
 Engine results come from hosted Windows runners. They are `ci-only` evidence in the
-server's terms: they show the dedicated target works, but they never certify a
-pairing and never replace an editor run.
+server's terms: the real library runs inside the real s&box dedicated engine, with no
+editor GUI. A green engine leg certifies a pull request or merge; a native editor run is
+not required for one.
 
 ## Labels
 
 | Label | Who applies it | Effect |
 |---|---|---|
 | `compat: breaking-approved` | maintainer, after review | Lets the API surface check pass with removed or changed public symbols. The migration rules still apply: keep the old form for the required period, ship the replacement first, and link the server counterpart |
-| `editor-tested` | maintainer, after the editor run below | Lets Editor evidence pass for `Code/` or `Editor/` changes |
-| `code-track` | maintainer, after reviewing the change | Reclassifies an `Editor/` change that is not GUI surface to the code track. Editor evidence then passes on the green engine legs, which must be cited in the PR. Create it with `gh label create code-track` if the repo lacks it |
-| `pending-sbox-editor-test` | the gate, automatically | Marks a PR that still waits for an editor run. Added when the token can write it; otherwise add it by hand |
+| `editor-tested`, `code-track` | nobody needed | No effect. The gate does not read them, so existing labels can stay |
+| `pending-sbox-editor-test` | nobody on pull requests or issues | Not added by the gate. It is only for a library release that is waiting for its native run (see below) |
 | `compat` | maintainers | Wire-affecting work and nightly failure issues |
 
 Label changes re-run the gate automatically.
 
-## Editor evidence (s&box editor run)
+## Editor evidence
 
-Editor evidence follows the server's two-track policy ([compatibility.md](https://github.com/sbox-cool/sbox-network-storage-server/blob/main/docs/compatibility.md),
-"When an s&box editor test is required"):
+Changes under `Code/` and `Editor/` are certified by the engine legs, under the server's
+policy ([compatibility.md](https://github.com/sbox-cool/sbox-network-storage-server/blob/main/docs/compatibility.md),
+"When s&box evidence is required"):
 
-- **Code track (ci-only).** `Code/`-only changes are certified by the engine legs (real library inside the
-  real s&box dedicated engine, no editor GUI). When every engine leg passes, Editor evidence passes. The job
-  summary records the engine run URL as the evidence.
-- **GUI track (native run).** `Editor/` changes that touch GUI surface (Setup and Sync Tool windows,
-  Library Manager, Play-in-editor panels, media capture) need a native editor run. Hosted runners cannot run
-  the s&box editor, so this step is manual and recorded in the server repo:
+- Every engine leg (latest-release, oldest-supported, main) must pass for a change under
+  `Code/` or `Editor/`. The real library runs inside the real s&box dedicated engine. The
+  job summary records the engine run URL as the evidence.
+- A failed, cancelled or skipped engine leg fails this check.
+- No native s&box editor run is needed to open, merge or release a change, and no label is
+  needed. A native run (Windows PC, Steam build) is reserved for two things: a library
+  release (one `pass` row for the version being published, recorded in the server's
+  `compat/library-matrix.json` before the version is published to sbox.game or Library
+  Manager), and periodic engine parity checks. GUI-only behaviour that the harness cannot
+  script is checked by the native run before a library release.
 
-  1. Run `tools/sbox-cli-e2e` from `sbox-cool/sbox-network-storage-server` on a
-     Windows PC with Steam, against this PR's library checkout (`--library <path>`).
-  2. Follow [docs/editor-test-plan.md](https://github.com/sbox-cool/sbox-network-storage-server/blob/main/docs/editor-test-plan.md):
-     write down the five facts (engine build, library version/source, server build,
-     OS, result) and record one `tested` row in `compat/library-matrix.json` there.
-     A run missing any fact is invalid. Never record `pass` without a real editor run.
-  3. Apply `editor-tested` to the PR. The gate re-runs and passes.
-
-- **Reclassification.** An `Editor/` change that is not GUI surface may instead get the `code-track` label from a
-  maintainer, citing the green engine run in the PR. Remove `pending-sbox-editor-test` at the same time.
-
-Non-code PRs (docs, CI, tests outside `Code/`, `Editor/`) pass this job without a label.
-Label changes re-run the gate, including the engine legs, so a `code-track` or `editor-tested` change costs one engine run.
+Non-code PRs (docs, CI, tests outside `Code/`, `Editor/`) pass this job without an engine run.
+Label changes re-run the gate, including the engine legs.
 
 ## Running the gate manually
 
