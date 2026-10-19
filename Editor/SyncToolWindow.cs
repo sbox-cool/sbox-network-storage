@@ -898,7 +898,7 @@ public partial class SyncToolWindow : PaintedWindow
 						: Color.Red.WithAlpha( 0.6f );
 					Paint.SetDefaultFont( size: 8 );
 					Paint.SetPen( detailColor );
-					Paint.DrawText( new Rect( pad + 26 + nameW + 4, y, w - nameW - 100, 16 ), detailText, TextFlag.LeftCenter );
+					DrawOneLineText( new Rect( pad + 26 + nameW + 4, y, w - nameW - 100, 16 ), detailText, TextFlag.LeftCenter, entry.Name, $"synclog_{_syncLog.IndexOf( entry )}" );
 
 					// Type badge
 					Paint.SetPen( Color.White.WithAlpha( 0.25f ) );
@@ -1243,6 +1243,31 @@ public partial class SyncToolWindow : PaintedWindow
 			_buttons.Add( new ClickRegion { Rect = rect, Id = id, OnClick = onClick } );
 	}
 
+	/// <summary>
+	/// The first line of <paramref name="text"/>, cut to <paramref name="maxWidth"/> with an ellipsis. Rows are one line
+	/// high, so a multi-line message shows its first line and the full text opens on click.
+	/// </summary>
+	private static string FitToOneLine( string text, float maxWidth )
+	{
+		if ( string.IsNullOrEmpty( text ) ) return "";
+		var trimmed = text.Trim();
+		var lineEnd = trimmed.IndexOfAny( new[] { '\r', '\n' } );
+		var line = lineEnd < 0 ? trimmed : trimmed[..lineEnd].TrimEnd() + " …";
+		while ( line.Length > 1 && Paint.MeasureText( line ).x > maxWidth )
+			line = line[..^2] + "…";
+		return line;
+	}
+
+	/// <summary>Draws one line of text. When the full text does not fit, clicking the row opens it in a dialog.</summary>
+	private void DrawOneLineText( Rect rect, string text, TextFlag flag, string title, string regionId )
+	{
+		var fullText = (text ?? "").Trim();
+		var shown = FitToOneLine( fullText, rect.Width );
+		Paint.DrawText( rect, shown, flag );
+		if ( !_busy && shown != fullText )
+			_buttons.Add( new ClickRegion { Rect = rect, Id = regionId, OnClick = () => MessageDialog.Show( title, fullText ) } );
+	}
+
 	private void DrawWideButton( Rect rect, string label, Color color, string id, Action onClick )
 	{
 		var hovered = rect.IsInside( _mousePos );
@@ -1334,7 +1359,7 @@ public partial class SyncToolWindow : PaintedWindow
 				() => OpenMergeView( capturedMergeId, capturedMergeName ) );
 			contentX += mergeW + 6;
 		}
-		else if ( state.RemoteDiffers )
+		else if ( pullAction != null && ( state.RemoteDiffers || _hasCheckedRemote && state.Status != SyncStatus.LocalOnly && state.Status != SyncStatus.Unknown ) )
 		{
 			var pullRect = new Rect( contentX, btnY, btnW, btnH );
 			DrawSmallButton( pullRect, "Pull", Color.Cyan, $"pull_{id}", pullAction );
@@ -1589,7 +1614,7 @@ public partial class SyncToolWindow : PaintedWindow
 			{
 				Paint.SetDefaultFont( size: 8 );
 				Paint.SetPen( status.IsStale ? Color.Yellow.WithAlpha( 0.75f ) : Color.White.WithAlpha( 0.35f ) );
-				Paint.DrawText( new Rect( pad + 22, y, w - 30, 14 ), detailText, TextFlag.LeftCenter );
+				DrawOneLineText( new Rect( pad + 22, y, w - 30, 14 ), detailText, TextFlag.LeftCenter, mapping.CsFile, $"mapping_{mapping.Collection}" );
 				y += 16;
 			}
 		}
@@ -2152,7 +2177,10 @@ public partial class SyncToolWindow : PaintedWindow
 						var sourceTextMatches = localEpSourceTextBySlug.TryGetValue( slug, out var localSourceText )
 							&& SyncToolTransforms.TryGetSourceText( ep, out var remoteSourceText )
 							&& localSourceText == NormalizeSourceTextForVerification( remoteSourceText );
-						var differs = !sourceTextMatches && NormalizeJson( remoteJson ) != NormalizeJson( localJson );
+						// The handler script is compared on its own. A matching remote sourceText must not hide a script
+						// changed on the live definition, because that sourceText can be stale.
+						var scriptMatches = SyncToolTransforms.EndpointScriptsMatch( localEp, ep );
+						var differs = !scriptMatches || ( !sourceTextMatches && NormalizeJson( remoteJson ) != NormalizeJson( localJson ) );
 
 						if ( differs )
 						{
@@ -2452,6 +2480,16 @@ public partial class SyncToolWindow : PaintedWindow
 		Update();
 
 		var activeEndpointFiles = GetActiveEndpointFiles();
+
+		// Script-file problems stop the whole push before anything is sent; rows are set in ReportPushBlocked.
+		if ( !EndpointScriptsReadyForPush() )
+		{
+			_busy = false;
+			_busyItem = null;
+			ScrollToBottom();
+			Update();
+			return;
+		}
 
 		var pushAllPayload = BuildPushAllPayload( out var hasAnyPushResource );
 		if ( !hasAnyPushResource || !await RunPreflightOrOfferFix( pushAllPayload, () => _ = PushAll() ) )
@@ -3280,9 +3318,10 @@ public partial class SyncToolWindow : PaintedWindow
 		if ( problems.Count == 0 )
 			return true;
 
-		var message = "Endpoint script files need fixing before push:\n" + string.Join( "\n", problems );
+		var message = "Endpoint script files need fixing before push:\n" + string.Join( "\n", problems.Values );
 		SyncToolApi.ReportLocalError( "endpoints", message );
 		ShowSyncBatchFailureWindow( message, "LOCAL_SCRIPT_FILE" );
+		ReportPushBlocked( problems );
 		SetStatus( "Push blocked: endpoint script file problem", true );
 		return false;
 	}
@@ -3291,9 +3330,6 @@ public partial class SyncToolWindow : PaintedWindow
 	{
 		try
 		{
-			if ( !EndpointScriptsReadyForPush() )
-				return false;
-
 			var localEps = SyncToolConfig.LoadSourcePayloadResources( "endpoint", includeDeprecated: false );
 			if ( localEps.Count == 0 )
 			{
@@ -3324,9 +3360,6 @@ public partial class SyncToolWindow : PaintedWindow
 	{
 		try
 		{
-			if ( !EndpointScriptsReadyForPush() )
-				return (false, false, false);
-
 			// Load raw local source. Backend compiler owns canonicalization.
 			var localEps = SyncToolConfig.LoadSourcePayloadResources( "endpoint", includeDeprecated: false );
 			var localCols = SyncToolConfig.LoadSourcePayloadResources( "collection" );
@@ -3367,6 +3400,10 @@ public partial class SyncToolWindow : PaintedWindow
 					// Batch sync endpoint not available, falling back to individual pushes
 					return await DoPushAllIndividual( hasEndpoints, hasCollections, hasWorkflows );
 				}
+
+				// A refused batch names the endpoints with broken scripts. Those rows fail; the rest read "not pushed (blocked)".
+				if ( SyncToolApi.LastErrorBody is JsonElement refusalBody && BlockPushForEndpointScripts( refusalBody, null ) )
+					return (false, false, false);
 
 				var finalErrMsg = string.IsNullOrEmpty( errMsg ) ? "Unknown error" : errMsg;
 				SyncToolApi.ReportLocalError( "sync", $"Batch sync failed: {finalErrMsg}" );
@@ -3426,6 +3463,9 @@ public partial class SyncToolWindow : PaintedWindow
 			var errMsg = SyncToolApi.LastErrorMessage ?? "";
 			if ( !resp.HasValue )
 			{
+				if ( SyncToolApi.LastErrorBody is JsonElement refusalBody && BlockPushForEndpointScripts( refusalBody, null ) )
+					return (false, false);
+
 				var finalErrMsg = string.IsNullOrEmpty( errMsg ) ? "Unknown error" : errMsg;
 				SyncToolApi.ReportLocalError( "sync", $"Endpoint/workflow batch sync failed: {finalErrMsg}" );
 				ShowSyncBatchFailureWindow( finalErrMsg, errCode );

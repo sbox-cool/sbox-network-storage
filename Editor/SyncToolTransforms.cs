@@ -58,6 +58,31 @@ public static class SyncToolTransforms
 	}
 
 	/// <summary>
+	/// The endpoint's handler script from its comparable view, or false when it carries none. Line endings and
+	/// surrounding whitespace are normalized so a CRLF copy and an LF copy compare equal.
+	/// </summary>
+	public static bool TryGetEndpointScript( JsonElement endpoint, out string script )
+	{
+		var view = GetComparableResourceView( endpoint );
+		if ( view.ValueKind == JsonValueKind.Object && view.TryGetProperty( "script", out var value ) && value.ValueKind == JsonValueKind.String )
+		{
+			script = SyncToolVerification.NormalizeSourceTextForVerification( value.GetString() );
+			return true;
+		}
+
+		script = null;
+		return false;
+	}
+
+	/// <summary>True when a local endpoint and its remote readback carry the same handler script. Both absent counts as equal.</summary>
+	public static bool EndpointScriptsMatch( JsonElement local, JsonElement remote )
+	{
+		var hasLocal = TryGetEndpointScript( local, out var localScript );
+		var hasRemote = TryGetEndpointScript( remote, out var remoteScript );
+		return hasLocal == hasRemote && ( !hasLocal || localScript == remoteScript );
+	}
+
+	/// <summary>
 	/// Build the management API payload for a source-authored resource. Pushes raw
 	/// source only; the backend compiler owns canonicalization and validation.
 	/// </summary>
@@ -210,6 +235,8 @@ public static class SyncToolTransforms
 				? (object)response
 				: new Dictionary<string, object> { ["status"] = 200, ["body"] = new Dictionary<string, object> { ["ok"] = true } }
 		};
+		if ( TryGetEndpointScript( ep, out var script ) )
+			local["script"] = script;
 
 		if ( source.TryGetProperty( "description", out var desc ) && !string.IsNullOrEmpty( desc.GetString() ) )
 			local["description"] = desc.GetString();

@@ -361,7 +361,7 @@ public static class NetworkStorageEditorMcpTools
 		var scriptProblems = SyncToolConfig.EndpointScriptProblems();
 		if ( scriptProblems.Count > 0 )
 		{
-			Log.Warning( $"[NetworkStorage MCP] Verification re-push skipped: {scriptProblems[0]}" );
+			Log.Warning( $"[NetworkStorage MCP] Verification re-push skipped: {scriptProblems.Values.First()}" );
 			return;
 		}
 

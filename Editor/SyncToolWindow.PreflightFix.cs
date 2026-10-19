@@ -16,6 +16,9 @@ public partial class SyncToolWindow
 		var resp = await SyncToolApi.PreflightSync( payload, _publishTarget );
 		if ( !resp.HasValue )
 		{
+			// A refused preflight answers HTTP 400 with the same findings, so script findings are read from that body too.
+			if ( SyncToolApi.LastErrorBody is JsonElement refusalBody && BlockPushForEndpointScripts( refusalBody, endpointIds ) )
+				return false;
 			var errCode = SyncToolApi.LastErrorCode ?? "";
 			var errMsg = SyncToolApi.LastErrorMessage ?? "";
 			if ( IsBatchSyncEndpointUnavailable( errCode, errMsg ) )
@@ -29,6 +32,10 @@ public partial class SyncToolWindow
 
 		var ok = !resp.Value.TryGetProperty( "ok", out var okProp ) || okProp.ValueKind == JsonValueKind.True;
 		AppendPreflightLog( resp.Value );
+
+		// Script findings block the endpoint they name, whatever their severity or the response's `ok`.
+		if ( BlockPushForEndpointScripts( resp.Value, endpointIds ) )
+			return false;
 		if ( ok ) return true;
 
 		if ( HasMissingStepIdDiagnostics( resp.Value ) )
@@ -165,24 +172,108 @@ public partial class SyncToolWindow
 		}
 	}
 
-	private static bool IsEndpointScriptCode( string code ) => code is "SCRIPT_SYNTAX" or "SCRIPT_MODULE_UNSUPPORTED";
+	/// <summary>Server findings that mean an endpoint's script cannot run. They block the push whatever their severity.</summary>
+	private static bool IsEndpointScriptCode( string code ) => code is "SCRIPT_SYNTAX" or "SCRIPT_TOO_LARGE" or "SCRIPT_MODULE_UNSUPPORTED"
+		or "GLOBAL_CYCLE" or "GLOBAL_NOT_FOUND" or "GLOBAL_EXPORT_NOT_FOUND";
 
 	/// <summary>
 	/// Where an endpoint script finding points: the script file, then the server's line and column inside it,
 	/// as "endpoints/slug.endpoint.js:12:5". The server parses the script text it was sent, which is the file's
-	/// own text, so the position applies to the file unchanged. Falls back to the resource when no file is found.
+	/// own text, so the position applies to the file unchanged. Falls back to the server's file name, then the resource.
 	/// </summary>
 	private string ScriptDiagnosticLocation( string resource, JsonElement diagnostic )
 	{
 		var envelope = _endpointFiles.FirstOrDefault( f => ResourceIdFromFile( f, "endpoint" ) == resource );
 		var script = envelope == null ? null : SyncToolConfig.EndpointScriptFileFor( envelope );
-		var where = script != null ? ProjectRelativePath( script ) : resource;
+		var where = script != null ? ProjectRelativePath( script ) : ( DiagnosticString( diagnostic, "file" ) ?? resource );
 
 		var line = diagnostic.TryGetProperty( "line", out var l ) && l.TryGetInt32( out var lineNumber ) ? lineNumber : 0;
 		if ( line <= 0 ) return where;
 		var column = diagnostic.TryGetProperty( "column", out var col ) && col.TryGetInt32( out var columnNumber ) ? columnNumber : 0;
 		return $"{where}:{line}:{column}";
 	}
+
+	/// <summary>
+	/// Endpoint script findings in a preflight response, keyed by endpoint slug. Each is one line, for example
+	/// "SCRIPT_SYNTAX at endpoints/hello.endpoint.js:5:37: message". Several findings for one endpoint are joined by "; ".
+	/// A finding with no resource id is kept under "" so the batch still reports it.
+	/// </summary>
+	private Dictionary<string, string> EndpointScriptBlocksFromPreflight( JsonElement preflight )
+	{
+		var blocks = new Dictionary<string, string>( StringComparer.OrdinalIgnoreCase );
+		var seen = new HashSet<string>();
+		foreach ( var diagnostic in EnumerateDiagnostics( preflight ) )
+		{
+			if ( diagnostic.ValueKind != JsonValueKind.Object ) continue;
+			var code = DiagnosticString( diagnostic, "code" );
+			if ( !IsEndpointScriptCode( code ) ) continue;
+			var kind = DiagnosticString( diagnostic, "resourceKind" );
+			if ( kind != null && !string.Equals( kind, "endpoint", StringComparison.OrdinalIgnoreCase ) ) continue;
+
+			var resource = DiagnosticString( diagnostic, "resourceId" ) ?? "";
+			var text = SingleLine( $"{code} at {ScriptDiagnosticLocation( resource, diagnostic )}: {DiagnosticString( diagnostic, "message" )}" );
+			if ( !seen.Add( $"{resource}\n{text}" ) ) continue;
+			blocks[resource] = blocks.TryGetValue( resource, out var earlier ) ? $"{earlier}; {text}" : text;
+		}
+		return blocks;
+	}
+
+	/// <summary>
+	/// Blocks the push when a preflight or refusal body names endpoint script problems. Returns true when it blocked.
+	/// </summary>
+	private bool BlockPushForEndpointScripts( JsonElement body, IEnumerable<string> endpointIds )
+	{
+		var blocks = EndpointScriptBlocksFromPreflight( body );
+		if ( blocks.Count == 0 )
+			return false;
+
+		var singleSlug = endpointIds?.FirstOrDefault();
+		ReportPushBlocked( blocks, singleSlug == null ? null : $"ep_{singleSlug}" );
+		SetStatus( "Push blocked: endpoint script problem", true );
+		return true;
+	}
+
+	/// <summary>
+	/// Records a push refused before anything was sent. Each endpoint named in <paramref name="problems"/> fails with
+	/// its own message; every other row reads "not pushed (blocked)". A non-null <paramref name="singleItemId"/> limits
+	/// the rows to that one item; null means the whole push-all batch.
+	/// </summary>
+	private void ReportPushBlocked( IReadOnlyDictionary<string, string> problems, string singleItemId = null )
+	{
+		var batch = singleItemId == null;
+		var summary = $"Push blocked: {problems.Count} endpoint script problem(s). Nothing was sent.";
+		_syncLog.Add( new SyncLogEntry { Name = "Preflight", Type = "Validation", Ok = false, Detail = summary } );
+
+		var endpointSlugs = batch
+			? GetActiveEndpointFiles().Select( f => ResourceIdFromFile( f, "endpoint" ) ).ToList()
+			: singleItemId.StartsWith( "ep_" ) ? new List<string> { singleItemId[3..] } : new List<string>();
+		foreach ( var slug in endpointSlugs )
+		{
+			var named = problems.TryGetValue( slug, out var problem );
+			if ( named || !batch )
+			{
+				SetItemState( $"ep_{slug}", result: "FAIL", remoteDiffers: false, diffSummary: "" );
+				_syncLog.Add( new SyncLogEntry { Name = $"{slug}.endpoint.yml", Type = "Endpoint", Ok = false, Detail = named ? problem : summary } );
+			}
+			else
+				_syncLog.Add( new SyncLogEntry { Name = $"{slug}.endpoint.yml", Type = "Endpoint", Ok = false, Warn = true, Detail = BlockedRowDetail } );
+		}
+
+		if ( !batch ) return;
+		foreach ( var file in _collectionFiles )
+			_syncLog.Add( new SyncLogEntry { Name = $"{ResourceIdFromFile( file, "collection" )}.collection.yml", Type = "Collection", Ok = false, Warn = true, Detail = BlockedRowDetail } );
+		foreach ( var file in _workflowFiles )
+			_syncLog.Add( new SyncLogEntry { Name = $"{ResourceIdFromFile( file, "workflow" )}.workflow.yml", Type = "Workflow", Ok = false, Warn = true, Detail = BlockedRowDetail } );
+	}
+
+	private const string BlockedRowDetail = "not pushed (blocked)";
+
+	/// <summary>Joins a message's lines into one, so it fits a one-line row.</summary>
+	private static string SingleLine( string text ) =>
+		string.Join( " ", (text ?? "").Split( new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries ).Select( s => s.Trim() ) );
+
+	private static string DiagnosticString( JsonElement diagnostic, string name ) =>
+		diagnostic.TryGetProperty( name, out var value ) && value.ValueKind == JsonValueKind.String ? value.GetString() : null;
 
 	private static bool IsResourceSyncLog( SyncLogEntry entry ) => entry.Type == "Endpoint" || entry.Type == "Collection" || entry.Type == "Workflow";
 }

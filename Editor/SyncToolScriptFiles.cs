@@ -239,10 +239,10 @@ public static partial class SyncToolConfig
 			&& FindPayloadSourceFiles( "endpoint", dir ).Any( path => EndpointScriptFileFor( path ) != null );
 	}
 
-	/// <summary>Script-file problems across all endpoint envelopes. Push refuses to run while any exist.</summary>
-	public static List<string> EndpointScriptProblems()
+	/// <summary>Script-file problems across all endpoint envelopes, keyed by endpoint slug. Push refuses to run while any exist.</summary>
+	public static Dictionary<string, string> EndpointScriptProblems()
 	{
-		var problems = new List<string>();
+		var problems = new Dictionary<string, string>( StringComparer.OrdinalIgnoreCase );
 		var dir = Abs( SourceFolderForKind( "endpoint" ) );
 		if ( !Directory.Exists( dir ) )
 			return problems;
@@ -251,7 +251,7 @@ public static partial class SyncToolConfig
 		{
 			var error = EndpointScriptError( path );
 			if ( error != null )
-				problems.Add( error );
+				problems[ResourceIdFromFilePath( path, "endpoint" )] = error;
 		}
 		return problems;
 	}
