@@ -154,11 +154,34 @@ public partial class SyncToolWindow
 			var message = diagnostic.TryGetProperty( "message", out var m ) && m.ValueKind == JsonValueKind.String ? m.GetString() : "";
 			var resource = diagnostic.TryGetProperty( "resourceId", out var r ) && r.ValueKind == JsonValueKind.String ? r.GetString() : "";
 			var path = diagnostic.TryGetProperty( "sourcePath", out var p ) && p.ValueKind == JsonValueKind.String ? p.GetString() : "";
-			if ( !seen.Add( $"{resource}|{code}|{path}" ) ) continue;
+			// Script findings name the script file and the position inside it, not the envelope path.
+			var isScript = IsEndpointScriptCode( code );
+			var location = isScript ? ScriptDiagnosticLocation( resource, diagnostic ) : $"{resource}{path}";
+			if ( !seen.Add( $"{resource}|{code}|{location}" ) ) continue;
 
-			Log.Warning( $"[SyncTool] Preflight warning {code} in {resource}{path}: {message}" );
-			_syncLog.Add( new SyncLogEntry { Name = string.IsNullOrEmpty( resource ) ? "Preflight warning" : resource, Type = "Validation", Ok = true, Warn = true, Detail = $"{code}: {message}" } );
+			Log.Warning( $"[SyncTool] Preflight warning {code} in {location}: {message}" );
+			var detail = isScript ? $"{code} at {location}: {message}" : $"{code}: {message}";
+			_syncLog.Add( new SyncLogEntry { Name = string.IsNullOrEmpty( resource ) ? "Preflight warning" : resource, Type = "Validation", Ok = true, Warn = true, Detail = detail } );
 		}
+	}
+
+	private static bool IsEndpointScriptCode( string code ) => code is "SCRIPT_SYNTAX" or "SCRIPT_MODULE_UNSUPPORTED";
+
+	/// <summary>
+	/// Where an endpoint script finding points: the script file, then the server's line and column inside it,
+	/// as "endpoints/slug.endpoint.js:12:5". The server parses the script text it was sent, which is the file's
+	/// own text, so the position applies to the file unchanged. Falls back to the resource when no file is found.
+	/// </summary>
+	private string ScriptDiagnosticLocation( string resource, JsonElement diagnostic )
+	{
+		var envelope = _endpointFiles.FirstOrDefault( f => ResourceIdFromFile( f, "endpoint" ) == resource );
+		var script = envelope == null ? null : SyncToolConfig.EndpointScriptFileFor( envelope );
+		var where = script != null ? ProjectRelativePath( script ) : resource;
+
+		var line = diagnostic.TryGetProperty( "line", out var l ) && l.TryGetInt32( out var lineNumber ) ? lineNumber : 0;
+		if ( line <= 0 ) return where;
+		var column = diagnostic.TryGetProperty( "column", out var col ) && col.TryGetInt32( out var columnNumber ) ? columnNumber : 0;
+		return $"{where}:{line}:{column}";
 	}
 
 	private static bool IsResourceSyncLog( SyncLogEntry entry ) => entry.Type == "Endpoint" || entry.Type == "Collection" || entry.Type == "Workflow";

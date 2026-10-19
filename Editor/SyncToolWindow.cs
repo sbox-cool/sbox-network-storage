@@ -3022,6 +3022,8 @@ public partial class SyncToolWindow : PaintedWindow
 			{
 				var slug = id[3..];
 				ok = await DoPushSingleEndpointMerged( slug );
+				if ( ok )
+					await SyncToolConfig.SyncEndpointTypingsAsync();
 				itemName = $"{slug}.endpoint.yml";
 				itemType = "Endpoint";
 			}
@@ -3136,6 +3138,8 @@ public partial class SyncToolWindow : PaintedWindow
 				{
 					var slug = id[3..];
 					ok = await DoPullSingleEndpoint( slug );
+					if ( ok )
+						await SyncToolConfig.SyncEndpointTypingsAsync();
 				}
 				else if ( id.StartsWith( "col_" ) )
 				{
@@ -3266,10 +3270,30 @@ public partial class SyncToolWindow : PaintedWindow
 	//  Push implementation
 	// ──────────────────────────────────────────────────────
 
+	/// <summary>
+	/// Refuses a push while an endpoint's script file is missing, ambiguous, or unreadable. The problem is
+	/// shown in the Sync window and nothing is sent.
+	/// </summary>
+	private bool EndpointScriptsReadyForPush()
+	{
+		var problems = SyncToolConfig.EndpointScriptProblems();
+		if ( problems.Count == 0 )
+			return true;
+
+		var message = "Endpoint script files need fixing before push:\n" + string.Join( "\n", problems );
+		SyncToolApi.ReportLocalError( "endpoints", message );
+		ShowSyncBatchFailureWindow( message, "LOCAL_SCRIPT_FILE" );
+		SetStatus( "Push blocked: endpoint script file problem", true );
+		return false;
+	}
+
 	private async Task<bool> DoPushAllEndpoints()
 	{
 		try
 		{
+			if ( !EndpointScriptsReadyForPush() )
+				return false;
+
 			var localEps = SyncToolConfig.LoadSourcePayloadResources( "endpoint", includeDeprecated: false );
 			if ( localEps.Count == 0 )
 			{
@@ -3278,7 +3302,11 @@ public partial class SyncToolWindow : PaintedWindow
 			}
 			var serverFmt = JsonSerializer.Deserialize<JsonElement>( JsonSerializer.Serialize( localEps ) );
 			var resp = await SyncToolApi.PushEndpoints( serverFmt, _publishTarget );
-			return resp.HasValue;
+			if ( !resp.HasValue )
+				return false;
+
+			await SyncToolConfig.SyncEndpointTypingsAsync();
+			return true;
 		}
 		catch ( Exception ex )
 		{
@@ -3296,6 +3324,9 @@ public partial class SyncToolWindow : PaintedWindow
 	{
 		try
 		{
+			if ( !EndpointScriptsReadyForPush() )
+				return (false, false, false);
+
 			// Load raw local source. Backend compiler owns canonicalization.
 			var localEps = SyncToolConfig.LoadSourcePayloadResources( "endpoint", includeDeprecated: false );
 			var localCols = SyncToolConfig.LoadSourcePayloadResources( "collection" );
@@ -3350,6 +3381,9 @@ public partial class SyncToolWindow : PaintedWindow
 				colResult.TryGetProperty( "ok", out var colOkProp ) && colOkProp.GetBoolean());
 			var wfOk = !hasWorkflows || (resp.Value.TryGetProperty( "workflows", out var wfResult ) &&
 				wfResult.TryGetProperty( "ok", out var wfOkProp ) && wfOkProp.GetBoolean());
+
+			if ( hasEndpoints && epOk )
+				await SyncToolConfig.SyncEndpointTypingsAsync();
 
 			return (hasEndpoints && epOk, hasCollections && colOk, hasWorkflows && wfOk);
 		}
@@ -3444,6 +3478,13 @@ public partial class SyncToolWindow : PaintedWindow
 			if ( !SyncToolConfig.TryLoadSourcePayloadResource( "endpoint", localFile, out var localEp, includeDeprecated: true ) )
 			{
 				SyncToolApi.ReportLocalError( "endpoints", $"Local endpoint file for {slug} could not be read." );
+				return false;
+			}
+
+			var scriptError = SyncToolConfig.EndpointScriptError( localFile );
+			if ( scriptError != null )
+			{
+				SyncToolApi.ReportLocalError( "endpoints", $"Local endpoint file for {slug} has a script problem: {scriptError}" );
 				return false;
 			}
 

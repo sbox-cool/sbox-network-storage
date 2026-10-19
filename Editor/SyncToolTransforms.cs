@@ -430,6 +430,7 @@ public static class SyncToolTransforms
 			or "sourceFormat"
 			or "sourceVersion"
 			or "sourcePath"
+			or "scriptFile"
 			or "authoringMode"
 			or "compilerFingerprint"
 			or "compilerFingerprintHash"
