@@ -49,7 +49,7 @@ public partial class SyncToolWindow
 					continue;
 				}
 
-				if ( CollectionVerificationMatches( colName, remoteCollection, localColByName, localColSourceTextByName ) )
+				if ( SyncToolVerification.MatchCollection( colName, remoteCollection, localColByName, localColSourceTextByName ) != SyncToolVerification.Match.None )
 				{
 					MarkCollectionMismatchVerified( colName );
 				}
@@ -70,24 +70,6 @@ public partial class SyncToolWindow
 		return collection.ValueKind == JsonValueKind.Object && collection.TryGetProperty( "name", out var name )
 			? name.GetString()
 			: null;
-	}
-
-	private static bool CollectionVerificationMatches(
-		string colName,
-		JsonElement remoteCollection,
-		Dictionary<string, string> localColByName,
-		Dictionary<string, string> localColSourceTextByName )
-	{
-		var sourceTextMatches = localColSourceTextByName.TryGetValue( colName, out var localSourceText )
-			&& SyncToolTransforms.TryGetSourceText( remoteCollection, out var remoteSourceText )
-			&& localSourceText == NormalizeSourceTextForVerification( remoteSourceText );
-		if ( sourceTextMatches )
-			return true;
-
-		var remoteLocal = SyncToolTransforms.ServerCollectionToLocal( remoteCollection );
-		var remoteNorm = NormalizeJson( JsonSerializer.Serialize( remoteLocal ) );
-		return localColByName.TryGetValue( colName, out var localNorm )
-			&& (localNorm == remoteNorm || CollectionSemanticsMatch( localNorm, remoteNorm ));
 	}
 
 	private void MarkCollectionMismatchVerified( string colName )
