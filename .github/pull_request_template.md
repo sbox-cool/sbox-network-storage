@@ -16,5 +16,6 @@ Describe existing callers, serialized payloads, defaults, error behavior and edi
 ## Compat gate labels
 
 - `compat: breaking-approved`: a maintainer applies this only when a public symbol is removed or changed on purpose and the migration in [docs/compat-gate.md](../docs/compat-gate.md) is in place. Without it the API check fails.
-- `editor-tested`: a maintainer applies this after the s&box editor run is recorded in the server repo. Required when this PR changes `Code/` or `Editor/`.
-- `pending-sbox-editor-test` is added automatically while `editor-tested` is missing.
+- `editor-tested`: a maintainer applies this after the s&box editor run is recorded in the server repo. Required when this PR changes `Editor/` GUI surface. `Code/`-only changes pass on the green engine legs without it.
+- `code-track`: a maintainer applies this to an `Editor/` change that is not GUI surface, citing the green engine run in the PR description. Removes the need for a native editor run.
+- `pending-sbox-editor-test` is added automatically while `editor-tested` and `code-track` are both missing for an `Editor/` change.
