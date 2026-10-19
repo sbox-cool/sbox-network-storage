@@ -91,17 +91,22 @@ jobs:
           https://raw.githubusercontent.com/sbox-cool/sbox-network-storage/release-status/release-status.json
           EOF
           generated="$(jq -r '.generatedAt' "$STATUS_FILE")"
+          # Build the snapshot with a private index and plumbing, so the checked-out tree is never touched.
+          export GIT_INDEX_FILE="$RUNNER_TEMP/release-status.index"
+          rm -f "$GIT_INDEX_FILE"
+          git read-tree --empty
+          parent=""
           if git ls-remote --exit-code --heads origin refs/heads/release-status >/dev/null 2>&1; then
-            git fetch --depth=1 origin refs/heads/release-status
-            git checkout -q -B release-status FETCH_HEAD
-          else
-            git checkout -q --orphan release-status
+            git fetch -q --depth=1 origin refs/heads/release-status
+            parent="$(git rev-parse FETCH_HEAD)"
           fi
-          git rm -r -q --ignore-unmatch .
-          cp "$STATUS_FILE" release-status.json
-          cp "$readme" README.md
-          git add release-status.json README.md
-          git -c user.name="github-actions[bot]" \
-            -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
-            commit -q -m "Release status ${generated}"
-          git push origin HEAD:refs/heads/release-status
+          git update-index --add --cacheinfo "100644,$(git hash-object -w "$STATUS_FILE"),release-status.json"
+          git update-index --add --cacheinfo "100644,$(git hash-object -w "$readme"),README.md"
+          tree="$(git write-tree)"
+          identity=(-c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com")
+          if [ -n "$parent" ]; then
+            commit="$(git "${identity[@]}" commit-tree "$tree" -p "$parent" -m "Release status ${generated}")"
+          else
+            commit="$(git "${identity[@]}" commit-tree "$tree" -m "Release status ${generated}")"
+          fi
+          git push origin "$commit:refs/heads/release-status"
