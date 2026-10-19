@@ -152,6 +152,11 @@ public static partial class NetworkStorage
 					{
 						delivered = 0;
 					}
+					else if ( root.TryGetProperty( "stored", out var stored ) && stored.ValueKind == JsonValueKind.False )
+					{
+						delivered = 0;
+						reason = "storage_unavailable";
+					}
 					else if ( root.TryGetProperty( "accepted", out var accepted ) && accepted.TryGetInt32( out var count ) )
 					{
 						delivered = Math.Clamp( count, 0, sent );
