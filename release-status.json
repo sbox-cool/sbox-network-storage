@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "generatedAt": "2026-10-19T20:35:04.860Z",
+  "generatedAt": "2026-10-19T23:21:34.386Z",
   "library": {
     "published": {
       "revision": 423774,
@@ -11,15 +11,21 @@
     },
     "main": {
       "version": "1.2.0",
-      "commit": "9b6ec5d41d99afd1756293d958be1f1330aa73b7",
-      "committedAt": "2026-10-19T06:29:00Z",
+      "commit": "8fb5785c6d6876482000f4d44a4d8c359bf5847e",
+      "committedAt": "2026-10-19T23:19:58Z",
       "ci": {
-        "conclusion": "success",
-        "runUrl": "https://github.com/sbox-cool/sbox-network-storage/actions/runs/39235642508",
-        "engine": "sbox-public@aecf62bd247648d5af1de9cb0108a6c4731befb3"
+        "conclusion": "pending",
+        "runUrl": "https://github.com/sbox-cool/sbox-network-storage/actions/runs/39340907634",
+        "engine": null
       }
     },
     "pending": [
+      {
+        "number": 51,
+        "title": "Honor 429 Retry-After with a bounded retry (#47)",
+        "mergedAt": "2026-10-19T23:19:59Z",
+        "url": "https://github.com/sbox-cool/sbox-network-storage/pull/51"
+      },
       {
         "number": 44,
         "title": "release-status: publish snapshot with plumbing",
@@ -139,10 +145,22 @@
       "url": "https://github.com/sbox-cool/sbox-network-storage-server/releases/tag/v0.5.4"
     },
     "main": {
-      "commit": "6b93bc37b66bcdf8d677b688d323d0357a5e4227",
-      "committedAt": "2026-10-19T11:21:52Z"
+      "commit": "6f5666b8211e75431518fbf07752993544e1431b",
+      "committedAt": "2026-10-19T23:20:35Z"
     },
     "pending": [
+      {
+        "number": 158,
+        "title": "Preflight: script syntax errors with line and column",
+        "mergedAt": "2026-10-19T23:20:35Z",
+        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/158"
+      },
+      {
+        "number": 155,
+        "title": "Encrypted-request switching, reference security codes, golden vectors (#151)",
+        "mergedAt": "2026-10-19T23:15:51Z",
+        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/155"
+      },
       {
         "number": 149,
         "title": "docs: script endpoints intro (YAML and JavaScript/TypeScript, globals, sandbox)",
