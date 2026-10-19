@@ -276,4 +276,7 @@ public partial class SyncToolWindow
 		diagnostic.TryGetProperty( name, out var value ) && value.ValueKind == JsonValueKind.String ? value.GetString() : null;
 
 	private static bool IsResourceSyncLog( SyncLogEntry entry ) => entry.Type == "Endpoint" || entry.Type == "Collection" || entry.Type == "Workflow";
+
+	/// <summary>A row the push skipped because a script problem blocked the batch. It is not a failure of its own.</summary>
+	private static bool IsBlockedLog( SyncLogEntry entry ) => !entry.Ok && entry.Detail == BlockedRowDetail;
 }

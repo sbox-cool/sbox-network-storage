@@ -823,7 +823,8 @@ public partial class SyncToolWindow : PaintedWindow
 			DrawSectionHeader( ref y, pad, w, "SYNC RESULTS" );
 
 			var okCount = _syncLog.Count( e => e.Ok && IsResourceSyncLog( e ) );
-			var failCount = _syncLog.Count( e => !e.Ok && IsResourceSyncLog( e ) );
+			var failCount = _syncLog.Count( e => !e.Ok && IsResourceSyncLog( e ) && !IsBlockedLog( e ) );
+			var blockedCount = _syncLog.Count( e => IsBlockedLog( e ) );
 			var verifiedCount = _syncLog.Count( e => IsResourceSyncLog( e ) && e.Detail != null && e.Detail.Contains( "Verified" ) );
 			var mismatchCount = _syncLog.Count( e => IsResourceSyncLog( e ) && e.Detail != null && e.Detail.Contains( "Mismatch" ) );
 
@@ -859,6 +860,12 @@ public partial class SyncToolWindow : PaintedWindow
 			{
 				Paint.SetPen( Color.Red.WithAlpha( 0.8f ) );
 				Paint.DrawText( new Rect( sx, y, 90, 16 ), $"✗ {failCount} failed", TextFlag.LeftCenter );
+				sx += 90;
+			}
+			if ( blockedCount > 0 )
+			{
+				Paint.SetPen( Color.White.WithAlpha( 0.6f ) );
+				Paint.DrawText( new Rect( sx, y, 110, 16 ), $"○ {blockedCount} not pushed", TextFlag.LeftCenter );
 			}
 			y += 22;
 
@@ -1939,16 +1946,22 @@ public partial class SyncToolWindow : PaintedWindow
 		if ( localJson != null )
 		{
 			state.LocalJson = localJson;
-			state.LocalYaml = SyncToolYamlRenderer.RenderFromJson( localJson );
+			state.LocalYaml = PreviewYaml( id, localJson );
 		}
 		if ( remoteJson != null )
 		{
 			state.RemoteJson = remoteJson;
-			state.RemoteYaml = SyncToolYamlRenderer.RenderFromJson( remoteJson );
+			state.RemoteYaml = PreviewYaml( id, remoteJson );
 		}
 		if ( status.HasValue ) state.Status = status.Value;
 		_items[id] = state;
 	}
+
+	/// <summary>Display-only YAML for a row. An endpoint shows its script as its own block, the way a pull writes it.</summary>
+	private static string PreviewYaml( string id, string json ) =>
+		id.StartsWith( "ep_", StringComparison.Ordinal )
+			? SyncToolPullWriter.EndpointPreviewText( id[3..], json )
+			: SyncToolYamlRenderer.RenderFromJson( json );
 
 	private void ClearAllRemoteDiffs()
 	{
@@ -2600,7 +2613,8 @@ public partial class SyncToolWindow : PaintedWindow
 		_hasCheckedRemote = false;
 
 		var okCount = _syncLog.Count( e => e.Ok && IsResourceSyncLog( e ) );
-		var failCount = _syncLog.Count( e => !e.Ok && IsResourceSyncLog( e ) );
+		var failCount = _syncLog.Count( e => !e.Ok && IsResourceSyncLog( e ) && !IsBlockedLog( e ) );
+		var blockedCount = _syncLog.Count( e => IsBlockedLog( e ) );
 		var mismatchCount = _syncLog.Count( e => IsResourceSyncLog( e ) && e.Detail != null && e.Detail.Contains( "Mismatch" ) );
 		var verifiedCount = _syncLog.Count( e => IsResourceSyncLog( e ) && e.Detail != null && e.Detail.Contains( "Verified" ) );
 		var mergeCount = _syncLog.Count( e => e.Detail != null && e.Detail.Contains( "Remote semantics available" ) );
@@ -2608,12 +2622,12 @@ public partial class SyncToolWindow : PaintedWindow
 		if ( mismatchCount > 0 )
 			ShowVerificationMismatchWindow( mismatchCount );
 
-		if ( mergeCount > 0 && mismatchCount == 0 && failCount == 0 )
+		if ( mergeCount > 0 && mismatchCount == 0 && failCount == 0 && blockedCount == 0 )
 			_status = $"Pushed OK - {mergeCount} item(s) can pull remote semantics";
 		else if ( mismatchCount > 0 )
 			_status = $"Done: {okCount} pushed, {mismatchCount} mismatch(es) — check diffs";
-		else if ( failCount > 0 )
-			_status = $"Done: {okCount - failCount} OK, {failCount} failed";
+		else if ( failCount > 0 || blockedCount > 0 )
+			_status = $"Done: {okCount} pushed, {failCount} failed" + ( blockedCount > 0 ? $", {blockedCount} not pushed" : "" );
 		else
 			_status = $"All synced and verified ({verifiedCount} resources)";
 

@@ -23,6 +23,31 @@ public static class SyncToolPullWriter
 			local );
 	}
 
+	/// <summary>
+	/// Display-only text of an endpoint in the layout a pull writes: the envelope, then its script file below a
+	/// divider. The pull preview shows both panes this way, so a script change reads line by line.
+	/// </summary>
+	public static string EndpointPreviewText( string slug, string json )
+	{
+		if ( string.IsNullOrWhiteSpace( json ) )
+			return "";
+
+		Dictionary<string, object> data;
+		try
+		{
+			data = JsonSerializer.Deserialize<Dictionary<string, object>>( json ) ?? new Dictionary<string, object>();
+		}
+		catch ( JsonException )
+		{
+			return SyncToolYamlRenderer.RenderFromJson( json );
+		}
+
+		// Same split the writer makes when it has no source path, so the preview matches what a pull writes.
+		var envelope = SyncToolConfig.SplitEndpointScript( slug, data, null, out var scriptFileName, out var scriptText );
+		var text = BuildSourceText( "endpoint", slug, envelope );
+		return scriptFileName == null ? text : $"{text}\n--- {scriptFileName} ---\n{scriptText}";
+	}
+
 	public static bool SaveCollection( string name, JsonElement remoteCollection )
 	{
 		var local = SyncToolTransforms.ServerCollectionToLocal( remoteCollection );
