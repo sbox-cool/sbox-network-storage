@@ -91,8 +91,8 @@ jobs:
           https://raw.githubusercontent.com/sbox-cool/sbox-network-storage/release-status/release-status.json
           EOF
           generated="$(jq -r '.generatedAt' "$STATUS_FILE")"
-          if git ls-remote --exit-code --heads origin release-status >/dev/null 2>&1; then
-            git fetch --depth=1 origin release-status
+          if git ls-remote --exit-code --heads origin refs/heads/release-status >/dev/null 2>&1; then
+            git fetch --depth=1 origin refs/heads/release-status
             git checkout -q -B release-status FETCH_HEAD
           else
             git checkout -q --orphan release-status
