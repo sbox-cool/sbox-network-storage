@@ -2,9 +2,9 @@ name: Compat gate
 
 # Library-side compatibility gate. Holds library PRs that break the public API
 # without approval, runs the real s&box dedicated server against the server's
-# latest release and main, and blocks Code/ or Editor/ changes until an
-# editor-tested label is applied. Everything is summarized by the single
-# required check "Compat gate". See docs/compat-gate.md.
+# latest release and main. Editor/ changes (GUI surface) need a native editor run
+# (editor-tested) or a maintainer code-track reclassification on a green engine run.
+# Everything is summarized by the single required check "Compat gate". See docs/compat-gate.md.
 
 on:
   pull_request:
@@ -50,6 +50,7 @@ jobs:
     outputs:
       engine: ${{ steps.classify.outputs.engine }}
       library_code: ${{ steps.classify.outputs.library_code }}
+      editor: ${{ steps.classify.outputs.editor }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -67,8 +68,7 @@ jobs:
         run: |
           set -euo pipefail
           if [ "$EVENT" != "pull_request" ]; then
-            echo "engine=true" >> "$GITHUB_OUTPUT"
-            echo "library_code=true" >> "$GITHUB_OUTPUT"
+            printf '%s\n' engine=true library_code=true editor=true >> "$GITHUB_OUTPUT"
             exit 0
           fi
           mb=$(git merge-base "$BASE_SHA" "$HEAD_SHA")
@@ -84,6 +84,11 @@ jobs:
           fi
           echo "engine=$engine" >> "$GITHUB_OUTPUT"
           echo "library_code=$code" >> "$GITHUB_OUTPUT"
+          editor=false
+          if grep -qE '^Editor/' changed.txt; then
+            editor=true
+          fi
+          echo "editor=$editor" >> "$GITHUB_OUTPUT"
 
   api-surface:
     name: API surface
@@ -280,22 +285,30 @@ jobs:
 
   editor-evidence:
     name: Editor evidence
-    needs: changes
-    if: github.event_name == 'pull_request'
+    needs: [changes, engine]
+    if: always() && github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
       contents: read
       pull-requests: write
     steps:
-      - name: Require editor-tested for Code/ or Editor/ changes
+      - name: Require editor evidence for Editor/ changes
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
+          CHANGES_RESULT: ${{ needs.changes.result }}
           LIBRARY_CODE: ${{ needs.changes.outputs.library_code }}
+          EDITOR_TOUCHED: ${{ needs.changes.outputs.editor }}
+          ENGINE_RESULT: ${{ needs.engine.result }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           set -euo pipefail
+          if [ "$CHANGES_RESULT" != "success" ]; then
+            echo "::error::Classify changes ended '$CHANGES_RESULT'; the editor evidence rule cannot be evaluated."
+            exit 1
+          fi
           if [ "$LIBRARY_CODE" != "true" ]; then
             echo "No changes under Code/ or Editor/: no s&box editor run required." >> "$GITHUB_STEP_SUMMARY"
             exit 0
@@ -307,6 +320,28 @@ jobs:
             exit 0
           fi
 
+          # Code/ or Editor/ changed without a native run: the engine legs are the ci-only evidence.
+          if [ "$ENGINE_RESULT" != "success" ]; then
+            echo "Engine legs ended '$ENGINE_RESULT'. Code/ or Editor/ changes need every engine leg to pass." >> "$GITHUB_STEP_SUMMARY"
+            echo "::error::Engine legs ended '$ENGINE_RESULT' for a Code/ or Editor/ change. See the engine jobs."
+            exit 1
+          fi
+          {
+            echo "## Engine evidence (ci-only)"
+            echo
+            echo "Every engine leg (latest-release, oldest-supported, main) passed: $RUN_URL"
+            echo
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "$EDITOR_TOUCHED" != "true" ]; then
+            echo "Code track: only Code/ changed. The engine legs certify it; no native editor run is required for non-GUI code." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          if grep -qxF 'code-track' <<<"$labels"; then
+            echo "Editor/ changed; reclassified to the code track by the code-track label. Engine evidence accepted." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
           if ! grep -qxF 'pending-sbox-editor-test' <<<"$labels"; then
             gh pr edit "$PR_NUMBER" --repo "$REPO" --add-label pending-sbox-editor-test \
               || echo "::warning::Could not add pending-sbox-editor-test (read-only token, e.g. fork PR). Add it manually."
@@ -315,16 +350,19 @@ jobs:
           cat >> "$GITHUB_STEP_SUMMARY" <<'EOF'
           ## Editor evidence required
 
-          This PR changes `Code/` or `Editor/`. Wire or library behavior needs a real s&box editor run
-          before merge. Hosted runners cannot run the editor, so this check stays red until a maintainer
-          records the run.
+          This PR changes `Editor/`. Editor GUI surfaces (Setup and Sync Tool windows, Library Manager,
+          Play-in-editor panels, media capture) need a real s&box editor run. Hosted runners cannot run the
+          editor, so this check stays red until a maintainer records the run or reclassifies the change.
 
           1. In `sbox-cool/sbox-network-storage-server`, run `tools/sbox-cli-e2e` on a Windows PC with Steam
              against this PR's library checkout (`--library <path>`), following `docs/editor-test-plan.md`.
           2. Record one `tested` row in `compat/library-matrix.json` in that repo, with the five facts.
           3. Apply the `editor-tested` label to this PR. The Compat gate re-runs automatically.
+
+          If the `Editor/` change is not GUI surface, a maintainer may apply `code-track` instead. The green
+          engine legs above then certify it, and the PR description must cite that run.
           EOF
-          echo "::error::Code/ or Editor/ changed without the editor-tested label. See the job summary."
+          echo "::error::Editor/ changed without a native editor run or a code-track reclassification. See the job summary."
           exit 1
 
   engine:
