@@ -105,7 +105,7 @@ runtime: javascript
 - Pull writes the server's `script` to the sibling file and keeps `scriptFile` in the envelope. An endpoint pulled to a `.json` file keeps `script` inline, because a JSON envelope cannot reference a file.
 - These stop the endpoint push before it is sent: `scriptFile` without `runtime`; both `.js` and `.ts` present for one runtime; `script` set inline together with a file; a JSON envelope that references a file. A runtime with no file is sent as is, and the server reports `MISSING_SCRIPT`.
 - After an endpoint push or pull, the sync tool downloads the typings to `Editor/<DataFolder>/types/ns.d.ts`.
-- Preflight warnings `SCRIPT_SYNTAX` and `SCRIPT_MODULE_UNSUPPORTED` name the script file and the line and column the server reports.
+- Preflight findings `SCRIPT_SYNTAX`, `SCRIPT_TOO_LARGE`, `SCRIPT_MODULE_UNSUPPORTED`, `GLOBAL_CYCLE`, `GLOBAL_NOT_FOUND`, and `GLOBAL_EXPORT_NOT_FOUND` block the push of the endpoint they name, whatever their severity. The row names the script file and the line and column the server reports. A refused push (HTTP 400) with the same findings blocks the same way.
 
 ## Flat And Wrapper Layouts
 
