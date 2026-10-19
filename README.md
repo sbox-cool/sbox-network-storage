@@ -359,6 +359,8 @@ the same screens with sample data.
 
 See [analytics.md](analytics.md) for Player Analytics setup, custom events, warnings, and error reporting examples.
 
+Analytics batching: when the server advertises the `analytics-batch` capability, analytics events are queued and sent together (up to 50 events or 256 KiB per request, after a window of up to 2 seconds). Servers without the capability receive one request per event, as before. Events the server rejects, events over 32 KiB, and events beyond the 500-event pending queue are counted and reported in a `[NetworkStorage] Dropped N analytics event(s)` warning, at most once every 30 seconds. Events still queued when the analytics runtime is destroyed are sent immediately; events queued when the process exits may be lost.
+
 ### JsonHelpers (static)
 
 Safe extraction from API `JsonElement` payloads with caller-provided defaults. Handles missing keys and string-to-number coercion.

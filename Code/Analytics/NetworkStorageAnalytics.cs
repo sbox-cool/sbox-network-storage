@@ -116,16 +116,23 @@ public static partial class NetworkStorage
 			["libraryVersion"] = NetworkStorage.PackageVersion,
 			["packageIdent"] = NetworkStoragePackageInfo.PackageIdent
 		};
+			if ( HasCapability( "analytics-batch" ) )
+			{
+				EnqueueAnalyticsEvent( body );
+				return;
+			}
 
 			var headers = await BuildAuthHeaders();
 			var url = BuildUrl( $"/storage/{Uri.EscapeDataString( ProjectId )}/analytics/events" );
 			var content = Http.CreateJsonContent( body );
-			await RequestStringAsync(url, "POST", content, headers);
+			var raw = await RequestStringAsync(url, "POST", content, headers);
+			RecordAnalyticsResponse( raw, 1 );
 			if ( NetworkStorageLogConfig.LogRequests )
 				NetLog.Info( "analytics", $"Reported {severity}:{normalized}" );
 		}
 		catch ( Exception ex )
 		{
+			RecordAnalyticsDrop( 1, ex.Message );
 			if ( NetworkStorageLogConfig.LogErrors )
 				NetLog.Error( "analytics", $"Analytics report failed: {ex.Message}" );
 		}
