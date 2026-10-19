@@ -23,7 +23,7 @@ public static partial class NetworkStorage
 	/// Other 429s, such as plan limits, are not transient and are never retried. Reads always retry; writes retry only
 	/// when the server marks the answer <c>retrySafe</c>.
 	/// </summary>
-	public static bool IsRetryableRateLimit( string method, int statusCode, string body )
+	internal static bool IsRetryableRateLimit( string method, int statusCode, string body )
 	{
 		var status = statusCode == 200 ? ReadRoot( body, root => root.TryGetProperty( "status", out var s ) && s.ValueKind == JsonValueKind.Number && s.TryGetInt32( out var n ) ? n : 0, 0 ) : statusCode;
 		if ( status != 429 ) return false;
@@ -39,7 +39,7 @@ public static partial class NetworkStorage
 	/// Seconds to wait before retrying: the Retry-After header, else the body's <c>retryAfterSec</c>, else the default.
 	/// A header or body value that is missing, negative or not a number is ignored.
 	/// </summary>
-	public static double RateLimitDelaySeconds( string retryAfterHeader, string body )
+	internal static double RateLimitDelaySeconds( string retryAfterHeader, string body )
 	{
 		if ( double.TryParse( retryAfterHeader, NumberStyles.Float, CultureInfo.InvariantCulture, out var headerSeconds ) && headerSeconds >= 0 )
 			return headerSeconds;
