@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "generatedAt": "2026-10-19T23:21:34.386Z",
+  "generatedAt": "2026-10-20T00:19:14.939Z",
   "library": {
     "published": {
       "revision": 423774,
@@ -11,15 +11,21 @@
     },
     "main": {
       "version": "1.2.0",
-      "commit": "8fb5785c6d6876482000f4d44a4d8c359bf5847e",
-      "committedAt": "2026-10-19T23:19:58Z",
+      "commit": "997983cfffbd16ec0fadac1ed536013c08e95cda",
+      "committedAt": "2026-10-20T00:16:33Z",
       "ci": {
         "conclusion": "pending",
-        "runUrl": "https://github.com/sbox-cool/sbox-network-storage/actions/runs/39340907634",
+        "runUrl": "https://github.com/sbox-cool/sbox-network-storage/actions/runs/39346671409",
         "engine": null
       }
     },
     "pending": [
+      {
+        "number": 57,
+        "title": "Send no-input encrypted endpoint calls as POST",
+        "mergedAt": "2026-10-20T00:16:33Z",
+        "url": "https://github.com/sbox-cool/sbox-network-storage/pull/57"
+      },
       {
         "number": 51,
         "title": "Honor 429 Retry-After with a bounded retry (#47)",
@@ -145,10 +151,22 @@
       "url": "https://github.com/sbox-cool/sbox-network-storage-server/releases/tag/v0.5.4"
     },
     "main": {
-      "commit": "6f5666b8211e75431518fbf07752993544e1431b",
-      "committedAt": "2026-10-19T23:20:35Z"
+      "commit": "74d264bc899ef4f8ec1c75908b6bbe0a8bd8d85e",
+      "committedAt": "2026-10-20T00:16:54Z"
     },
     "pending": [
+      {
+        "number": 159,
+        "title": "Serialize concurrent writes to one record with a keyed write queue (#157)",
+        "mergedAt": "2026-10-20T00:16:55Z",
+        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/159"
+      },
+      {
+        "number": 161,
+        "title": "Branding: use the new lime cube logo everywhere",
+        "mergedAt": "2026-10-19T23:46:53Z",
+        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/161"
+      },
       {
         "number": 158,
         "title": "Preflight: script syntax errors with line and column",
