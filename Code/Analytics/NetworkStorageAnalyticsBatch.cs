@@ -79,7 +79,7 @@ public static partial class NetworkStorage
 	/// </summary>
 	private static async Task DrainAnalyticsBatchAsync( Task wakeup )
 	{
-		await Task.WhenAny( Task.Delay( TimeSpan.FromSeconds( AnalyticsBatchWindowSeconds ) ), wakeup );
+		await Task.WhenAny( new[] { Task.Delay( TimeSpan.FromSeconds( AnalyticsBatchWindowSeconds ) ), wakeup } );
 
 		while ( true )
 		{
