@@ -11,6 +11,8 @@ public static partial class NetworkStorage
 	private static Task<bool> _runtimeSecurityConfigLoadTask;
 	private static bool _securityConfigUnavailableLogged;
 	private static DateTimeOffset _securityConfigRetryAfter;
+	// Bumped when the pin, API root or project changes, so a fetch started before the change cannot commit its result.
+	private static int _securityConfigGeneration;
 
 	// Lowercase hex SHA-256 of the security-config signing key's SubjectPublicKeyInfo. Empty trusts the first key seen
 	// for each API root instead.
@@ -45,6 +47,16 @@ public static partial class NetworkStorage
 
 		_runtimeSecurityConfigLoadTask = LoadRuntimeSecurityConfigAsync( reason, forceRefresh );
 		return await _runtimeSecurityConfigLoadTask;
+	}
+
+	// Drops the held snapshot when the pin, API root or project changes. The next call verifies against the new settings,
+	// and a pinned game refuses encrypted calls until a config signed by the pinned key loads.
+	private static void ResetRuntimeSecurityConfig()
+	{
+		_securityConfigGeneration++;
+		_runtimeSecurityConfig = null;
+		_runtimeSecurityConfigLoadTask = null;
+		_securityConfigRetryAfter = default;
 	}
 
 	public static void MarkRuntimeSecurityMismatch( string code, string requestMode = "" )

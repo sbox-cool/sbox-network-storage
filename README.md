@@ -290,7 +290,9 @@ Encrypted requests v2 seal each request to a key the server generates, so that k
 
 To stop a proxy or a swapped config from substituting its own key, pin the server's signing key. Pass `securityKeyFingerprint` as the seventh argument to `NetworkStorage.Configure(projectId, apiKey, baseUrl, apiVersion, cdnUrl, publishTarget, securityKeyFingerprint)`, enter it in the Sync Tool Setup window, or copy the "Security signing key" value from `sbox-ns security status`. Spaces, colons and letter case are ignored.
 
-With a pin set, endpoint calls are refused with `ENCRYPTION_KEY_UNVERIFIED` until a config signed by that key loads. Without a pin, the first signing key seen for each API root is trusted and saved in the game's data folder (`network-storage-signing-key-trust.json`). If that key later changes, the game logs a warning and trusts the new key; pin the fingerprint to refuse unplanned changes. Unpinned games that never receive a trusted config stay on v1. A config that fails verification refuses every call, plain or encrypted, so plain requests cannot bypass the owner's mode.
+With a pin set, endpoint calls are refused with `ENCRYPTION_KEY_UNVERIFIED` until a config signed by that key loads. Without a pin, the first signing key seen for each API root is trusted and saved in the game's data folder (`network-storage-signing-key-trust.json`). If that key later changes, the game logs a warning and trusts the new key; pin the fingerprint to refuse unplanned changes. Unpinned games that never receive a trusted config stay on v1. A config that fails verification refuses every endpoint call, plain or encrypted, so plain requests cannot bypass the owner's mode. Calling `NetworkStorage.Configure` with a different pin, base URL, API version, or project drops the held config and verifies again.
+
+`GetGameValues` is a public, unsigned GET outside the endpoint path. Neither the pin nor a refused config covers it, and a proxy or MITM can read or change it. Do not put secrets in game values.
 
 ## Game values
 

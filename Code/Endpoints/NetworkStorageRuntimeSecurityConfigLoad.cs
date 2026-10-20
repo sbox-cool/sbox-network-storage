@@ -15,6 +15,7 @@ public static partial class NetworkStorage
 	private static async Task<bool> LoadRuntimeSecurityConfigAsync( string reason, bool forceRefresh )
 	{
 		var url = $"{ApiRoot}/security-config/{Uri.EscapeDataString( ProjectId )}";
+		var generation = _securityConfigGeneration;
 		if ( forceRefresh )
 			url += "?refresh=1";
 
@@ -23,6 +24,8 @@ public static partial class NetworkStorage
 			var headers = new System.Collections.Generic.Dictionary<string, string>();
 			AddRuntimeTargetHeaders( headers );
 			var raw = await RequestStringAsync(url, "GET", null, headers);
+			// The pin, API root or project changed while this fetch was in flight; its result must not be committed.
+			if ( generation != _securityConfigGeneration ) return false;
 			if ( !TryParseRuntimeSecurityConfig( raw, out var loaded, out var refusal, out var error ) )
 				return refusal is not null ? RefuseSecurityConfig( reason, refusal ) : UseSyncedSecurityConfig( reason, error );
 
@@ -44,6 +47,7 @@ public static partial class NetworkStorage
 		}
 		catch ( Exception ex )
 		{
+			if ( generation != _securityConfigGeneration ) return false;
 			return UseSyncedSecurityConfig( reason, ex.Message );
 		}
 	}

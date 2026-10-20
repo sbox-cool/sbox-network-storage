@@ -69,6 +69,9 @@ public static partial class NetworkStorage
 	/// <summary>Configure the client manually and pin the server signing key. Call once at game startup. A null fingerprint leaves the current pin unchanged.</summary>
 	public static void Configure( string projectId, string apiKey, string baseUrl, string apiVersion, string cdnUrl, string publishTarget, string securityKeyFingerprint )
 	{
+		var previousRoot = ApiRoot;
+		var previousProject = ProjectId;
+		var previousPin = SecuritySigningKeyPin;
 		ProjectId = projectId;
 		ApiKey = apiKey;
 		if ( !string.IsNullOrEmpty( baseUrl ) ) BaseUrl = baseUrl.TrimEnd( '/' );
@@ -76,6 +79,8 @@ public static partial class NetworkStorage
 		CdnUrl = string.IsNullOrEmpty( cdnUrl ) ? null : cdnUrl.TrimEnd( '/' );
 		PublishTarget = NormalizePublishTarget( publishTarget ?? PublishTarget );
 		if ( securityKeyFingerprint is not null ) SetSecuritySigningKeyPin( securityKeyFingerprint );
+		if ( ApiRoot != previousRoot || ProjectId != previousProject || SecuritySigningKeyPin != previousPin )
+			ResetRuntimeSecurityConfig();
 		_autoConfigAttempted = true;
 		InitializeServerCompatibility();
 		NetworkStorageRevisionHandler.Initialize();
