@@ -71,6 +71,15 @@ public static partial class NetworkStorage
 			}
 			else
 			{
+				await EnsureRuntimeSecurityConfigAsync( "endpoint-on-behalf" );
+				if ( RuntimeEnableEncryptedRequests )
+				{
+					// A GET has no body, so it cannot carry the encrypted envelope the server requires.
+					var message = $"Encrypted requests are required, and an on-behalf call without input would be sent as GET. Call {slug} from the player's own client, which encrypts its request.";
+					Log.Warning( $"[NetworkStorage] {slug} (as {targetSteamId}): {message}" );
+					RecordEndpointError( slug, "ENCRYPTION_REQUIRES_POST", message );
+					return null;
+				}
 				if ( NetworkStorageLogConfig.LogRequests )
 				{
 					NetLog.Request( slug, $"GET (as {targetSteamId})" );
@@ -98,7 +107,7 @@ public static partial class NetworkStorage
 					Log.Warning( $"[NetworkStorage]   Body: {bodyJson}" );
 				NetLog.Error( slug, $"HTTP {status}" );
 			}
-			RecordEndpointError( slug, "HTTP_ERROR", $"HTTP {status}" );
+			RecordEndpointError( slug, httpEx.StatusCode == System.Net.HttpStatusCode.TooManyRequests ? "RATE_LIMITED" : "HTTP_ERROR", $"HTTP {status}" );
 			return null;
 		}
 		catch ( Exception ex )

@@ -49,7 +49,8 @@ public static partial class NetworkStorage
 
 			string result;
 			requestStartedAt = RealTime.Now;
-			if ( input is not null )
+			// Encrypted calls always POST: the envelope is the body, so a call without input still needs one.
+			if ( input is not null || securityRequest.Encrypted )
 			{
 				bodyJson = JsonSerializer.Serialize( securityRequest.Body );
 				if ( NetworkStorageLogConfig.LogRequests )
@@ -102,7 +103,7 @@ public static partial class NetworkStorage
 					Log.Warning( $"[NetworkStorage]   Body: {bodyJson}" );
 				NetLog.Error( slug, $"HTTP {status}" );
 			}
-			RecordEndpointError( slug, "HTTP_ERROR", $"HTTP {status}" );
+			RecordEndpointError( slug, httpEx.StatusCode == System.Net.HttpStatusCode.TooManyRequests ? "RATE_LIMITED" : "HTTP_ERROR", $"HTTP {status}" );
 			return null;
 		}
 		catch ( Exception ex )

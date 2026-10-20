@@ -13,6 +13,7 @@ public static partial class NetworkStorage
 		public object Body { get; init; }
 		public Dictionary<string, string> Headers { get; init; }
 		public string Mode { get; init; }
+		public bool Encrypted { get; init; }
 		public string RoutePath { get; init; }
 		public string RouteLabel { get; init; }
 	}
@@ -76,6 +77,7 @@ public static partial class NetworkStorage
 			},
 			Headers = headers,
 			Mode = mode,
+			Encrypted = true,
 			RoutePath = $"/endpoints/{ProjectId}/{EscapeRouteSegment( slug )}",
 			RouteLabel = $"/endpoints/{ProjectId}/{slug}"
 		};
