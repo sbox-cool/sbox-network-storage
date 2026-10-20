@@ -74,6 +74,8 @@ public class EndpointErrorWindow : PaintedWindow
 
 	private static string FriendlyCode( string code, string message, JsonElement raw )
 	{
+		// Local validation codes (LOCAL_*) are already user-facing; do not rewrite them as backend 404s.
+		if ( code != null && code.StartsWith( "LOCAL_", StringComparison.Ordinal ) ) return code;
 		var text = $"{code} {message} {raw}";
 		if ( text.Contains( "LEGACY_FLATTEN_FAILED", StringComparison.OrdinalIgnoreCase )
 			|| (text.Contains( "steps[", StringComparison.OrdinalIgnoreCase ) && text.Contains( ".id", StringComparison.OrdinalIgnoreCase )) )
@@ -85,6 +87,7 @@ public class EndpointErrorWindow : PaintedWindow
 
 	private static string FriendlyMessage( string code, string message, JsonElement raw )
 	{
+		if ( code != null && code.StartsWith( "LOCAL_", StringComparison.Ordinal ) ) return message ?? "";
 		var text = $"{code} {message} {raw}";
 		if ( text.Contains( "LEGACY_FLATTEN_FAILED", StringComparison.OrdinalIgnoreCase )
 			|| (text.Contains( "steps[", StringComparison.OrdinalIgnoreCase ) && text.Contains( ".id", StringComparison.OrdinalIgnoreCase )) )

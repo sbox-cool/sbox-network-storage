@@ -64,6 +64,12 @@ public static class SyncToolApi
 	public static string LastErrorMessage { get; private set; }
 
 	/// <summary>
+	/// Parsed body of the last refused request (non-success response). A refused push or preflight carries its
+	/// per-resource diagnostics here. Reset on each request; null when the last request succeeded.
+	/// </summary>
+	public static JsonElement? LastErrorBody { get; private set; }
+
+	/// <summary>
 	/// One-line summary of the most recent management request, e.g. "PUT sync -> 200 (42 ms)".
 	/// Shown in the Sync Tool window so the user can see which request just went to which server.
 	/// </summary>
@@ -118,6 +124,7 @@ public static class SyncToolApi
 		ClearErrorStateForPath( path );
 		LastErrorCode = null;
 		LastErrorMessage = null;
+		LastErrorBody = null;
 
 		if ( !SyncToolConfig.IsValid )
 		{
@@ -162,6 +169,7 @@ public static class SyncToolApi
 				try
 				{
 					var errJson = JsonSerializer.Deserialize<JsonElement>( text, _readOptions );
+					if ( errJson.ValueKind == JsonValueKind.Object ) LastErrorBody = errJson;
 					if ( errJson.TryGetProperty( "error", out var errCode ) )
 						LastErrorCode = errCode.ValueKind == JsonValueKind.Object && errCode.TryGetProperty( "code", out var codeVal )
 							? codeVal.GetString()

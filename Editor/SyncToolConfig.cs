@@ -28,7 +28,7 @@ public static partial class SyncToolConfig
 	public static string ProjectId { get; private set; } = "";
 	public static string BaseUrl { get; private set; } = "https://api.sboxcool.com";
 	public static string CdnUrl { get; private set; } = "";
-	public static string ApiVersion { get; private set; } = "api";
+	public static string ApiVersion { get; private set; } = "v3";
 
 	// ── Preferences ──
 	public static DataSourceMode DataSource { get; private set; } = DataSourceMode.ApiOnly;
@@ -198,7 +198,7 @@ public static partial class SyncToolConfig
 		ProjectId = "";
 		BaseUrl = "https://api.sboxcool.com";
 		CdnUrl = "";
-		ApiVersion = "api";
+		ApiVersion = "v3";
 		DataSource = DataSourceMode.ApiOnly;
 		SourceExport = SourceExportMode.SourceOnly;
 		EnableAuthSessions = false;
@@ -782,7 +782,7 @@ public static partial class SyncToolConfig
 			["publicKey"] = "sbox_ns_your_public_key_here",
 			["baseUrl"] = "https://api.sboxcool.com",
 			["cdnUrl"] = "",
-			["apiVersion"] = "api",
+			["apiVersion"] = "v3",
 			["dataFolder"] = "Network Storage",
 			["dataSource"] = "api_only",
 			["sourceExportMode"] = "source_only",

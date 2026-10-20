@@ -98,7 +98,7 @@ public static partial class SyncToolConfig
 		resource = default;
 		try
 		{
-			var sourceText = File.ReadAllText( absolutePath );
+			var sourceText = InlineSourceScript( kind, absolutePath, File.ReadAllText( absolutePath ) );
 			if ( !includeDeprecated && kind.Equals( "endpoint", StringComparison.OrdinalIgnoreCase ) && IsDeprecatedSourceText( sourceText ) )
 				return false;
 
@@ -190,8 +190,14 @@ public static partial class SyncToolConfig
 
 		try
 		{
-			var sourceText = File.ReadAllText( absolutePath );
-			return TryParseSourceText( kind, sourceText, absolutePath, out resource );
+			var sourceText = InlineSourceScript( kind, absolutePath, File.ReadAllText( absolutePath ) );
+			if ( !TryParseSourceText( kind, sourceText, absolutePath, out resource ) )
+				return false;
+
+			// scriptFile is an authoring reference the server does not return, so it must not reach a comparison.
+			if ( kind.Equals( "endpoint", StringComparison.OrdinalIgnoreCase ) )
+				resource = WithoutProperty( resource, "scriptFile" );
+			return true;
 		}
 		catch ( Exception ex )
 		{

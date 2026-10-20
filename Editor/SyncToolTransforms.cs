@@ -58,6 +58,31 @@ public static class SyncToolTransforms
 	}
 
 	/// <summary>
+	/// The endpoint's handler script from its comparable view, or false when it carries none. Line endings and
+	/// surrounding whitespace are normalized so a CRLF copy and an LF copy compare equal.
+	/// </summary>
+	public static bool TryGetEndpointScript( JsonElement endpoint, out string script )
+	{
+		var view = GetComparableResourceView( endpoint );
+		if ( view.ValueKind == JsonValueKind.Object && view.TryGetProperty( "script", out var value ) && value.ValueKind == JsonValueKind.String )
+		{
+			script = SyncToolVerification.NormalizeSourceTextForVerification( value.GetString() );
+			return true;
+		}
+
+		script = null;
+		return false;
+	}
+
+	/// <summary>True when a local endpoint and its remote readback carry the same handler script. Both absent counts as equal.</summary>
+	public static bool EndpointScriptsMatch( JsonElement local, JsonElement remote )
+	{
+		var hasLocal = TryGetEndpointScript( local, out var localScript );
+		var hasRemote = TryGetEndpointScript( remote, out var remoteScript );
+		return hasLocal == hasRemote && ( !hasLocal || localScript == remoteScript );
+	}
+
+	/// <summary>
 	/// Build the management API payload for a source-authored resource. Pushes raw
 	/// source only; the backend compiler owns canonicalization and validation.
 	/// </summary>
@@ -188,7 +213,7 @@ public static class SyncToolTransforms
 
 	/// <summary>
 	/// Convert a single server endpoint to local file format.
-	/// Always includes all fields with defaults so local matches server exactly.
+	/// Non-script endpoints always include all fields with defaults so local matches server exactly.
 	/// Strips only server-managed fields (id, createdAt).
 	/// </summary>
 	public static Dictionary<string, object> ServerEndpointToLocal( JsonElement ep )
@@ -198,18 +223,38 @@ public static class SyncToolTransforms
 		if ( string.IsNullOrEmpty( slugStr ) && ep.TryGetProperty( "slug", out var wrappedSlug ) )
 			slugStr = wrappedSlug.GetString();
 
+		var scripted = TryGetEndpointScript( ep, out var script );
 		var local = new Dictionary<string, object>
 		{
 			["slug"] = slugStr,
 			["name"] = source.TryGetProperty( "name", out var name ) ? name.GetString() : slugStr.Replace( "-", " " ),
 			["method"] = source.TryGetProperty( "method", out var method ) ? method.GetString() : "POST",
-			["enabled"] = !source.TryGetProperty( "enabled", out var enabled ) || enabled.ValueKind != JsonValueKind.False,
-			["input"] = source.TryGetProperty( "input", out var input ) ? (object)input : new Dictionary<string, object>(),
-			["steps"] = NormalizeStepsField( source ),
-			["response"] = source.TryGetProperty( "response", out var response )
-				? (object)response
-				: new Dictionary<string, object> { ["status"] = 200, ["body"] = new Dictionary<string, object> { ["ok"] = true } }
+			["enabled"] = !source.TryGetProperty( "enabled", out var enabled ) || enabled.ValueKind != JsonValueKind.False
 		};
+		if ( !scripted )
+		{
+			local["input"] = source.TryGetProperty( "input", out var input ) ? (object)input : new Dictionary<string, object>();
+			local["steps"] = NormalizeStepsField( source );
+			local["response"] = source.TryGetProperty( "response", out var response )
+				? (object)response
+				: new Dictionary<string, object> { ["status"] = 200, ["body"] = new Dictionary<string, object> { ["ok"] = true } };
+		}
+		else
+		{
+			// A script endpoint's behaviour is its script. Input, steps, and response are written only when they hold
+			// something beyond the server default, so a pull writes no default noise and the compare is symmetric.
+			if ( !IsDefaultScriptField( source, "input" ) )
+				local["input"] = source.GetProperty( "input" );
+			if ( !IsDefaultScriptField( source, "steps" ) )
+				local["steps"] = NormalizeStepsField( source );
+			if ( !IsDefaultScriptField( source, "response" ) )
+				local["response"] = source.GetProperty( "response" );
+			local["script"] = script;
+			if ( source.TryGetProperty( "runtime", out var runtime ) && runtime.ValueKind == JsonValueKind.String )
+				local["runtime"] = runtime.GetString();
+			if ( source.TryGetProperty( "scope", out var scope ) && scope.ValueKind == JsonValueKind.String )
+				local["scope"] = scope.GetString();
+		}
 
 		if ( source.TryGetProperty( "description", out var desc ) && !string.IsNullOrEmpty( desc.GetString() ) )
 			local["description"] = desc.GetString();
@@ -221,6 +266,41 @@ public static class SyncToolTransforms
 
 		// Intentionally omit: id, createdAt (server-managed)
 		return local;
+	}
+
+	/// <summary>
+	/// True when a script endpoint's input, steps, or response is absent or holds the server default. The server
+	/// fills those defaults in on create, so they are left out of both sides of the compare.
+	/// </summary>
+	private static bool IsDefaultScriptField( JsonElement source, string name )
+	{
+		if ( !source.TryGetProperty( name, out var value ) )
+			return true;
+
+		switch ( name )
+		{
+			case "input":
+				return value.ValueKind == JsonValueKind.Object && !value.EnumerateObject().Any();
+			case "steps":
+				return value.ValueKind == JsonValueKind.Array && value.GetArrayLength() == 0;
+			case "response":
+				return IsDefaultResponse( value );
+			default:
+				return false;
+		}
+	}
+
+	private static bool IsDefaultResponse( JsonElement response )
+	{
+		if ( response.ValueKind != JsonValueKind.Object || response.EnumerateObject().Count() != 2 )
+			return false;
+		if ( !response.TryGetProperty( "status", out var status ) || status.ValueKind != JsonValueKind.Number || status.GetDouble() != 200 )
+			return false;
+		return response.TryGetProperty( "body", out var body )
+			&& body.ValueKind == JsonValueKind.Object
+			&& body.EnumerateObject().Count() == 1
+			&& body.TryGetProperty( "ok", out var ok )
+			&& ok.ValueKind == JsonValueKind.True;
 	}
 
 	/// <summary>
@@ -430,6 +510,7 @@ public static class SyncToolTransforms
 			or "sourceFormat"
 			or "sourceVersion"
 			or "sourcePath"
+			or "scriptFile"
 			or "authoringMode"
 			or "compilerFingerprint"
 			or "compilerFingerprintHash"

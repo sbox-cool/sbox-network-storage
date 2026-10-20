@@ -85,7 +85,7 @@ To return to the released library, delete that folder and install it from [sbox.
 Caveats:
 
 - Unreleased code has passed the GitHub Actions compat gate, but not the native Windows editor run that a published release requires. Expect changes, and do not ship games built on it.
-- `main` can need a newer server than the published library. Since `LibraryVersion` 1.2.0 the default API root is `/api`, which servers before 0.5.5 do not serve; set `apiVersion` to `v3` in `projectConfig.json` for those servers (see [Setup](#setup)).
+- `main` can need a newer server than the published library. The default API root is `/v3`, which the hosted backend and every released server serve. Self-hosted servers 0.5.5 and later also serve `/api`; set `apiVersion` to `api` in `projectConfig.json` to use it (see [Setup](#setup)).
 
 ### Server compatibility status
 
@@ -171,6 +171,8 @@ assigned package revision, server commit/version, engine build, database and evi
 `LibraryVersion` (SemVer) and the sbox.game package revision are separate.
 sbox.game assigns each publish a global revision; no committed file predicts it,
 and `.version` is only the Library Manager install marker.
+The editor's revision notice ignores `.version` when the library folder has a `.git` entry (a git clone or
+submodule), because a checkout's committed `.version` does not track published revisions.
 
 `.github/workflows/sbox-revisions.yml` maps every published revision to the
 commit whose shipped files match the revision's public manifest by size and CRC64
@@ -210,7 +212,7 @@ Your credentials are saved to `Editor/Network Storage/.env` — this file is in 
 
 To use a self-hosted server instead of `api.sboxcool.com`, set `baseUrl` in `Editor/Network Storage/config/public/projectConfig.json` (or `NetworkStorage.Configure( projectId, publicKey, "https://your-server" )` in game code). The Sync Tool window shows the active server (highlighted when it is not `api.sboxcool.com`) and the last request it sent.
 
-New projects get the API root `/api` (`https://your-server/api/...`) from the Sync Tool template. Servers released before 0.5.5 do not serve `/api`: set `apiVersion` to `v3` in `projectConfig.json`, or pass `"v3"` as the fourth argument of `Configure( projectId, publicKey, baseUrl, apiVersion )`. A config without an `apiVersion` key keeps `v3`. `/api/storage` uses uniform storage routes only for library 1.2.0 and later; older libraries keep their legacy document meaning.
+New projects get `apiVersion` `v3` (`https://your-server/v3/...`) from the Sync Tool template. The hosted backend at `api.sboxcool.com` does not serve the `/api/{family}` routes (values, endpoints, sessions, security-config), so `api` works only on self-hosted servers 0.5.5 and later: set `apiVersion` to `api` in `projectConfig.json`, or pass `"api"` as the fourth argument of `Configure( projectId, publicKey, baseUrl, apiVersion )`. A config without an `apiVersion` key keeps `v3`. `/api/storage` uses uniform storage routes only for library 1.2.0 and later; older libraries keep their legacy document meaning.
 
 ### Generated code
 
@@ -319,7 +321,7 @@ var weapons = gv.GetProperty( "tables" ).GetProperty( "weapons" )
 ```
 
 `GetGameValues()` loads every group and table in one request
-(`GET {ApiRoot}/values/{projectId}`, `/api` by default). The library is API-only and keeps no offline
+(`GET {ApiRoot}/values/{projectId}`, `/v3` by default). The library is API-only and keeps no offline
 copy: load once when the game starts, then lookups in your code are local. The
 game still calls the server for that load, and game code cannot write game values.
 
@@ -365,7 +367,7 @@ the same screens with sample data.
 | `NetworkStorageAnalytics.Error(exception, code?, context?)` | Report an exception/error to the player timeline without breaking gameplay. |
 | `NetworkStorageAnalytics.SessionStart/SessionEnd` | Report managed session boundaries when analytics is enabled. |
 | `IsConfigured` | `true` after `Configure()` has been called. |
-| `ApiRoot` | The full API URL (e.g. `https://api.sboxcool.com/api`, or `.../v3` when configured). |
+| `ApiRoot` | The full API URL (e.g. `https://api.sboxcool.com/v3`, or `.../api` when `apiVersion` is `api`). |
 
 See [analytics.md](analytics.md) for Player Analytics setup, custom events, warnings, and error reporting examples.
 
