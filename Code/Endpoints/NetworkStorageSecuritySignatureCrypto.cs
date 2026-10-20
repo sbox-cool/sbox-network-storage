@@ -1,11 +1,10 @@
 using System;
-using System.Text;
 
 namespace Sandbox;
 
 internal static partial class NetworkStorageSecuritySignature
 {
-	private static byte[] Base64UrlDecode( string value )
+	internal static byte[] Base64UrlDecode( string value )
 	{
 		if ( string.IsNullOrWhiteSpace( value ) )
 			return Array.Empty<byte>();
@@ -21,7 +20,7 @@ internal static partial class NetworkStorageSecuritySignature
 		}
 	}
 
-	private static byte[] LeftPad( byte[] value, int length )
+	internal static byte[] LeftPad( byte[] value, int length )
 	{
 		if ( value.Length == length )
 			return value;
@@ -30,7 +29,7 @@ internal static partial class NetworkStorageSecuritySignature
 		return padded;
 	}
 
-	private static byte[] Sha256( byte[] data )
+	internal static byte[] Sha256( byte[] data )
 	{
 		long bitLen = (long)data.Length * 8;
 		int padLen = (64 - (int)((data.Length + 9) % 64)) % 64;
@@ -74,14 +73,6 @@ internal static partial class NetworkStorageSecuritySignature
 		buffer[offset + 1] = (byte)(value >> 16);
 		buffer[offset + 2] = (byte)(value >> 8);
 		buffer[offset + 3] = (byte)value;
-	}
-
-	private static string ToHex( byte[] value )
-	{
-		var sb = new StringBuilder( value.Length * 2 );
-		foreach ( var b in value )
-			sb.Append( b.ToString( "x2" ) );
-		return sb.ToString();
 	}
 
 	private static readonly uint[] K = {

@@ -15,6 +15,8 @@ public static partial class NetworkStorage
 	{
 		var steamId = Game.SteamId.ToString();
 		var securityRequest = await BuildEndpointSecurityRequest( slug, input ?? new { }, allowAuthSession: false );
+		if ( securityRequest is null )
+			return null;
 		string proxySlug = slug;
 		string inputJson = JsonSerializer.Serialize( securityRequest.Body );
 
@@ -50,6 +52,9 @@ public static partial class NetworkStorage
 				return null;
 			}
 
+			result = UnsealEndpointResponse( securityRequest.ResponseContext, slug, result );
+			if ( result is null )
+				return null;
 			if ( NetworkStorageLogConfig.LogProxy )
 				Log.Info( $"[NetworkStorage] {slug} PROXY → {TruncateJson( result, 200 )}" );
 			var parsed = ParseResponse( slug, result );

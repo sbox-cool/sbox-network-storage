@@ -28,29 +28,66 @@ public static partial class NetworkStorage
 	{
 		var roundKeys = Aes256ExpandKey( key );
 		var h = AesEncryptBlock( new byte[16], roundKeys );
+		var j0 = GcmJ0( iv );
+		var ciphertext = AesGcmCtr( roundKeys, j0, plaintext );
+		return (ciphertext, GcmTag( roundKeys, h, j0, aad, ciphertext ));
+	}
+
+	// Returns null when the tag does not verify. The tag comparison is constant time.
+	private static byte[] Aes256GcmDecrypt( byte[] key, byte[] iv, byte[] ciphertext, byte[] tag, byte[] aad )
+	{
+		var roundKeys = Aes256ExpandKey( key );
+		var h = AesEncryptBlock( new byte[16], roundKeys );
+		var j0 = GcmJ0( iv );
+		var expected = GcmTag( roundKeys, h, j0, aad, ciphertext );
+		if ( !ConstantTimeEquals( expected, tag ) )
+			return null;
+		return AesGcmCtr( roundKeys, j0, ciphertext );
+	}
+
+	private static byte[] GcmJ0( byte[] iv )
+	{
 		var j0 = new byte[16];
 		Array.Copy( iv, 0, j0, 0, 12 );
 		j0[15] = 1;
+		return j0;
+	}
 
-		var ciphertext = new byte[plaintext.Length];
+	private static byte[] AesGcmCtr( byte[][] roundKeys, byte[] j0, byte[] input )
+	{
+		var output = new byte[input.Length];
 		var counter = CopyBytes( j0 );
 		var offset = 0;
-		while ( offset < plaintext.Length )
+		while ( offset < input.Length )
 		{
 			IncrementCounter32( counter );
 			var stream = AesEncryptBlock( counter, roundKeys );
-			var count = Math.Min( 16, plaintext.Length - offset );
+			var count = Math.Min( 16, input.Length - offset );
 			for ( var i = 0; i < count; i++ )
-				ciphertext[offset + i] = (byte)(plaintext[offset + i] ^ stream[i]);
+				output[offset + i] = (byte)(input[offset + i] ^ stream[i]);
 			offset += count;
 		}
+		return output;
+	}
 
+	private static byte[] GcmTag( byte[][] roundKeys, byte[] h, byte[] j0, byte[] aad, byte[] ciphertext )
+	{
 		var ghash = GHash( h, aad, ciphertext );
 		var s = AesEncryptBlock( j0, roundKeys );
 		var tag = new byte[16];
 		for ( var i = 0; i < 16; i++ )
 			tag[i] = (byte)(s[i] ^ ghash[i]);
-		return (ciphertext, tag);
+		return tag;
+	}
+
+	private static bool ConstantTimeEquals( byte[] left, byte[] right )
+	{
+		if ( left.Length != right.Length )
+			return false;
+		var diff = 0;
+		for ( var i = 0; i < left.Length; i++ )
+			diff |= left[i] ^ right[i];
+		return diff == 0;
 	}
 
 	private static void IncrementCounter32( byte[] counter )

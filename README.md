@@ -286,6 +286,12 @@ See the [Examples/](Examples/) folder for complete working patterns.
 
 With encrypted requests required, a call without input is still sent as an encrypted POST. The host's `CallEndpointAs` path builds no envelope, so a no-input call on behalf of another player is refused locally with `ENCRYPTION_REQUIRES_POST`.
 
+Encrypted requests v2 seal each request to a key the server generates, so that key can rotate without a game update. The game learns it from the server's signed security config. The owner chooses the mode on the server (`off`, `v1`, `v2-preferred`, or `v2-required`), and the game follows the signed config.
+
+To stop a proxy or a swapped config from substituting its own key, pin the server's signing key. Pass `securityKeyFingerprint` to `NetworkStorage.Configure(...)`, enter it in the Sync Tool Setup window, or copy the "Security signing key" value from `sbox-ns security status`. Spaces, colons and letter case are ignored.
+
+With a pin set, endpoint calls are refused with `ENCRYPTION_KEY_UNVERIFIED` until a config signed by that key loads. Without a pin, the first signing key seen for each API root is trusted for the session, and a later change refuses calls until the game restarts. A config that fails verification refuses every call, plain or encrypted, so plain requests cannot bypass the owner's mode.
+
 ## Game values
 
 Game values are the shared numbers your game and server both read: tuning

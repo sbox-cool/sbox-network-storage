@@ -36,6 +36,7 @@ public static partial class SyncToolConfig
 	public static bool EnableAuthSessions { get; private set; }
 	public static bool EnableEncryptedRequests { get; private set; }
 	public static string PublishTarget { get; private set; } = "live";
+	public static string SecurityKeyFingerprint { get; private set; } = "";
 
 	/// <summary>
 	/// When true, the game host proxies Network Storage API calls on behalf of non-host clients.
@@ -155,6 +156,10 @@ public static partial class SyncToolConfig
 		ReadCommentHandling = JsonCommentHandling.Skip
 	};
 
+	// Pins compare as lowercase hex. Whitespace and ':' separators are dropped, so pasted fingerprints work.
+	private static string NormalizeSecurityKeyFingerprint( string value )
+		=> new string( (value ?? "").Where( c => !char.IsWhiteSpace( c ) && c != ':' ).Select( c => char.ToLowerInvariant( c ) ).ToArray() );
+
 	private static string NormalizePublishTarget( string target )
 	{
 		return string.Equals( target, "next", StringComparison.OrdinalIgnoreCase )
@@ -199,6 +204,7 @@ public static partial class SyncToolConfig
 		EnableAuthSessions = false;
 		EnableEncryptedRequests = false;
 		PublishTarget = "live";
+		SecurityKeyFingerprint = "";
 		DataFolder = "Network Storage";
 		ProxyEnabled = false;
 
@@ -266,6 +272,8 @@ public static partial class SyncToolConfig
 			EnableEncryptedRequests = eer.ValueKind == JsonValueKind.True;
 		if ( json.TryGetProperty( "publishTarget", out var pt ) )
 			PublishTarget = NormalizePublishTarget( pt.GetString() );
+		if ( json.TryGetProperty( "securityKeyFingerprint", out var skf ) )
+			SecurityKeyFingerprint = NormalizeSecurityKeyFingerprint( skf.GetString() );
 
 		// Sync mappings
 		SyncMappings.Clear();
@@ -355,6 +363,7 @@ public static partial class SyncToolConfig
 			["enableAuthSessions"] = EnableAuthSessions,
 			["enableEncryptedRequests"] = EnableEncryptedRequests,
 			["publishTarget"] = PublishTarget,
+			["securityKeyFingerprint"] = SecurityKeyFingerprint,
 			["proxyEnabled"] = ProxyEnabled
 		};
 
@@ -412,6 +421,7 @@ public static partial class SyncToolConfig
 			merged["proxyEnabled"] = ProxyEnabled;
 			merged["enableAuthSessions"] = EnableAuthSessions;
 			merged["enableEncryptedRequests"] = EnableEncryptedRequests;
+			merged["securityKeyFingerprint"] = SecurityKeyFingerprint;
 
 			File.WriteAllText( credsPath, JsonSerializer.Serialize( merged, _jsonOptions ) );
 			Log.Info( "[SyncTool] Runtime credentials written to Assets/network-storage.credentials.json" );
@@ -444,6 +454,16 @@ public static partial class SyncToolConfig
 	public static void SetPublishTarget( string target )
 	{
 		PublishTarget = NormalizePublishTarget( target );
+		if ( File.Exists( Abs( ProjectConfigFile ) ) )
+			Save( SecretKey, PublicApiKey, ProjectId, BaseUrl, DataSource, DataFolder, CdnUrl );
+	}
+
+	/// <summary>
+	/// Set the signing-key fingerprint games pin (empty clears the pin) and re-save config.
+	/// </summary>
+	public static void SetSecurityKeyFingerprint( string fingerprint )
+	{
+		SecurityKeyFingerprint = NormalizeSecurityKeyFingerprint( fingerprint );
 		if ( File.Exists( Abs( ProjectConfigFile ) ) )
 			Save( SecretKey, PublicApiKey, ProjectId, BaseUrl, DataSource, DataFolder, CdnUrl );
 	}
@@ -769,6 +789,7 @@ public static partial class SyncToolConfig
 			["enableAuthSessions"] = false,
 			["enableEncryptedRequests"] = false,
 			["publishTarget"] = "live",
+			["securityKeyFingerprint"] = "",
 			["proxyEnabled"] = false
 		};
 		File.WriteAllText( Abs( ProjectConfigFile ), JsonSerializer.Serialize( publicConfig, _jsonOptions ) );

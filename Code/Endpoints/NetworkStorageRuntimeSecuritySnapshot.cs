@@ -45,6 +45,10 @@ public static partial class NetworkStorage
 		public bool SyncedEnableAuthSessions { get; init; }
 		public bool SyncedEnableEncryptedRequests { get; init; }
 		public bool SignaturePresent { get; init; }
+		public bool Trusted { get; init; }
+		public RuntimeEncryptionKey EncryptionKey { get; init; }
+		public string RefusalCode { get; init; } = "";
+		public string RefusalMessage { get; init; } = "";
 		public string LastRefreshReason { get; set; } = "";
 		public string LastMismatchCode { get; set; } = "";
 		public string LastRequestMode { get; set; } = "";

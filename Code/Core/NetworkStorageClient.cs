@@ -63,7 +63,7 @@ public static partial class NetworkStorage
 	public static bool IsHost => !Networking.IsActive || Networking.IsHost;
 
 	/// <summary>Configure the client manually. Call once at game startup.</summary>
-	public static void Configure( string projectId, string apiKey, string baseUrl = null, string apiVersion = null, string cdnUrl = null, string publishTarget = null )
+	public static void Configure( string projectId, string apiKey, string baseUrl = null, string apiVersion = null, string cdnUrl = null, string publishTarget = null, string securityKeyFingerprint = null )
 	{
 		ProjectId = projectId;
 		ApiKey = apiKey;
@@ -71,6 +71,7 @@ public static partial class NetworkStorage
 		if ( !string.IsNullOrEmpty( apiVersion ) ) ApiVersion = apiVersion.Trim( '/' );
 		CdnUrl = string.IsNullOrEmpty( cdnUrl ) ? null : cdnUrl.TrimEnd( '/' );
 		PublishTarget = NormalizePublishTarget( publishTarget ?? PublishTarget );
+		if ( securityKeyFingerprint is not null ) SetSecuritySigningKeyPin( securityKeyFingerprint );
 		_autoConfigAttempted = true;
 		InitializeServerCompatibility();
 		NetworkStorageRevisionHandler.Initialize();
