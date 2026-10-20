@@ -119,7 +119,7 @@ public static partial class NetworkStorage
 			["libraryVersion"] = NetworkStorage.PackageVersion,
 			["packageIdent"] = NetworkStoragePackageInfo.PackageIdent
 		};
-			if ( HasCapability( "analytics-batch" ) )
+			if ( _serverCapabilities?.Contains( "analytics-batch" ) == true )
 			{
 				EnqueueAnalyticsEvent( body );
 				return;
