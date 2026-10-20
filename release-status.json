@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "generatedAt": "2026-10-20T00:43:55.535Z",
+  "generatedAt": "2026-10-20T01:04:23.516Z",
   "library": {
     "published": {
       "revision": 423774,
@@ -11,15 +11,21 @@
     },
     "main": {
       "version": "1.2.0",
-      "commit": "5b0ed8d6e9c4a4d500f794303ebe045009ee5907",
-      "committedAt": "2026-10-20T00:43:22Z",
+      "commit": "b418aeefa920c6ba978495001b9b8638483291bb",
+      "committedAt": "2026-10-20T01:04:13Z",
       "ci": {
         "conclusion": "pending",
-        "runUrl": "https://github.com/sbox-cool/sbox-network-storage/actions/runs/39349323077",
+        "runUrl": "https://github.com/sbox-cool/sbox-network-storage/actions/runs/39351350941",
         "engine": null
       }
     },
     "pending": [
+      {
+        "number": 50,
+        "title": "Default API root to v3 (#46)",
+        "mergedAt": "2026-10-20T01:04:13Z",
+        "url": "https://github.com/sbox-cool/sbox-network-storage/pull/50"
+      },
       {
         "number": 58,
         "title": "Skip the revision notice for git checkouts",
