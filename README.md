@@ -252,7 +252,7 @@ Then call endpoints from your game code:
 if ( !NetworkStorage.IsConfigured )
     MyNetStorageConfig.Initialize();
 
-// Call a server endpoint (GET)
+// Call a server endpoint without input (GET; POST when encrypted requests are required)
 var player = await NetworkStorage.CallEndpoint( "load-player" );
 
 // Call with input (POST)
@@ -283,6 +283,8 @@ if ( result.HasValue )
 ```
 
 See the [Examples/](Examples/) folder for complete working patterns.
+
+With encrypted requests required, a call without input is still sent as an encrypted POST. The host's `CallEndpointAs` path builds no envelope, so a no-input call on behalf of another player is refused locally with `ENCRYPTION_REQUIRES_POST`.
 
 ## Game values
 
