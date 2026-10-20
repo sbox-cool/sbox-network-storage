@@ -288,7 +288,7 @@ With encrypted requests required, a call without input is still sent as an encry
 
 Encrypted requests v2 seal each request to a key the server generates, so that key can rotate without a game update. The game learns it from the server's signed security config. The owner chooses the mode on the server (`off`, `v1`, `v2-preferred`, or `v2-required`), and the game follows the signed config.
 
-To stop a proxy or a swapped config from substituting its own key, pin the server's signing key. Pass `securityKeyFingerprint` to `NetworkStorage.Configure(...)`, enter it in the Sync Tool Setup window, or copy the "Security signing key" value from `sbox-ns security status`. Spaces, colons and letter case are ignored.
+To stop a proxy or a swapped config from substituting its own key, pin the server's signing key. Pass `securityKeyFingerprint` as the seventh argument to `NetworkStorage.Configure(projectId, apiKey, baseUrl, apiVersion, cdnUrl, publishTarget, securityKeyFingerprint)`, enter it in the Sync Tool Setup window, or copy the "Security signing key" value from `sbox-ns security status`. Spaces, colons and letter case are ignored.
 
 With a pin set, endpoint calls are refused with `ENCRYPTION_KEY_UNVERIFIED` until a config signed by that key loads. Without a pin, the first signing key seen for each API root is trusted and saved in the game's data folder (`network-storage-signing-key-trust.json`). If that key later changes, the game logs a warning and trusts the new key; pin the fingerprint to refuse unplanned changes. Unpinned games that never receive a trusted config stay on v1. A config that fails verification refuses every call, plain or encrypted, so plain requests cannot bypass the owner's mode.
 

@@ -63,7 +63,11 @@ public static partial class NetworkStorage
 	public static bool IsHost => !Networking.IsActive || Networking.IsHost;
 
 	/// <summary>Configure the client manually. Call once at game startup.</summary>
-	public static void Configure( string projectId, string apiKey, string baseUrl = null, string apiVersion = null, string cdnUrl = null, string publishTarget = null, string securityKeyFingerprint = null )
+	public static void Configure( string projectId, string apiKey, string baseUrl = null, string apiVersion = null, string cdnUrl = null, string publishTarget = null )
+		=> Configure( projectId, apiKey, baseUrl, apiVersion, cdnUrl, publishTarget, null );
+
+	/// <summary>Configure the client manually and pin the server signing key. Call once at game startup. A null fingerprint leaves the current pin unchanged.</summary>
+	public static void Configure( string projectId, string apiKey, string baseUrl, string apiVersion, string cdnUrl, string publishTarget, string securityKeyFingerprint )
 	{
 		ProjectId = projectId;
 		ApiKey = apiKey;

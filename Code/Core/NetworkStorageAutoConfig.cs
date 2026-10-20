@@ -121,7 +121,7 @@ public static partial class NetworkStorage
 				if ( encryptedRequestsVal is bool encryptedRequestsBool )
 					EnableEncryptedRequests = encryptedRequestsBool;
 
-				Configure( projectId, publicKey, baseUrl, apiVersion, publishTarget: publishTarget, securityKeyFingerprint: securityKeyFingerprint );
+				Configure( projectId, publicKey, baseUrl, apiVersion, null, publishTarget, securityKeyFingerprint );
 				if ( NetworkStorageLogConfig.LogConfig )
 					NetLog.Info( "config", $"Configured from NSConfig constants (ProxyEnabled={ProxyEnabled}, PublishTarget={PublishTarget})" );
 				return true;
