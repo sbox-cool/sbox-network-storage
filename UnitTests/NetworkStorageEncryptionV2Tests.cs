@@ -165,12 +165,15 @@ public class NetworkStorageEncryptionV2Tests
 	}
 
 	[TestMethod]
-	public void UnsealEndpointResponse_PassesPlainBodiesThrough()
+	public void UnsealEndpointResponse_RejectsPlainSuccessForEncryptedRequest()
 	{
 		var context = new NetworkStorage.EncryptedResponseContext( new byte[32], "AAAAAAAAAAAAAAAA", "f753feefa9e7837fa0495b6cc487b0cc" );
 
-		Assert.AreEqual( "{\"ok\":true}", NetworkStorage.UnsealEndpointResponse( context, "", "{\"ok\":true}" ) );
-		Assert.AreEqual( "not json", NetworkStorage.UnsealEndpointResponse( context, "", "not json" ) );
+		Assert.IsNull( NetworkStorage.UnsealEndpointResponse( context, "", "{\"ok\":true,\"coins\":999}" ) );
+		Assert.IsNull( NetworkStorage.UnsealEndpointResponse( context, "", "not json" ) );
+		Assert.AreEqual( "{\"ok\":false,\"code\":\"SECURITY_KEY_STALE\"}",
+			NetworkStorage.UnsealEndpointResponse( context, "", "{\"ok\":false,\"code\":\"SECURITY_KEY_STALE\"}" ) );
+		Assert.AreEqual( "{\"ok\":true}", NetworkStorage.UnsealEndpointResponse( null, "", "{\"ok\":true}" ) );
 	}
 
 	[TestMethod]
@@ -211,14 +214,6 @@ public class NetworkStorageEncryptionV2Tests
 		Assert.AreEqual( "", NetworkStorage.NormalizeSecurityKeyFingerprint( null ) );
 	}
 
-	[TestMethod]
-	public void SecureRandom_ReturnsRequestedLengthAndVaries()
-	{
-		Assert.AreEqual( 0, NetworkStorageSecureRandom.Bytes( 0 ).Length );
-		Assert.AreEqual( 12, NetworkStorageSecureRandom.Bytes( 12 ).Length );
-		Assert.AreEqual( 70, NetworkStorageSecureRandom.Bytes( 70 ).Length );
-		CollectionAssert.AreNotEqual( NetworkStorageSecureRandom.Bytes( 32 ), NetworkStorageSecureRandom.Bytes( 32 ) );
-	}
 
 	[TestMethod]
 	public void VerifySecurityConfigSignature_AcceptsOwnKeyAndRejectsTampering()

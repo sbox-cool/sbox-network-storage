@@ -24,10 +24,10 @@ public static partial class NetworkStorage
 		ClearLastEndpointError( slug );
 		if ( !await RequireCapabilityAsync( "endpoints", slug ) ) return null;
 
-		// Same-machine shortcut: if the target is the host's own Steam ID (e.g. two
-		// editor instances on one machine share a Steam account), just call directly
-		// using the host's auth — no proxy headers needed.
-		if ( targetSteamId == Game.SteamId.ToString() )
+		// A client-sealed request must be relayed unchanged, even when both editor instances share a Steam account.
+		var sealedInput = input is JsonElement element && element.ValueKind == JsonValueKind.Object
+			&& element.TryGetProperty( "encrypted", out var encrypted ) && encrypted.ValueKind == JsonValueKind.True;
+		if ( targetSteamId == Game.SteamId.ToString() && !sealedInput )
 		{
 			if ( NetworkStorageLogConfig.LogProxy )
 				Log.Info( $"[NetworkStorage] {slug} same-account shortcut (targetSteamId == hostSteamId), calling directly" );

@@ -11,7 +11,7 @@ public static partial class NetworkStorage
 	/// <summary>
 	/// Route an endpoint call through the game host via the registered RequestProxy delegate.
 	/// </summary>
-	private static async Task<JsonElement?> CallEndpointViaProxy( string slug, object input )
+	private static async Task<JsonElement?> CallEndpointViaProxy( string slug, object input, bool allowSecurityRetry = true )
 	{
 		var steamId = Game.SteamId.ToString();
 		var securityRequest = await BuildEndpointSecurityRequest( slug, input ?? new { }, allowAuthSession: false );
@@ -60,6 +60,11 @@ public static partial class NetworkStorage
 			var parsed = ParseResponse( slug, result );
 			if ( parsed.HasValue && NetworkStorageLogConfig.LogProxy )
 				NetLog.Response( slug, $"PROXY OK — {TruncateJson( parsed.Value )}" );
+			if ( !parsed.HasValue && allowSecurityRetry && TryGetLastEndpointError( slug, out var code, out _ ) && IsSecurityConfigMismatchCode( code ) )
+			{
+				await EnsureRuntimeSecurityConfigAsync( "proxy-security-retry", forceRefresh: true );
+				return await CallEndpointViaProxy( slug, input, allowSecurityRetry: false );
+			}
 			return parsed;
 		}
 		catch ( Exception ex )

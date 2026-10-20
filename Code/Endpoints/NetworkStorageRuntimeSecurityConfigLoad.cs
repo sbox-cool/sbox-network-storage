@@ -139,13 +139,14 @@ public static partial class NetworkStorage
 			if ( embedded.Fingerprint != SecuritySigningKeyPin )
 				return new SecurityConfigRefusal( "ENCRYPTION_KEY_PIN_MISMATCH", "security config signing key does not match the pinned fingerprint" );
 		}
-		else if ( !TrustedSigningKeys.TryGetValue( ApiRoot, out var stored ) || stored.Fingerprint != embedded.Fingerprint )
+		else if ( !TrustedSigningKeys.TryGetValue( ApiRoot, out var stored ) )
 		{
-			// First use, or the signing key changed. Without a pin nothing else can tell the keys apart, so the new key
-			// becomes the trust anchor for this API root. A change is logged loudly.
-			if ( stored is not null )
-				Log.Warning( $"[NetworkStorage] server signing key for {ApiRoot} changed from {stored.Fingerprint} to {embedded.Fingerprint}. Trusting the new key; pin securityKeyFingerprint to refuse unplanned changes." );
 			firstUse = embedded;
+		}
+		else if ( stored.Fingerprint != embedded.Fingerprint )
+		{
+			Log.Warning( $"[NetworkStorage] server signing key for {ApiRoot} changed from {stored.Fingerprint} to {embedded.Fingerprint}. Refusing the replacement; verify the server identity before changing its pin or local trust store." );
+			return new SecurityConfigRefusal( "ENCRYPTION_SIGNING_KEY_CHANGED", "security config signing key differs from the key trusted on first use" );
 		}
 
 		return NetworkStorageSecuritySignature.VerifySecurityConfigSignature( config, embedded.Modulus, embedded.Exponent )

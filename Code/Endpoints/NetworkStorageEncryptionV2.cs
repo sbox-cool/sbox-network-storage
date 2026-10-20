@@ -144,28 +144,31 @@ public static partial class NetworkStorage
 		return Encoding.UTF8.GetBytes( StableStringify( binding ) );
 	}
 
-	// Returns the body to parse. A plain body passes through; a body sealed as v2 is opened with the request's key.
-	// Returns null and records an error when a sealed body cannot be opened.
+	// A v2 request requires an authenticated response. Plain failures may report a pre-decryption error
+	// (for example a stale key); they may trigger a verified config refresh but can never become a successful result.
 	internal static string UnsealEndpointResponse( EncryptedResponseContext context, string slug, string raw )
 	{
-		var trimmed = (raw ?? "").TrimStart();
-		if ( trimmed.Length == 0 || trimmed[0] != '{' )
-			return raw;
-
 		try
 		{
-			using var doc = JsonDocument.Parse( trimmed );
+			using var doc = JsonDocument.Parse( raw ?? "" );
 			var root = doc.RootElement;
 			if ( !IsSealedV2Response( root ) )
-				return raw;
-
-			var body = context is null ? null : OpenSealedV2Response( context, root );
-			if ( body is not null )
-				return body;
+			{
+				if ( context is null || (root.ValueKind == JsonValueKind.Object
+					&& root.TryGetProperty( "ok", out var ok ) && ok.ValueKind == JsonValueKind.False) )
+					return raw;
+			}
+			else if ( context is not null )
+			{
+				var body = OpenSealedV2Response( context, root );
+				if ( body is not null )
+					return body;
+			}
 		}
 		catch ( JsonException )
 		{
-			return raw;
+			if ( context is null )
+				return raw;
 		}
 
 		RecordEndpointError( slug, "ENCRYPTED_RESPONSE_INVALID", "Encrypted response could not be opened." );
