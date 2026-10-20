@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "generatedAt": "2026-10-20T01:16:14.992Z",
+  "generatedAt": "2026-10-20T02:07:37.791Z",
   "library": {
     "published": {
       "revision": 423774,
@@ -11,15 +11,21 @@
     },
     "main": {
       "version": "1.2.0",
-      "commit": "46353575214cbd8d9e361c2313c721f810ab97a5",
-      "committedAt": "2026-10-20T01:16:05Z",
+      "commit": "ddf9b617c0c4fdf26c9c0e91c5cd34fa915b1750",
+      "committedAt": "2026-10-20T02:07:28Z",
       "ci": {
         "conclusion": "pending",
-        "runUrl": "https://github.com/sbox-cool/sbox-network-storage/actions/runs/39352481611",
+        "runUrl": "https://github.com/sbox-cool/sbox-network-storage/actions/runs/39357206123",
         "engine": null
       }
     },
     "pending": [
+      {
+        "number": 62,
+        "title": "Release: complete library acceptance and native verification",
+        "mergedAt": "2026-10-20T02:07:28Z",
+        "url": "https://github.com/sbox-cool/sbox-network-storage/pull/62"
+      },
       {
         "number": 55,
         "title": "Sync tool: endpoint script files (JavaScript and TypeScript)",
