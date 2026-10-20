@@ -12,11 +12,6 @@ public static partial class NetworkStorage
 	// A config that was received but cannot be trusted. Code is the stable error code; Message is for logs.
 	private sealed record SecurityConfigRefusal( string Code, string Message );
 
-	// Signing key learned on first use for an API root when no pin is configured. Held in memory only.
-	private sealed record TrustedSigningKey( string Fingerprint, byte[] Modulus, byte[] Exponent );
-
-	private static readonly Dictionary<string, TrustedSigningKey> _trustedSigningKeys = new();
-
 	private static async Task<bool> LoadRuntimeSecurityConfigAsync( string reason, bool forceRefresh )
 	{
 		var url = $"{ApiRoot}/security-config/{Uri.EscapeDataString( ProjectId )}";
@@ -115,7 +110,7 @@ public static partial class NetworkStorage
 				EncryptionKey = encryptionKey
 			};
 			if ( firstUseKey is not null )
-				_trustedSigningKeys[ApiRoot] = firstUseKey;
+				RememberTrustedSigningKey( ApiRoot, firstUseKey );
 			return true;
 		}
 		catch ( Exception ex )
@@ -133,27 +128,25 @@ public static partial class NetworkStorage
 		if ( !NetworkStorageSecuritySignature.TryReadSigningKey( config, out var modulus, out var exponent ) )
 			return new SecurityConfigRefusal( "ENCRYPTION_CONFIG_UNVERIFIED", "security config has no usable signing key" );
 
+		// The config is verified with the key it carries. A pin, or the key trusted for this API root, must name that key.
 		var embedded = new TrustedSigningKey( NetworkStorageRsaKey.Fingerprint( modulus, exponent ), modulus, exponent );
-		TrustedSigningKey key;
 		if ( SecuritySigningKeyPin.Length > 0 )
 		{
 			if ( embedded.Fingerprint != SecuritySigningKeyPin )
 				return new SecurityConfigRefusal( "ENCRYPTION_KEY_PIN_MISMATCH", "security config signing key does not match the pinned fingerprint" );
-			key = embedded;
 		}
-		else if ( _trustedSigningKeys.TryGetValue( ApiRoot, out var stored ) )
+		else if ( !TrustedSigningKeys.TryGetValue( ApiRoot, out var stored ) || stored.Fingerprint != embedded.Fingerprint )
 		{
-			key = stored;
-		}
-		else
-		{
-			key = embedded;
+			// First use, or the signing key changed. Without a pin nothing else can tell the keys apart, so the new key
+			// becomes the trust anchor for this API root. A change is logged loudly.
+			if ( stored is not null )
+				Log.Warning( $"[NetworkStorage] server signing key for {ApiRoot} changed from {stored.Fingerprint} to {embedded.Fingerprint}. Trusting the new key; pin securityKeyFingerprint to refuse unplanned changes." );
 			firstUse = embedded;
 		}
 
-		return NetworkStorageSecuritySignature.VerifySecurityConfigSignature( config, key.Modulus, key.Exponent )
+		return NetworkStorageSecuritySignature.VerifySecurityConfigSignature( config, embedded.Modulus, embedded.Exponent )
 			? null
-			: new SecurityConfigRefusal( "ENCRYPTION_CONFIG_UNVERIFIED", "security config signature did not verify with the trusted signing key; restart the game if the server key changed" );
+			: new SecurityConfigRefusal( "ENCRYPTION_CONFIG_UNVERIFIED", "security config signature did not verify with its signing key" );
 	}
 
 	// A received config was refused. A trusted config is kept; otherwise the refusal is recorded so encrypted calls stop
