@@ -49,6 +49,7 @@ public static partial class NetworkStorage
 		var overflow = false;
 		var schedule = false;
 		TaskCompletionSource<bool> wakeup = null;
+		TaskCompletionSource<bool> scheduledWakeup = null;
 		lock ( AnalyticsBatchLock )
 		{
 			if ( _analyticsBatchQueue.Count >= AnalyticsBatchMaxPending )
@@ -60,7 +61,7 @@ public static partial class NetworkStorage
 				_analyticsBatchQueue.Enqueue( (json, bytes) );
 				_analyticsPendingBytes += bytes;
 				schedule = !_analyticsDrainScheduled;
-				if ( schedule ) _analyticsBatchWakeup = new TaskCompletionSource<bool>();
+				if ( schedule ) _analyticsBatchWakeup = scheduledWakeup = new TaskCompletionSource<bool>();
 				_analyticsDrainScheduled = true;
 				if ( _analyticsBatchQueue.Count >= AnalyticsBatchMaxEvents
 					|| _analyticsPendingBytes + _analyticsBatchQueue.Count + AnalyticsBatchEnvelopeBytes >= AnalyticsBatchMaxBytes )
@@ -70,7 +71,17 @@ public static partial class NetworkStorage
 
 		if ( overflow ) RecordAnalyticsDrop( 1, "pending analytics queue is full" );
 		wakeup?.TrySetResult( true );
-		if ( schedule ) _ = DrainAnalyticsBatchAsync( _analyticsBatchWakeup.Task );
+		if ( schedule )
+		{
+			_ = WakeAnalyticsBatchAfterWindowAsync( scheduledWakeup );
+			_ = DrainAnalyticsBatchAsync( scheduledWakeup.Task );
+		}
+	}
+
+	private static async Task WakeAnalyticsBatchAfterWindowAsync( TaskCompletionSource<bool> wakeup )
+	{
+		await Task.Delay( TimeSpan.FromSeconds( AnalyticsBatchWindowSeconds ) );
+		wakeup.TrySetResult( true );
 	}
 
 	/// <summary>
@@ -79,7 +90,7 @@ public static partial class NetworkStorage
 	/// </summary>
 	private static async Task DrainAnalyticsBatchAsync( Task wakeup )
 	{
-		await Task.WhenAny( new[] { Task.Delay( TimeSpan.FromSeconds( AnalyticsBatchWindowSeconds ) ), wakeup } );
+		await wakeup;
 
 		while ( true )
 		{
