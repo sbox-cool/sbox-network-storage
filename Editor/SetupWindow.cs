@@ -21,6 +21,7 @@ public class SetupWindow : PaintedWindow
 	private LineEdit _baseUrlInput;
 	private LineEdit _cdnUrlInput;
 	private LineEdit _dataFolderInput;
+	private LineEdit _securityKeyFingerprintInput;
 
 	// ── UI state ──
 	private string _status = "";
@@ -46,7 +47,7 @@ public class SetupWindow : PaintedWindow
 	public SetupWindow()
 	{
 		Title = "Network Storage Setup";
-		Size = new Vector2( 520, 720 );
+		Size = new Vector2( 520, 780 );
 		MinimumSize = new Vector2( 400, 580 );
 
 		SyncToolConfig.Load();
@@ -88,6 +89,7 @@ public class SetupWindow : PaintedWindow
 		_baseUrlInput = CreateLineEdit( SyncToolConfig.BaseUrl, "Default: https://api.sboxcool.com" );
 		_cdnUrlInput = CreateLineEdit( SyncToolConfig.CdnUrl, "Optional: storage.sboxcool.com" );
 		_dataFolderInput = CreateLineEdit( SyncToolConfig.DataFolder, "Subfolder under Editor/ (default: Network Storage)" );
+		_securityKeyFingerprintInput = CreateLineEdit( SyncToolConfig.SecurityKeyFingerprint, "Optional: signing-key fingerprint from sbox-ns security status (empty = unpinned)" );
 	}
 
 	private LineEdit CreateLineEdit( string value, string placeholder )
@@ -267,6 +269,10 @@ public class SetupWindow : PaintedWindow
 		PositionInput( _dataFolderInput, pad, y, w, fieldH );
 		y += fieldH + 8;
 
+		DrawFieldLabel( ref y, pad, w, "Security Key Pin (optional)" );
+		PositionInput( _securityKeyFingerprintInput, pad, y, w, fieldH );
+		y += fieldH + 8;
+
 		DrawSeparator( ref y, w, pad );
 
 		// ── Data Source Preference ──
@@ -427,6 +433,7 @@ public class SetupWindow : PaintedWindow
 		}
 
 		SyncToolConfig.Save( secretKey, publicKey, projectId, baseUrl, SyncToolConfig.DataSourceMode.ApiOnly, dataFolder, cdnUrl );
+		SyncToolConfig.SetSecurityKeyFingerprint( _securityKeyFingerprintInput.Text?.Trim() ?? "" );
 
 		// Warn about non-standard prefixes but still save
 		var warnings = "";
@@ -434,6 +441,8 @@ public class SetupWindow : PaintedWindow
 			warnings += " (public key: non-standard prefix)";
 		if ( !string.IsNullOrEmpty( secretKey ) && !secretKey.StartsWith( "sbox_sk_" ) )
 			warnings += " (secret key: non-standard prefix)";
+		if ( SyncToolConfig.SecurityKeyFingerprint.Length > 0 && SyncToolConfig.SecurityKeyFingerprint.Length != 64 )
+			warnings += " (security key pin: not a 64-character SHA-256 fingerprint)";
 
 		if ( !string.IsNullOrEmpty( warnings ) )
 		{

@@ -94,6 +94,9 @@ public static partial class NetworkStorage
 			if ( string.IsNullOrWhiteSpace( normalized ) ) return;
 			if ( severity == "custom" && !IsAnalyticsEventAllowed( normalized ) )
 			{
+				// Owner-disabled analytics stays silent by design. A name missing from the allowlist is a developer
+				// mistake: count it and warn (throttled), so the refusal is visible in the log.
+				if ( AnalyticsManagedLibraryEvents ) RecordAnalyticsDrop( 1, $"custom event '{normalized}' is not in the project's allowed event list (Player analytics settings)" );
 				if ( NetworkStorageLogConfig.LogRequests )
 					NetLog.Info( "analytics", $"Suppressed disallowed event {normalized}" );
 				return;
@@ -116,16 +119,23 @@ public static partial class NetworkStorage
 			["libraryVersion"] = NetworkStorage.PackageVersion,
 			["packageIdent"] = NetworkStoragePackageInfo.PackageIdent
 		};
+			if ( _serverCapabilities?.Contains( "analytics-batch" ) == true )
+			{
+				EnqueueAnalyticsEvent( body );
+				return;
+			}
 
 			var headers = await BuildAuthHeaders();
 			var url = BuildUrl( $"/storage/{Uri.EscapeDataString( ProjectId )}/analytics/events" );
 			var content = Http.CreateJsonContent( body );
-			await RequestStringAsync(url, "POST", content, headers);
+			var raw = await RequestStringAsync(url, "POST", content, headers);
+			RecordAnalyticsResponse( raw, 1 );
 			if ( NetworkStorageLogConfig.LogRequests )
 				NetLog.Info( "analytics", $"Reported {severity}:{normalized}" );
 		}
 		catch ( Exception ex )
 		{
+			RecordAnalyticsDrop( 1, ex.Message );
 			if ( NetworkStorageLogConfig.LogErrors )
 				NetLog.Error( "analytics", $"Analytics report failed: {ex.Message}" );
 		}

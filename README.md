@@ -288,6 +288,14 @@ See the [Examples/](Examples/) folder for complete working patterns.
 
 With encrypted requests required, a call without input is still sent as an encrypted POST. The host's `CallEndpointAs` path builds no envelope, so a no-input call on behalf of another player is refused locally with `ENCRYPTION_REQUIRES_POST`.
 
+Encrypted requests v2 seal each request to a key the server generates, so that key can rotate without a game update. The game learns it from the server's signed security config. The owner chooses the mode on the server (`off`, `v1`, `v2-preferred`, or `v2-required`), and the game follows the signed config.
+
+To stop a proxy or a swapped config from substituting its own key, pin the server's signing key. Pass `securityKeyFingerprint` as the seventh argument to `NetworkStorage.Configure(projectId, apiKey, baseUrl, apiVersion, cdnUrl, publishTarget, securityKeyFingerprint)`, enter it in the Sync Tool Setup window, or copy the "Security signing key" value from `sbox-ns security status`. Spaces, colons and letter case are ignored.
+
+With a pin set, endpoint calls are refused with `ENCRYPTION_KEY_UNVERIFIED` until a config signed by that key loads. Without a pin, the first signing key seen for each API root is trusted and saved in the game's data folder (`network-storage-signing-key-trust.json`). A later signing-key change warns and is refused with `ENCRYPTION_SIGNING_KEY_CHANGED`; the last trusted config is kept. Verify the server identity out of band before setting a replacement pin or resetting the local trust store. Encryption-key rotation under the same signing key remains automatic. Unpinned games that never receive a trusted config stay on v1. A config that fails verification refuses every endpoint call, plain or encrypted, so plain requests cannot bypass the owner's mode. Calling `NetworkStorage.Configure` with a different pin, base URL, API version, or project drops the held config and verifies again.
+
+`GetGameValues` is a public, unsigned GET outside the endpoint path. Neither the pin nor a refused config covers it, and a proxy or MITM can read or change it. Do not put secrets in game values.
+
 ## Game values
 
 Game values are the shared numbers your game and server both read: tuning
@@ -354,7 +362,7 @@ the same screens with sample data.
 | `UpdateDocument(collectionId, documentId, ops)` | Apply server-side operations (`set`, `inc`, `push`, `pull`, `remove`) to a document. |
 | `DeleteDocument(collectionId, documentId?)` | Delete one collection document/row. Public calls require record deletes to be enabled; dedicated secret keys with collection execute permission can delete rows for diagnostics/backoffice cleanup. Does not delete collection schemas. |
 | `ListRecords/CreateRecord/RenameRecord/DeleteRecord` | Manage multi-record save slots. |
-| `NetworkStorageAnalytics.TrackEvent(eventType, payload?)` | Report an allowlisted custom Player Analytics event. |
+| `NetworkStorage.TrackAnalyticsEvent(eventType, payload?)` (or `NetworkStorageAnalytics.TrackEvent`) | Report a custom Player Analytics event. The name must be listed in the project's Player analytics settings on the owner page. Names that are not listed are not sent and are counted in the `Dropped N analytics event(s)` warning. |
 | `NetworkStorageAnalytics.Warning(code, message?, context?)` | Report a recoverable warning/pain point to the player timeline. |
 | `NetworkStorageAnalytics.Error(exception, code?, context?)` | Report an exception/error to the player timeline without breaking gameplay. |
 | `NetworkStorageAnalytics.SessionStart/SessionEnd` | Report managed session boundaries when analytics is enabled. |
@@ -363,7 +371,9 @@ the same screens with sample data.
 
 See [analytics.md](analytics.md) for Player Analytics setup, custom events, warnings, and error reporting examples.
 
-Rate-limited calls (HTTP 429) are retried at most twice, with the total wait capped at 5 seconds, using the server's `Retry-After`. GET requests always retry; other methods retry only when the server marks the response `retrySafe`. A call that still fails with 429 is reported as `RATE_LIMITED` through `TryGetLastEndpointError`.
+Analytics batching: when the server advertises the `analytics-batch` capability, analytics events are queued and sent together (up to 50 events or 256 KiB per request). A count or size threshold wakes the single sender immediately; otherwise the first event waits at most 2 seconds. Servers without the capability receive one request per event, as before. Events the server rejects, events over 32 KiB, and events beyond the 500-event pending queue are counted and reported in a `[NetworkStorage] Dropped N analytics event(s)` warning, at most once every 30 seconds. Destroying the analytics runtime wakes the same sender to flush pending events without starting a competing drain; an abrupt process exit can still lose in-flight events.
+
+Rate-limited calls (HTTP 429) are retried at most twice, with the total wait capped at 5 seconds, using the server's `Retry-After`. GET requests always retry; other methods retry only when the server marks the response `retrySafe`. A call that still fails with 429 is reported as `RATE_LIMITED` through `TryGetLastEndpointError`; document reads use the `storage` error key and game-value reads use `game-values`.
 
 ### JsonHelpers (static)
 

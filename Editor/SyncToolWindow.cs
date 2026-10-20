@@ -454,12 +454,6 @@ public partial class SyncToolWindow : PaintedWindow
 		var pad = 16f;
 		var w = Width - pad * 2;
 
-		// ── Brand header + Push All button (short title never clips at minimum width) ──
-		NetworkStorageBrand.DrawIcon( pad, y, 22f );
-		Paint.SetDefaultFont( size: 13, weight: 700 );
-		Paint.SetPen( Color.White );
-		Paint.DrawText( new Rect( pad + 30f, y, w * 0.55f, 22 ), Title, TextFlag.LeftCenter );
-
 		// Push All + Test All buttons
 		if ( SyncToolConfig.IsValid )
 		{
@@ -952,10 +946,11 @@ public partial class SyncToolWindow : PaintedWindow
 	{
 		var y = 38f;
 
-		// Header + Push All + Test All
+		// Brand header (approved icon + short title, never clips at minimum width) + Push All + Test All
+		NetworkStorageBrand.DrawIcon( pad, y, 22f );
 		Paint.SetDefaultFont( size: 13, weight: 700 );
 		Paint.SetPen( Color.White );
-		Paint.DrawText( new Rect( pad, y, w * 0.55f, 22 ), "Network Storage Sync", TextFlag.LeftCenter );
+		Paint.DrawText( new Rect( pad + 30f, y, w * 0.55f, 22 ), Title, TextFlag.LeftCenter );
 
 		if ( SyncToolConfig.IsValid )
 		{

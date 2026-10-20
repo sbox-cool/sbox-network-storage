@@ -60,6 +60,31 @@ policy ([compatibility.md](https://github.com/sbox-cool/sbox-network-storage-ser
 Non-code PRs (docs, CI, tests outside `Code/`, `Editor/`) pass this job without an engine run.
 Label changes re-run the gate, including the engine legs.
 
+## Sandbox API restrictions
+
+`dotnet build` and `dotnet test` compile against the installed SDK assemblies, but do **not**
+prove that game code passes the s&box API whitelist. Keep the real-engine legs required.
+The dedicated harness checks that `NetworkStorage` loaded after sandbox compilation before
+running HTTP probes; on failure its evidence includes the compiler/tool error and engine console.
+Do not replace this with a source-text blacklist: overloads and whitelist contents vary by engine.
+
+Observed on the native Steam engine `26.10.13a` (build `38759734332`), Windows 11 Home 25H2:
+
+| Rejected game-code API | Evidence | Current replacement |
+|---|---|---|
+| `Task.WhenAny(Task, Task)` | Native whitelist compiler error at candidate `26516da`; [release #62](https://github.com/sbox-cool/sbox-network-storage/pull/62) | One `TaskCompletionSource<bool>` awakened by the timer, batch threshold, or shutdown |
+| `Task.WhenAny(Task[])` | Native whitelist compiler error at candidate `092592f`; same release evidence | Same single-sender wakeup; no `WhenAny` overload |
+
+These are observed restrictions for that engine, not a claim that every overload or future
+engine rejects them. The replacement must pass the sandbox compiler and live batching checks,
+not just the ordinary C# tests. Preserve failed-run evidence; do not relabel a failed candidate
+as passed after changing its source.
+
+Actions uses a source-built `Facepunch/sbox-public` engine. Native release evidence must also
+name the Steam engine build: a green current-source engine does not prove that an older
+installed Steam engine has the same whitelist. Before publishing, repeat the affected paths
+in the native editor, including Setup/Sync Tool UI changes.
+
 ## Running the gate manually
 
 Use **Actions > Compat gate > Run workflow** on any branch:

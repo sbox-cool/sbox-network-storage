@@ -11,10 +11,12 @@ public static partial class NetworkStorage
 	/// <summary>
 	/// Route an endpoint call through the game host via the registered RequestProxy delegate.
 	/// </summary>
-	private static async Task<JsonElement?> CallEndpointViaProxy( string slug, object input )
+	private static async Task<JsonElement?> CallEndpointViaProxy( string slug, object input, bool allowSecurityRetry = true )
 	{
 		var steamId = Game.SteamId.ToString();
 		var securityRequest = await BuildEndpointSecurityRequest( slug, input ?? new { }, allowAuthSession: false );
+		if ( securityRequest is null )
+			return null;
 		string proxySlug = slug;
 		string inputJson = JsonSerializer.Serialize( securityRequest.Body );
 
@@ -50,11 +52,19 @@ public static partial class NetworkStorage
 				return null;
 			}
 
+			result = UnsealEndpointResponse( securityRequest.ResponseContext, slug, result );
+			if ( result is null )
+				return null;
 			if ( NetworkStorageLogConfig.LogProxy )
 				Log.Info( $"[NetworkStorage] {slug} PROXY → {TruncateJson( result, 200 )}" );
 			var parsed = ParseResponse( slug, result );
 			if ( parsed.HasValue && NetworkStorageLogConfig.LogProxy )
 				NetLog.Response( slug, $"PROXY OK — {TruncateJson( parsed.Value )}" );
+			if ( !parsed.HasValue && allowSecurityRetry && TryGetLastEndpointError( slug, out var code, out _ ) && IsSecurityConfigMismatchCode( code ) )
+			{
+				await EnsureRuntimeSecurityConfigAsync( "proxy-security-retry", forceRefresh: true );
+				return await CallEndpointViaProxy( slug, input, allowSecurityRetry: false );
+			}
 			return parsed;
 		}
 		catch ( Exception ex )

@@ -187,8 +187,9 @@ internal sealed class NetworkStorageAnalyticsRuntime : Component
 	{
 		// Process-stable session: scene-change destruction does NOT emit leave.
 		// The final leave is best-effort (the server's 60s stale-presence sweep
-		// covers hard exits). Only clear the instance reference.
+		// covers hard exits). Clear the instance reference and send queued analytics events.
 		if ( _instance == this ) _instance = null;
+		NetworkStorage.FlushAnalyticsBatch();
 	}
 
 

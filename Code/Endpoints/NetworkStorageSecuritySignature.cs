@@ -13,14 +13,12 @@ internal static partial class NetworkStorageSecuritySignature
 		0x05, 0x00, 0x04, 0x20
 	};
 
-	public static bool VerifySecurityConfigSignature( JsonElement config )
-		=> VerifySecurityConfigSignature( config, out _ );
-
-	public static bool VerifySecurityConfigSignature( JsonElement config, out string verificationMode )
+	// Reads the RSA key a signed security config claims for itself. The embedded key is never trusted
+	// on its own: the caller must match it to a pinned fingerprint or a stored first-use key.
+	public static bool TryReadSigningKey( JsonElement config, out byte[] modulus, out byte[] exponent )
 	{
-		verificationMode = "";
-		if ( !config.TryGetProperty( "signature", out var signatureProp ) || signatureProp.ValueKind != JsonValueKind.String )
-			return false;
+		modulus = null;
+		exponent = null;
 		if ( !config.TryGetProperty( "signing", out var signing ) || signing.ValueKind != JsonValueKind.Object )
 			return false;
 		if ( !string.Equals( ReadString( signing, "algorithm" ), "rsa-sha256", StringComparison.OrdinalIgnoreCase ) )
@@ -28,27 +26,24 @@ internal static partial class NetworkStorageSecuritySignature
 		if ( !signing.TryGetProperty( "publicKeyJwk", out var jwk ) || jwk.ValueKind != JsonValueKind.Object )
 			return false;
 
-		var modulus = Base64UrlDecode( ReadString( jwk, "n" ) );
-		var exponent = Base64UrlDecode( ReadString( jwk, "e" ) );
+		modulus = Base64UrlDecode( ReadString( jwk, "n" ) );
+		exponent = Base64UrlDecode( ReadString( jwk, "e" ) );
+		return modulus.Length >= 128 && exponent.Length > 0;
+	}
+
+	// Verifies the config's RSA-PKCS1 SHA-256 signature against the supplied key only. There is no
+	// unsigned or alternative acceptance path.
+	public static bool VerifySecurityConfigSignature( JsonElement config, byte[] modulus, byte[] exponent )
+	{
+		if ( !config.TryGetProperty( "signature", out var signatureProp ) || signatureProp.ValueKind != JsonValueKind.String )
+			return false;
+
 		var signature = Base64UrlDecode( signatureProp.GetString() );
 		if ( modulus.Length < 128 || exponent.Length == 0 || signature.Length == 0 )
 			return false;
 
-		var signedPayload = StableStringifyWithoutSignature( config );
-		var digest = Sha256( Encoding.UTF8.GetBytes( signedPayload ) );
-		if ( VerifyRsaSha256Pkcs1( digest, signature, modulus, exponent ) )
-		{
-			verificationMode = "rsa-sha256";
-			return true;
-		}
-
-		if ( VerifyConfigVersionIntegrity( config ) )
-		{
-			verificationMode = "config-version-fallback";
-			return true;
-		}
-
-		return false;
+		var digest = Sha256( Encoding.UTF8.GetBytes( StableStringifyWithoutSignature( config ) ) );
+		return VerifyRsaSha256Pkcs1( digest, signature, modulus, exponent );
 	}
 
 	private static bool VerifyRsaSha256Pkcs1( byte[] digest, byte[] signature, byte[] modulus, byte[] exponent )
@@ -96,19 +91,6 @@ internal static partial class NetworkStorageSecuritySignature
 		var sb = new StringBuilder();
 		WriteStableValue( sb, element, skipSignature: true );
 		return sb.ToString();
-	}
-
-	private static bool VerifyConfigVersionIntegrity( JsonElement config )
-	{
-		if ( !config.TryGetProperty( "settings", out var settings ) || settings.ValueKind != JsonValueKind.Object )
-			return false;
-
-		var expected = ReadString( config, "configVersion" );
-		if ( string.IsNullOrWhiteSpace( expected ) )
-			return false;
-
-		var digest = Sha256( Encoding.UTF8.GetBytes( StableStringifyWithoutSignature( settings ) ) );
-		return string.Equals( ToHex( digest )[..16], expected, StringComparison.OrdinalIgnoreCase );
 	}
 
 	private static void WriteStableValue( StringBuilder sb, JsonElement element, bool skipSignature = false )
