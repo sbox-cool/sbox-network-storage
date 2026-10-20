@@ -358,6 +358,13 @@ public static class NetworkStorageEditorMcpTools
 
 	private static async Task RePushEndpoints( List<string> slugs, string target )
 	{
+		var scriptProblems = SyncToolConfig.EndpointScriptProblems();
+		if ( scriptProblems.Count > 0 )
+		{
+			Log.Warning( $"[NetworkStorage MCP] Verification re-push skipped: {scriptProblems.Values.First()}" );
+			return;
+		}
+
 		var payloadBySlug = SyncToolConfig.LoadSourcePayloadResources( "endpoint", includeDeprecated: false )
 			.Where( e => StringField( e, "slug" ) != null )
 			.ToDictionary( e => StringField( e, "slug" ), StringComparer.OrdinalIgnoreCase );

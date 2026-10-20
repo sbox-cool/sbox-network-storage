@@ -23,6 +23,31 @@ public static class SyncToolPullWriter
 			local );
 	}
 
+	/// <summary>
+	/// Display-only text of an endpoint in the layout a pull writes: the envelope, then its script file below a
+	/// divider. The pull preview shows both panes this way, so a script change reads line by line.
+	/// </summary>
+	public static string EndpointPreviewText( string slug, string json )
+	{
+		if ( string.IsNullOrWhiteSpace( json ) )
+			return "";
+
+		Dictionary<string, object> data;
+		try
+		{
+			data = JsonSerializer.Deserialize<Dictionary<string, object>>( json ) ?? new Dictionary<string, object>();
+		}
+		catch ( JsonException )
+		{
+			return SyncToolYamlRenderer.RenderFromJson( json );
+		}
+
+		// Same split the writer makes when it has no source path, so the preview matches what a pull writes.
+		var envelope = SyncToolConfig.SplitEndpointScript( slug, data, null, out var scriptFileName, out var scriptText );
+		var text = BuildSourceText( "endpoint", slug, envelope );
+		return scriptFileName == null ? text : $"{text}\n--- {scriptFileName} ---\n{scriptText}";
+	}
+
 	public static bool SaveCollection( string name, JsonElement remoteCollection )
 	{
 		var local = SyncToolTransforms.ServerCollectionToLocal( remoteCollection );
@@ -79,7 +104,14 @@ public static class SyncToolPullWriter
 		// canonical data the user approved. Only preserve raw sourceText for older
 		// responses that do not expose a compiled view.
 		if ( hasSource && !hasCompiledRemoteView )
-			SyncToolConfig.SaveSourceResource( kind, id, sourceText, sourcePath );
+		{
+			// A script endpoint's raw text still has its script to move into a file, so it goes through WriteSource.
+			var rawEnvelope = kind == "endpoint" ? SyncToolConfig.RawEndpointToSplit( sourceText, sourcePath ) : null;
+			if ( rawEnvelope != null )
+				WriteSource( kind, id, rawEnvelope, sourcePath );
+			else
+				SyncToolConfig.SaveSourceResource( kind, id, sourceText, sourcePath );
+		}
 		else
 			WriteSource( kind, id, local, sourcePath );
 
@@ -88,9 +120,18 @@ public static class SyncToolPullWriter
 
 	public static void WriteSource( string kind, string id, Dictionary<string, object> data, string sourcePath = null )
 	{
+		// Endpoint code lives in its own script file; the envelope only references it.
+		string scriptFileName = null;
+		string scriptText = null;
+		var envelope = data;
+		if ( kind == "endpoint" )
+			envelope = SyncToolConfig.SplitEndpointScript( id, data, sourcePath, out scriptFileName, out scriptText );
+
 		if ( !string.IsNullOrWhiteSpace( sourcePath ) )
 		{
-			SyncToolConfig.SaveSourceResource( kind, id, BuildSourceText( kind, id, data ), sourcePath );
+			var savedPath = SyncToolConfig.SaveSourceResource( kind, id, BuildSourceText( kind, id, envelope ), sourcePath );
+			if ( scriptFileName != null && savedPath != null )
+				SyncToolConfig.WriteEndpointScriptFile( Path.GetDirectoryName( SyncToolConfig.Abs( savedPath ) ), scriptFileName, scriptText );
 			return;
 		}
 
@@ -109,7 +150,9 @@ public static class SyncToolPullWriter
 		if ( !Directory.Exists( dir ) )
 			Directory.CreateDirectory( dir );
 
-		File.WriteAllText( path, BuildSourceText( kind, id, data ) );
+		File.WriteAllText( path, BuildSourceText( kind, id, envelope ) );
+		if ( scriptFileName != null )
+			SyncToolConfig.WriteEndpointScriptFile( dir, scriptFileName, scriptText );
 	}
 
 	private static string FindExistingSourcePath( string absoluteFolder, string kind, string id )

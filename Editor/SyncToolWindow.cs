@@ -817,7 +817,8 @@ public partial class SyncToolWindow : PaintedWindow
 			DrawSectionHeader( ref y, pad, w, "SYNC RESULTS" );
 
 			var okCount = _syncLog.Count( e => e.Ok && IsResourceSyncLog( e ) );
-			var failCount = _syncLog.Count( e => !e.Ok && IsResourceSyncLog( e ) );
+			var failCount = _syncLog.Count( e => !e.Ok && IsResourceSyncLog( e ) && !IsBlockedLog( e ) );
+			var blockedCount = _syncLog.Count( e => IsBlockedLog( e ) );
 			var verifiedCount = _syncLog.Count( e => IsResourceSyncLog( e ) && e.Detail != null && e.Detail.Contains( "Verified" ) );
 			var mismatchCount = _syncLog.Count( e => IsResourceSyncLog( e ) && e.Detail != null && e.Detail.Contains( "Mismatch" ) );
 
@@ -853,6 +854,12 @@ public partial class SyncToolWindow : PaintedWindow
 			{
 				Paint.SetPen( Color.Red.WithAlpha( 0.8f ) );
 				Paint.DrawText( new Rect( sx, y, 90, 16 ), $"✗ {failCount} failed", TextFlag.LeftCenter );
+				sx += 90;
+			}
+			if ( blockedCount > 0 )
+			{
+				Paint.SetPen( Color.White.WithAlpha( 0.6f ) );
+				Paint.DrawText( new Rect( sx, y, 110, 16 ), $"○ {blockedCount} not pushed", TextFlag.LeftCenter );
 			}
 			y += 22;
 
@@ -892,7 +899,7 @@ public partial class SyncToolWindow : PaintedWindow
 						: Color.Red.WithAlpha( 0.6f );
 					Paint.SetDefaultFont( size: 8 );
 					Paint.SetPen( detailColor );
-					Paint.DrawText( new Rect( pad + 26 + nameW + 4, y, w - nameW - 100, 16 ), detailText, TextFlag.LeftCenter );
+					DrawOneLineText( new Rect( pad + 26 + nameW + 4, y, w - nameW - 100, 16 ), detailText, TextFlag.LeftCenter, entry.Name, $"synclog_{_syncLog.IndexOf( entry )}" );
 
 					// Type badge
 					Paint.SetPen( Color.White.WithAlpha( 0.25f ) );
@@ -1238,6 +1245,31 @@ public partial class SyncToolWindow : PaintedWindow
 			_buttons.Add( new ClickRegion { Rect = rect, Id = id, OnClick = onClick } );
 	}
 
+	/// <summary>
+	/// The first line of <paramref name="text"/>, cut to <paramref name="maxWidth"/> with an ellipsis. Rows are one line
+	/// high, so a multi-line message shows its first line and the full text opens on click.
+	/// </summary>
+	private static string FitToOneLine( string text, float maxWidth )
+	{
+		if ( string.IsNullOrEmpty( text ) ) return "";
+		var trimmed = text.Trim();
+		var lineEnd = trimmed.IndexOfAny( new[] { '\r', '\n' } );
+		var line = lineEnd < 0 ? trimmed : trimmed[..lineEnd].TrimEnd() + " …";
+		while ( line.Length > 1 && Paint.MeasureText( line ).x > maxWidth )
+			line = line[..^2] + "…";
+		return line;
+	}
+
+	/// <summary>Draws one line of text. When the full text does not fit, clicking the row opens it in a dialog.</summary>
+	private void DrawOneLineText( Rect rect, string text, TextFlag flag, string title, string regionId )
+	{
+		var fullText = (text ?? "").Trim();
+		var shown = FitToOneLine( fullText, rect.Width );
+		Paint.DrawText( rect, shown, flag );
+		if ( !_busy && shown != fullText )
+			_buttons.Add( new ClickRegion { Rect = rect, Id = regionId, OnClick = () => MessageDialog.Show( title, fullText ) } );
+	}
+
 	private void DrawWideButton( Rect rect, string label, Color color, string id, Action onClick )
 	{
 		var hovered = rect.IsInside( _mousePos );
@@ -1329,7 +1361,7 @@ public partial class SyncToolWindow : PaintedWindow
 				() => OpenMergeView( capturedMergeId, capturedMergeName ) );
 			contentX += mergeW + 6;
 		}
-		else if ( state.RemoteDiffers )
+		else if ( pullAction != null && ( state.RemoteDiffers || _hasCheckedRemote && state.Status != SyncStatus.LocalOnly && state.Status != SyncStatus.Unknown ) )
 		{
 			var pullRect = new Rect( contentX, btnY, btnW, btnH );
 			DrawSmallButton( pullRect, "Pull", Color.Cyan, $"pull_{id}", pullAction );
@@ -1584,7 +1616,7 @@ public partial class SyncToolWindow : PaintedWindow
 			{
 				Paint.SetDefaultFont( size: 8 );
 				Paint.SetPen( status.IsStale ? Color.Yellow.WithAlpha( 0.75f ) : Color.White.WithAlpha( 0.35f ) );
-				Paint.DrawText( new Rect( pad + 22, y, w - 30, 14 ), detailText, TextFlag.LeftCenter );
+				DrawOneLineText( new Rect( pad + 22, y, w - 30, 14 ), detailText, TextFlag.LeftCenter, mapping.CsFile, $"mapping_{mapping.Collection}" );
 				y += 16;
 			}
 		}
@@ -1909,16 +1941,22 @@ public partial class SyncToolWindow : PaintedWindow
 		if ( localJson != null )
 		{
 			state.LocalJson = localJson;
-			state.LocalYaml = SyncToolYamlRenderer.RenderFromJson( localJson );
+			state.LocalYaml = PreviewYaml( id, localJson );
 		}
 		if ( remoteJson != null )
 		{
 			state.RemoteJson = remoteJson;
-			state.RemoteYaml = SyncToolYamlRenderer.RenderFromJson( remoteJson );
+			state.RemoteYaml = PreviewYaml( id, remoteJson );
 		}
 		if ( status.HasValue ) state.Status = status.Value;
 		_items[id] = state;
 	}
+
+	/// <summary>Display-only YAML for a row. An endpoint shows its script as its own block, the way a pull writes it.</summary>
+	private static string PreviewYaml( string id, string json ) =>
+		id.StartsWith( "ep_", StringComparison.Ordinal )
+			? SyncToolPullWriter.EndpointPreviewText( id[3..], json )
+			: SyncToolYamlRenderer.RenderFromJson( json );
 
 	private void ClearAllRemoteDiffs()
 	{
@@ -2147,7 +2185,10 @@ public partial class SyncToolWindow : PaintedWindow
 						var sourceTextMatches = localEpSourceTextBySlug.TryGetValue( slug, out var localSourceText )
 							&& SyncToolTransforms.TryGetSourceText( ep, out var remoteSourceText )
 							&& localSourceText == NormalizeSourceTextForVerification( remoteSourceText );
-						var differs = !sourceTextMatches && NormalizeJson( remoteJson ) != NormalizeJson( localJson );
+						// The handler script is compared on its own. A matching remote sourceText must not hide a script
+						// changed on the live definition, because that sourceText can be stale.
+						var scriptMatches = SyncToolTransforms.EndpointScriptsMatch( localEp, ep );
+						var differs = !scriptMatches || ( !sourceTextMatches && NormalizeJson( remoteJson ) != NormalizeJson( localJson ) );
 
 						if ( differs )
 						{
@@ -2448,6 +2489,16 @@ public partial class SyncToolWindow : PaintedWindow
 
 		var activeEndpointFiles = GetActiveEndpointFiles();
 
+		// Script-file problems stop the whole push before anything is sent; rows are set in ReportPushBlocked.
+		if ( !EndpointScriptsReadyForPush() )
+		{
+			_busy = false;
+			_busyItem = null;
+			ScrollToBottom();
+			Update();
+			return;
+		}
+
 		var pushAllPayload = BuildPushAllPayload( out var hasAnyPushResource );
 		if ( !hasAnyPushResource || !await RunPreflightOrOfferFix( pushAllPayload, () => _ = PushAll() ) )
 		{
@@ -2557,7 +2608,8 @@ public partial class SyncToolWindow : PaintedWindow
 		_hasCheckedRemote = false;
 
 		var okCount = _syncLog.Count( e => e.Ok && IsResourceSyncLog( e ) );
-		var failCount = _syncLog.Count( e => !e.Ok && IsResourceSyncLog( e ) );
+		var failCount = _syncLog.Count( e => !e.Ok && IsResourceSyncLog( e ) && !IsBlockedLog( e ) );
+		var blockedCount = _syncLog.Count( e => IsBlockedLog( e ) );
 		var mismatchCount = _syncLog.Count( e => IsResourceSyncLog( e ) && e.Detail != null && e.Detail.Contains( "Mismatch" ) );
 		var verifiedCount = _syncLog.Count( e => IsResourceSyncLog( e ) && e.Detail != null && e.Detail.Contains( "Verified" ) );
 		var mergeCount = _syncLog.Count( e => e.Detail != null && e.Detail.Contains( "Remote semantics available" ) );
@@ -2565,12 +2617,12 @@ public partial class SyncToolWindow : PaintedWindow
 		if ( mismatchCount > 0 )
 			ShowVerificationMismatchWindow( mismatchCount );
 
-		if ( mergeCount > 0 && mismatchCount == 0 && failCount == 0 )
+		if ( mergeCount > 0 && mismatchCount == 0 && failCount == 0 && blockedCount == 0 )
 			_status = $"Pushed OK - {mergeCount} item(s) can pull remote semantics";
 		else if ( mismatchCount > 0 )
 			_status = $"Done: {okCount} pushed, {mismatchCount} mismatch(es) — check diffs";
-		else if ( failCount > 0 )
-			_status = $"Done: {okCount - failCount} OK, {failCount} failed";
+		else if ( failCount > 0 || blockedCount > 0 )
+			_status = $"Done: {okCount} pushed, {failCount} failed" + ( blockedCount > 0 ? $", {blockedCount} not pushed" : "" );
 		else
 			_status = $"All synced and verified ({verifiedCount} resources)";
 
@@ -3017,6 +3069,8 @@ public partial class SyncToolWindow : PaintedWindow
 			{
 				var slug = id[3..];
 				ok = await DoPushSingleEndpointMerged( slug );
+				if ( ok )
+					await SyncToolConfig.SyncEndpointTypingsAsync();
 				itemName = $"{slug}.endpoint.yml";
 				itemType = "Endpoint";
 			}
@@ -3131,6 +3185,8 @@ public partial class SyncToolWindow : PaintedWindow
 				{
 					var slug = id[3..];
 					ok = await DoPullSingleEndpoint( slug );
+					if ( ok )
+						await SyncToolConfig.SyncEndpointTypingsAsync();
 				}
 				else if ( id.StartsWith( "col_" ) )
 				{
@@ -3261,6 +3317,24 @@ public partial class SyncToolWindow : PaintedWindow
 	//  Push implementation
 	// ──────────────────────────────────────────────────────
 
+	/// <summary>
+	/// Refuses a push while an endpoint's script file is missing, ambiguous, or unreadable. The problem is
+	/// shown in the Sync window and nothing is sent.
+	/// </summary>
+	private bool EndpointScriptsReadyForPush()
+	{
+		var problems = SyncToolConfig.EndpointScriptProblems();
+		if ( problems.Count == 0 )
+			return true;
+
+		var message = "Endpoint script files need fixing before push:\n" + string.Join( "\n", problems.Values );
+		SyncToolApi.ReportLocalError( "endpoints", message );
+		ShowSyncBatchFailureWindow( message, "LOCAL_SCRIPT_FILE" );
+		ReportPushBlocked( problems );
+		SetStatus( "Push blocked: endpoint script file problem", true );
+		return false;
+	}
+
 	private async Task<bool> DoPushAllEndpoints()
 	{
 		try
@@ -3273,7 +3347,11 @@ public partial class SyncToolWindow : PaintedWindow
 			}
 			var serverFmt = JsonSerializer.Deserialize<JsonElement>( JsonSerializer.Serialize( localEps ) );
 			var resp = await SyncToolApi.PushEndpoints( serverFmt, _publishTarget );
-			return resp.HasValue;
+			if ( !resp.HasValue )
+				return false;
+
+			await SyncToolConfig.SyncEndpointTypingsAsync();
+			return true;
 		}
 		catch ( Exception ex )
 		{
@@ -3332,6 +3410,10 @@ public partial class SyncToolWindow : PaintedWindow
 					return await DoPushAllIndividual( hasEndpoints, hasCollections, hasWorkflows );
 				}
 
+				// A refused batch names the endpoints with broken scripts. Those rows fail; the rest read "not pushed (blocked)".
+				if ( SyncToolApi.LastErrorBody is JsonElement refusalBody && BlockPushForEndpointScripts( refusalBody, null ) )
+					return (false, false, false);
+
 				var finalErrMsg = string.IsNullOrEmpty( errMsg ) ? "Unknown error" : errMsg;
 				SyncToolApi.ReportLocalError( "sync", $"Batch sync failed: {finalErrMsg}" );
 				ShowSyncBatchFailureWindow( finalErrMsg, errCode );
@@ -3345,6 +3427,9 @@ public partial class SyncToolWindow : PaintedWindow
 				colResult.TryGetProperty( "ok", out var colOkProp ) && colOkProp.GetBoolean());
 			var wfOk = !hasWorkflows || (resp.Value.TryGetProperty( "workflows", out var wfResult ) &&
 				wfResult.TryGetProperty( "ok", out var wfOkProp ) && wfOkProp.GetBoolean());
+
+			if ( hasEndpoints && epOk )
+				await SyncToolConfig.SyncEndpointTypingsAsync();
 
 			return (hasEndpoints && epOk, hasCollections && colOk, hasWorkflows && wfOk);
 		}
@@ -3387,6 +3472,9 @@ public partial class SyncToolWindow : PaintedWindow
 			var errMsg = SyncToolApi.LastErrorMessage ?? "";
 			if ( !resp.HasValue )
 			{
+				if ( SyncToolApi.LastErrorBody is JsonElement refusalBody && BlockPushForEndpointScripts( refusalBody, null ) )
+					return (false, false);
+
 				var finalErrMsg = string.IsNullOrEmpty( errMsg ) ? "Unknown error" : errMsg;
 				SyncToolApi.ReportLocalError( "sync", $"Endpoint/workflow batch sync failed: {finalErrMsg}" );
 				ShowSyncBatchFailureWindow( finalErrMsg, errCode );
@@ -3439,6 +3527,13 @@ public partial class SyncToolWindow : PaintedWindow
 			if ( !SyncToolConfig.TryLoadSourcePayloadResource( "endpoint", localFile, out var localEp, includeDeprecated: true ) )
 			{
 				SyncToolApi.ReportLocalError( "endpoints", $"Local endpoint file for {slug} could not be read." );
+				return false;
+			}
+
+			var scriptError = SyncToolConfig.EndpointScriptError( localFile );
+			if ( scriptError != null )
+			{
+				SyncToolApi.ReportLocalError( "endpoints", $"Local endpoint file for {slug} has a script problem: {scriptError}" );
 				return false;
 			}
 
