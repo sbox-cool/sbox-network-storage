@@ -171,6 +171,8 @@ assigned package revision, server commit/version, engine build, database and evi
 `LibraryVersion` (SemVer) and the sbox.game package revision are separate.
 sbox.game assigns each publish a global revision; no committed file predicts it,
 and `.version` is only the Library Manager install marker.
+The editor's revision notice ignores `.version` when the library folder has a `.git` entry (a git clone or
+submodule), because a checkout's committed `.version` does not track published revisions.
 
 `.github/workflows/sbox-revisions.yml` maps every published revision to the
 commit whose shipped files match the revision's public manifest by size and CRC64
@@ -252,7 +254,7 @@ Then call endpoints from your game code:
 if ( !NetworkStorage.IsConfigured )
     MyNetStorageConfig.Initialize();
 
-// Call a server endpoint (GET)
+// Call a server endpoint without input (GET; POST when encrypted requests are required)
 var player = await NetworkStorage.CallEndpoint( "load-player" );
 
 // Call with input (POST)
@@ -283,6 +285,8 @@ if ( result.HasValue )
 ```
 
 See the [Examples/](Examples/) folder for complete working patterns.
+
+With encrypted requests required, a call without input is still sent as an encrypted POST. The host's `CallEndpointAs` path builds no envelope, so a no-input call on behalf of another player is refused locally with `ENCRYPTION_REQUIRES_POST`.
 
 ## Game values
 
