@@ -171,6 +171,8 @@ assigned package revision, server commit/version, engine build, database and evi
 `LibraryVersion` (SemVer) and the sbox.game package revision are separate.
 sbox.game assigns each publish a global revision; no committed file predicts it,
 and `.version` is only the Library Manager install marker.
+The editor's revision notice ignores `.version` when the library folder has a `.git` entry (a git clone or
+submodule), because a checkout's committed `.version` does not track published revisions.
 
 `.github/workflows/sbox-revisions.yml` maps every published revision to the
 commit whose shipped files match the revision's public manifest by size and CRC64

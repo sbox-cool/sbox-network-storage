@@ -150,7 +150,7 @@ public static class EditorCompatibility
 		if ( generation != _generation ) return;
 		Status = status ?? "unknown";
 		ServerVersion = version;
-		Current = Evaluate( Status, NetworkStorage.LibraryVersion, ReadLocalRevision(), latestRevision, sunset, version, capabilities, minimum );
+		Current = Evaluate( Status, NetworkStorage.LibraryVersion, ReadLocalRevision( SyncToolConfig.ProjectRoot ), latestRevision, sunset, version, capabilities, minimum );
 	}
 
 	/// <summary>Pure decision logic, kept free of editor and network calls so it can be unit tested.</summary>
@@ -210,12 +210,19 @@ public static class EditorCompatibility
 		return Version.TryParse( core, out version );
 	}
 
-	private static long? ReadLocalRevision()
+	/// <summary>
+	/// The installed package revision (<c>1.0.{n}</c> in the library's <c>.version</c>), or null when there is nothing to
+	/// compare. A git checkout (a <c>.git</c> entry in the library folder) has null: its committed <c>.version</c> is not
+	/// updated when packages are published, so comparing it would report an update that is not needed (#52).
+	/// </summary>
+	public static long? ReadLocalRevision( string projectRoot )
 	{
 		try
 		{
-			var path = Path.Combine( SyncToolConfig.ProjectRoot, "Libraries", "sboxcool.network-storage", ".version" );
-			var text = File.ReadAllText( path ).Trim();
+			var library = Path.Combine( projectRoot, "Libraries", "sboxcool.network-storage" );
+			var git = Path.Combine( library, ".git" );
+			if ( Directory.Exists( git ) || File.Exists( git ) ) return null;
+			var text = File.ReadAllText( Path.Combine( library, ".version" ) ).Trim();
 			const string prefix = "1.0.";
 			if ( text.StartsWith( prefix, StringComparison.Ordinal ) && long.TryParse( text[prefix.Length..], NumberStyles.None, CultureInfo.InvariantCulture, out var revision ) )
 				return revision;
