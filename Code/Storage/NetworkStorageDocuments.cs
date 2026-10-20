@@ -59,7 +59,8 @@ public static partial class NetworkStorage
 				Log.Warning( $"[NetworkStorage] GetDocument: {ex.Message}" );
 				NetLog.Error( "storage", ex.Message );
 			}
-			RecordEndpointError( "storage", "REQUEST_FAILED", ex.Message );
+			RecordEndpointError( "storage", ex is System.Net.Http.HttpRequestException { StatusCode: System.Net.HttpStatusCode.TooManyRequests }
+				? "RATE_LIMITED" : "REQUEST_FAILED", ex.Message );
 			return null;
 		}
 	}

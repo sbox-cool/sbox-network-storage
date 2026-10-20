@@ -14,6 +14,7 @@ public static partial class NetworkStorage
 	public static async Task<JsonElement?> GetGameValues()
 	{
 		EnsureConfigured();
+		ClearLastEndpointError( "game-values" );
 		if ( !await RequireCapabilityAsync( "game-values", "game-values" ) ) return null;
 		try
 		{
@@ -31,6 +32,8 @@ public static partial class NetworkStorage
 		}
 		catch ( Exception ex )
 		{
+			if ( ex is System.Net.Http.HttpRequestException { StatusCode: System.Net.HttpStatusCode.TooManyRequests } )
+				RecordEndpointError( "game-values", "RATE_LIMITED", ex.Message );
 			if ( NetworkStorageLogConfig.LogErrors )
 			{
 				Log.Warning( $"[NetworkStorage] GameValues: {ex.Message}" );
