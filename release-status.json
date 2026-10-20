@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "generatedAt": "2026-10-20T00:26:15.699Z",
+  "generatedAt": "2026-10-20T00:43:55.535Z",
   "library": {
     "published": {
       "revision": 423774,
@@ -11,15 +11,21 @@
     },
     "main": {
       "version": "1.2.0",
-      "commit": "997983cfffbd16ec0fadac1ed536013c08e95cda",
-      "committedAt": "2026-10-20T00:16:33Z",
+      "commit": "5b0ed8d6e9c4a4d500f794303ebe045009ee5907",
+      "committedAt": "2026-10-20T00:43:22Z",
       "ci": {
         "conclusion": "pending",
-        "runUrl": "https://github.com/sbox-cool/sbox-network-storage/actions/runs/39346671409",
+        "runUrl": "https://github.com/sbox-cool/sbox-network-storage/actions/runs/39349323077",
         "engine": null
       }
     },
     "pending": [
+      {
+        "number": 58,
+        "title": "Skip the revision notice for git checkouts",
+        "mergedAt": "2026-10-20T00:43:22Z",
+        "url": "https://github.com/sbox-cool/sbox-network-storage/pull/58"
+      },
       {
         "number": 57,
         "title": "Send no-input encrypted endpoint calls as POST",
@@ -151,10 +157,16 @@
       "url": "https://github.com/sbox-cool/sbox-network-storage-server/releases/tag/v0.5.4"
     },
     "main": {
-      "commit": "74d264bc899ef4f8ec1c75908b6bbe0a8bd8d85e",
-      "committedAt": "2026-10-20T00:16:54Z"
+      "commit": "3a70f02ed7f0211b18a8a2ad878e9ee24ab065f7",
+      "committedAt": "2026-10-20T00:41:53Z"
     },
     "pending": [
+      {
+        "number": 163,
+        "title": "Return endpoint-route errors in the library envelope (#152)",
+        "mergedAt": "2026-10-20T00:41:54Z",
+        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/163"
+      },
       {
         "number": 159,
         "title": "Serialize concurrent writes to one record with a keyed write queue (#157)",
