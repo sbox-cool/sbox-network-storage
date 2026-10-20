@@ -61,4 +61,8 @@
 		<ProjectReference Include="../../../../../../../../Program Files (x86)/Steam/steamapps/common/sbox/editor/ShaderGraph/Code/shadergraph.csproj" />
 	</ItemGroup>
 
+	<ItemGroup>
+		<EmbeddedResource Include="Fixtures/encrypted-request-v2-vectors.json" LogicalName="encrypted-request-v2-vectors.json" />
+	</ItemGroup>
+
 </Project>

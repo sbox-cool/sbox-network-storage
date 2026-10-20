@@ -14,6 +14,7 @@ public static partial class NetworkStorage
 		public Dictionary<string, string> Headers { get; init; }
 		public string Mode { get; init; }
 		public bool Encrypted { get; init; }
+		public EncryptedResponseContext ResponseContext { get; init; }
 		public string RoutePath { get; init; }
 		public string RouteLabel { get; init; }
 	}
@@ -30,6 +31,12 @@ public static partial class NetworkStorage
 	private static async Task<EndpointSecurityRequest> BuildEndpointSecurityRequest( string slug, object input, bool allowAuthSession = true, bool useDedicatedServerSecret = false )
 	{
 		await EnsureRuntimeSecurityConfigAsync( "endpoint" );
+		var refusal = EndpointSecurityRefusal();
+		if ( refusal is not null )
+		{
+			RecordEndpointError( slug, refusal.Code, refusal.Message );
+			return null;
+		}
 
 		var session = RuntimeEnableAuthSessions && allowAuthSession && !useDedicatedServerSecret
 			? await TryEnsureRuntimeAuthSessionAsync()
@@ -66,6 +73,27 @@ public static partial class NetworkStorage
 		payload["_endpointSlug"] = slug;
 		if ( NetworkStorageLogConfig.LogRequests )
 			Log.Info( $"[NetworkStorage] {slug} encrypted request id={encryptedRequestId} mode={mode}" );
+		if ( RuntimeEnableEncryptedRequests && _runtimeSecurityConfig?.EncryptionKey is { } encryptionKey )
+		{
+			payload.Remove( "security" );
+			var v2Envelope = SealEndpointRequestV2( encryptionKey, slug, payload, session, out var responseContext );
+			return new EndpointSecurityRequest
+			{
+				Body = new Dictionary<string, object>
+				{
+					["security"] = BuildClientSecurityContext( mode ),
+					["encrypted"] = true,
+					["envelope"] = v2Envelope
+				},
+				Headers = headers,
+				Mode = mode,
+				Encrypted = true,
+				ResponseContext = responseContext,
+				RoutePath = $"/endpoints/{ProjectId}/{EscapeRouteSegment( slug )}",
+				RouteLabel = $"/endpoints/{ProjectId}/{slug}"
+			};
+		}
+
 		var envelope = CreateEncryptedEndpointEnvelope( slug, payload, session );
 		return new EndpointSecurityRequest
 		{

@@ -10,6 +10,13 @@ public static partial class NetworkStorage
 	private static RuntimeSecurityConfigSnapshot _runtimeSecurityConfig;
 	private static Task<bool> _runtimeSecurityConfigLoadTask;
 	private static bool _securityConfigUnavailableLogged;
+	private static DateTimeOffset _securityConfigRetryAfter;
+	// Bumped when the pin, API root or project changes, so a fetch started before the change cannot commit its result.
+	private static int _securityConfigGeneration;
+
+	// Lowercase hex SHA-256 of the security-config signing key's SubjectPublicKeyInfo. Empty trusts the first key seen
+	// for each API root instead.
+	public static string SecuritySigningKeyPin { get; private set; } = "";
 
 	public static bool RuntimeSecurityConfigLoaded => _runtimeSecurityConfig?.Loaded == true;
 	public static bool RuntimeEnableAuthSessions => HasCapability( "auth-sessions" ) && (_runtimeSecurityConfig?.EnableAuthSessions ?? EnableAuthSessions);
@@ -32,11 +39,24 @@ public static partial class NetworkStorage
 		if ( !forceRefresh && _runtimeSecurityConfig?.IsFresh == true )
 			return true;
 
+		if ( !forceRefresh && _securityConfigRetryAfter > DateTimeOffset.UtcNow )
+			return false;
+
 		if ( !forceRefresh && _runtimeSecurityConfigLoadTask is not null && !_runtimeSecurityConfigLoadTask.IsCompleted )
 			return await _runtimeSecurityConfigLoadTask;
 
 		_runtimeSecurityConfigLoadTask = LoadRuntimeSecurityConfigAsync( reason, forceRefresh );
 		return await _runtimeSecurityConfigLoadTask;
+	}
+
+	// Drops the held snapshot when the pin, API root or project changes. The next call verifies against the new settings,
+	// and a pinned game refuses encrypted calls until a config signed by the pinned key loads.
+	private static void ResetRuntimeSecurityConfig()
+	{
+		_securityConfigGeneration++;
+		_runtimeSecurityConfig = null;
+		_runtimeSecurityConfigLoadTask = null;
+		_securityConfigRetryAfter = default;
 	}
 
 	public static void MarkRuntimeSecurityMismatch( string code, string requestMode = "" )
@@ -58,12 +78,21 @@ public static partial class NetworkStorage
 			return;
 		}
 
+		// A hint is not authority: once a signed config is trusted, pinned, or refused, only that config changes the mode.
+		if ( SecuritySigningKeyPin.Length > 0 || _runtimeSecurityConfig?.Trusted == true || !string.IsNullOrEmpty( _runtimeSecurityConfig?.RefusalCode ) )
+		{
+			Log.Warning( $"[NetworkStorage] ignoring expected config from {code}; signed config is authoritative" );
+			return;
+		}
+
 		var authSessions = expected.TryGetProperty( "authSessions", out var authProp )
 			? string.Equals( authProp.GetString(), "enabled", StringComparison.OrdinalIgnoreCase )
 			: RuntimeEnableAuthSessions;
 		var encryptedRequests = expected.TryGetProperty( "encryptedRequests", out var encProp )
 			? string.Equals( encProp.GetString(), "required", StringComparison.OrdinalIgnoreCase )
 			: RuntimeEnableEncryptedRequests;
+		// A hint may not switch encryption off; a MITM could otherwise strip it by forging an expected-config body.
+		encryptedRequests |= RuntimeEnableEncryptedRequests;
 
 		var previousMode = _runtimeSecurityConfig?.ModeText ?? "none";
 		var previousAuthSessions = RuntimeEnableAuthSessions;

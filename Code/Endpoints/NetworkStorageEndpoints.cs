@@ -43,6 +43,8 @@ public static partial class NetworkStorage
 				return null;
 
 			var securityRequest = await BuildEndpointSecurityRequest( slug, input ?? new { }, useDedicatedServerSecret: shouldUseDedicatedSecret );
+			if ( securityRequest is null )
+				return null;
 			var headers = securityRequest.Headers;
 			var hasDedicatedSecret = shouldUseDedicatedSecret && TryAddDedicatedServerSecretHeaders( headers, endpoint );
 			url = BuildUrl( securityRequest.RoutePath, hasDedicatedSecret );
@@ -71,6 +73,9 @@ public static partial class NetworkStorage
 				result = await RequestStringAsync(url, "GET", null, headers);
 			}
 
+			result = UnsealEndpointResponse( securityRequest.ResponseContext, slug, result );
+			if ( result is null )
+				return null;
 			if ( NetworkStorageLogConfig.LogResponses )
 				Log.Info( $"[NetworkStorage] {slug} → {result}" );
 			var parsed = ParseResponse( slug, result );
@@ -86,6 +91,7 @@ public static partial class NetworkStorage
 			if ( allowSecurityRetry && TryGetLastEndpointError( slug, out var code, out _ ) && IsSecurityConfigMismatchCode( code ) )
 			{
 				Log.Info( $"[NetworkStorage] {slug} security mismatch detected ({code}), retrying with updated config..." );
+				await EnsureRuntimeSecurityConfigAsync( "security-retry", forceRefresh: true );
 				return await CallEndpointInternal( slug, input, allowSecurityRetry: false );
 			}
 
