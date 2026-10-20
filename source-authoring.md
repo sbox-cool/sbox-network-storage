@@ -84,6 +84,29 @@ steps:
         value: "{{-params.amount}}"
 ```
 
+## Endpoint Script Files
+
+A JavaScript or TypeScript endpoint can keep its code in a sibling file, so the editor gets highlighting and the `ns` typings:
+
+```
+endpoints/hello.endpoint.yml
+endpoints/hello.endpoint.js   (runtime: typescript uses hello.endpoint.ts)
+```
+
+```yaml
+sourceVersion: 1
+kind: endpoint
+id: hello
+runtime: javascript
+```
+
+- The file is found by name: `<id>.endpoint.js` or `<id>.endpoint.ts`. To use another name, set `scriptFile: other.endpoint.js`. It must be a file name next to the envelope, with no folders, and its extension must match the runtime.
+- Push inlines the file as `script` in the text sent to the server. The server stores `script`, which stays the canonical copy.
+- Pull writes the server's `script` to the sibling file and keeps `scriptFile` in the envelope. An endpoint pulled to a `.json` file keeps `script` inline, because a JSON envelope cannot reference a file.
+- These stop the endpoint push before it is sent: `scriptFile` without `runtime`; both `.js` and `.ts` present for one runtime; `script` set inline together with a file; a JSON envelope that references a file. A runtime with no file is sent as is, and the server reports `MISSING_SCRIPT`.
+- After an endpoint push or pull, the sync tool downloads the typings to `Editor/<DataFolder>/types/ns.d.ts`.
+- Preflight findings `SCRIPT_SYNTAX`, `SCRIPT_TOO_LARGE`, `SCRIPT_MODULE_UNSUPPORTED`, `GLOBAL_CYCLE`, `GLOBAL_NOT_FOUND`, and `GLOBAL_EXPORT_NOT_FOUND` block the push of the endpoint they name, whatever their severity. The row names the script file and the line and column the server reports. A refused push (HTTP 400) with the same findings blocks the same way.
+
 ## Flat And Wrapper Layouts
 
 New source should be flat: resource fields live at the top level next to `sourceVersion`, `kind`, and `id`.

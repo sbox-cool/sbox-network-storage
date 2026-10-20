@@ -33,6 +33,7 @@ from urllib.error import HTTPError
 
 from sync_api_errors import SyncApiError, print_api_error
 from sync_sources import load_source_definitions, source_id_from_filename
+from endpoint_scripts import ScriptFileError, inline_script_sources
 
 # Read the runtime constant rather than maintaining a second release version.
 _library_root = Path(__file__).resolve().parent.parent
@@ -397,7 +398,7 @@ def push_collections(config, dry_run=False):
 
 
 def push_endpoints(config, dry_run=False, replace_all=False):
-    endpoints = load_endpoints()
+    endpoints = inline_script_sources(load_endpoints(), NS_DIR)
     all_endpoints = load_endpoints(include_deprecated=True)
     skipped_deprecated = len(all_endpoints) - len(endpoints)
     if not endpoints:
@@ -475,7 +476,7 @@ def upgrade_source_with_backend(config, source):
 
 
 def push_sources(config, dry_run=False):
-    sources = load_source_definitions(NS_DIR)
+    sources = inline_script_sources(load_source_definitions(NS_DIR), NS_DIR)
     if not sources:
         print("  No YAML source definitions found, skipping")
         return
@@ -963,6 +964,9 @@ def main():
 if __name__ == "__main__":
     try:
         main()
+    except ScriptFileError as exc:
+        print_error(str(exc))
+        sys.exit(1)
     except SyncApiError as exc:
         print_error(str(exc))
         sys.exit(1)
