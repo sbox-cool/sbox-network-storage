@@ -53,6 +53,14 @@ public class NetworkStorageCompatibilityTests
 	}
 
 	[TestMethod]
+	public void DefaultApiRoot_IsV3()
+	{
+		// The hosted backend serves /v3 but not /api/{family}, so v3 must stay the default.
+		Assert.AreEqual( "v3", NetworkStorage.ApiVersion );
+		Assert.IsTrue( NetworkStorage.ApiRoot.EndsWith( "/v3" ) );
+	}
+
+	[TestMethod]
 	public void EditorEvaluate_MapsEveryStatusToItsPrompt()
 	{
 		var all = new[] { "records", "endpoints", "queries", "game-values", "auth-sessions", "package-sync" };
