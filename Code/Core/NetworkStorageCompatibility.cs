@@ -127,20 +127,38 @@ public static partial class NetworkStorage
 	internal static async Task<string> RequestStringAsync( string url, string method = "GET", HttpContent content = null,
 		Dictionary<string, string> headers = null )
 	{
-		var generation = _compatibilityGeneration;
-		using var response = await Http.RequestAsync( url, method, content, headers );
-		if ( generation == _compatibilityGeneration ) ObserveCompatibilityHeaders( response );
-		// A 426 carries the server's remediation message in a structured body, which ParseResponse turns
-		// into the endpoint error. Every other HTTP failure keeps the historical exception.
-		var body = await response.Content.ReadAsStringAsync();
-		if ( response.StatusCode == HttpStatusCode.UpgradeRequired && TryReadCompatibilityError( body, out var code, out var message ) )
+		var waited = 0.0;
+		for ( var retries = 0; ; retries++ )
 		{
-			ObserveLibraryStatus( code == "LIBRARY_BLOCKED" ? "blocked" : "unsupported" );
-			Log.Warning( $"[NetworkStorage] {code}: {message}" );
+			var generation = _compatibilityGeneration;
+			using var response = await Http.RequestAsync( url, method, content, headers );
+			if ( generation == _compatibilityGeneration ) ObserveCompatibilityHeaders( response );
+			// A 426 carries the server's remediation message in a structured body, which ParseResponse turns
+			// into the endpoint error. Every other HTTP failure keeps the historical exception.
+			var body = await response.Content.ReadAsStringAsync();
+			if ( response.StatusCode == HttpStatusCode.UpgradeRequired && TryReadCompatibilityError( body, out var code, out var message ) )
+			{
+				ObserveLibraryStatus( code == "LIBRARY_BLOCKED" ? "blocked" : "unsupported" );
+				Log.Warning( $"[NetworkStorage] {code}: {message}" );
+				return body;
+			}
+
+			// Rate limits retry a bounded number of times; the total wait never exceeds MaxRateLimitWaitSeconds.
+			if ( retries < MaxRateLimitRetries && IsRetryableRateLimit( method, (int)response.StatusCode, body ) )
+			{
+				var delay = RateLimitDelaySeconds( RetryAfterHeader( response ), body );
+				if ( waited + delay <= MaxRateLimitWaitSeconds )
+				{
+					waited += delay;
+					Log.Info( $"[NetworkStorage] {method} rate limited; retry {retries + 1}/{MaxRateLimitRetries} in {delay:0.##}s." );
+					await Task.Delay( (int)Math.Ceiling( delay * 1000 ) );
+					continue;
+				}
+			}
+
+			response.EnsureSuccessStatusCode();
 			return body;
 		}
-		response.EnsureSuccessStatusCode();
-		return body;
 	}
 
 	private static async Task<bool> RequireCapabilityAsync( string capability, string operation )

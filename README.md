@@ -361,6 +361,8 @@ See [analytics.md](analytics.md) for Player Analytics setup, custom events, warn
 
 Analytics batching: when the server advertises the `analytics-batch` capability, analytics events are queued and sent together (up to 50 events or 256 KiB per request, after a window of up to 2 seconds). Servers without the capability receive one request per event, as before. Events the server rejects, events over 32 KiB, and events beyond the 500-event pending queue are counted and reported in a `[NetworkStorage] Dropped N analytics event(s)` warning, at most once every 30 seconds. Events still queued when the analytics runtime is destroyed are sent immediately; events queued when the process exits may be lost.
 
+Rate-limited calls (HTTP 429) are retried at most twice, with the total wait capped at 5 seconds, using the server's `Retry-After`. GET requests always retry; other methods retry only when the server marks the response `retrySafe`. A call that still fails with 429 is reported as `RATE_LIMITED` through `TryGetLastEndpointError`.
+
 ### JsonHelpers (static)
 
 Safe extraction from API `JsonElement` payloads with caller-provided defaults. Handles missing keys and string-to-number coercion.
