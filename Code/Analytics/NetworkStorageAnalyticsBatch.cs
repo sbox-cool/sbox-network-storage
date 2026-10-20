@@ -24,7 +24,9 @@ public static partial class NetworkStorage
 	private const double AnalyticsDropReportIntervalSeconds = 30;
 
 	private static readonly object AnalyticsBatchLock = new();
-	private static readonly List<(string Json, int Bytes)> _analyticsBatchQueue = new();
+	private static readonly Queue<(string Json, int Bytes)> _analyticsBatchQueue = new();
+	private static int _analyticsPendingBytes;
+	private static TaskCompletionSource<bool> _analyticsBatchWakeup;
 	private static bool _analyticsDrainScheduled;
 	private static long _analyticsDroppedTotal;
 	private static long _analyticsDroppedUnreported;
@@ -46,6 +48,7 @@ public static partial class NetworkStorage
 
 		var overflow = false;
 		var schedule = false;
+		TaskCompletionSource<bool> wakeup = null;
 		lock ( AnalyticsBatchLock )
 		{
 			if ( _analyticsBatchQueue.Count >= AnalyticsBatchMaxPending )
@@ -54,23 +57,29 @@ public static partial class NetworkStorage
 			}
 			else
 			{
-				_analyticsBatchQueue.Add( (json, bytes) );
+				_analyticsBatchQueue.Enqueue( (json, bytes) );
+				_analyticsPendingBytes += bytes;
 				schedule = !_analyticsDrainScheduled;
+				if ( schedule ) _analyticsBatchWakeup = new TaskCompletionSource<bool>();
 				_analyticsDrainScheduled = true;
+				if ( _analyticsBatchQueue.Count >= AnalyticsBatchMaxEvents
+					|| _analyticsPendingBytes + _analyticsBatchQueue.Count + AnalyticsBatchEnvelopeBytes >= AnalyticsBatchMaxBytes )
+					wakeup = _analyticsBatchWakeup;
 			}
 		}
 
 		if ( overflow ) RecordAnalyticsDrop( 1, "pending analytics queue is full" );
-		if ( schedule ) _ = DrainAnalyticsBatchAsync( AnalyticsBatchWindowSeconds );
+		wakeup?.TrySetResult( true );
+		if ( schedule ) _ = DrainAnalyticsBatchAsync( _analyticsBatchWakeup.Task );
 	}
 
 	/// <summary>
 	/// Sends queued events as batches until the queue is empty. Each request holds at most
 	/// <see cref="AnalyticsBatchMaxEvents"/> items and <see cref="AnalyticsBatchMaxBytes"/> bytes.
 	/// </summary>
-	private static async Task DrainAnalyticsBatchAsync( float delaySeconds )
+	private static async Task DrainAnalyticsBatchAsync( Task wakeup )
 	{
-		if ( delaySeconds > 0f ) await Task.Delay( TimeSpan.FromSeconds( delaySeconds ) );
+		await Task.WhenAny( Task.Delay( TimeSpan.FromSeconds( AnalyticsBatchWindowSeconds ) ), wakeup );
 
 		while ( true )
 		{
@@ -80,6 +89,7 @@ public static partial class NetworkStorage
 				if ( _analyticsBatchQueue.Count == 0 )
 				{
 					_analyticsDrainScheduled = false;
+					_analyticsBatchWakeup = null;
 					return;
 				}
 
@@ -97,12 +107,13 @@ public static partial class NetworkStorage
 		var bytes = 0;
 		while ( items.Count < AnalyticsBatchMaxEvents && _analyticsBatchQueue.Count > 0 )
 		{
-			var next = _analyticsBatchQueue[0];
+			var next = _analyticsBatchQueue.Peek();
 			if ( items.Count > 0 && bytes + next.Bytes + items.Count + AnalyticsBatchEnvelopeBytes > AnalyticsBatchMaxBytes ) break;
 
 			items.Add( next.Json );
 			bytes += next.Bytes;
-			_analyticsBatchQueue.RemoveAt( 0 );
+			_analyticsBatchQueue.Dequeue();
+			_analyticsPendingBytes -= next.Bytes;
 		}
 
 		return items;
@@ -203,6 +214,12 @@ public static partial class NetworkStorage
 		Log.Warning( $"[NetworkStorage] {message}" );
 	}
 
-	/// <summary>Starts sending queued analytics events now. Called when the analytics runtime is destroyed.</summary>
-	internal static void FlushAnalyticsBatch() => _ = DrainAnalyticsBatchAsync( 0f );
+	/// <summary>Wakes the single drain immediately when the analytics runtime is destroyed.</summary>
+	internal static void FlushAnalyticsBatch()
+	{
+		TaskCompletionSource<bool> wakeup;
+		lock ( AnalyticsBatchLock )
+			wakeup = _analyticsBatchWakeup;
+		wakeup?.TrySetResult( true );
+	}
 }
