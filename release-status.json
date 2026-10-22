@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "generatedAt": "2026-10-22T04:42:50.268Z",
+  "generatedAt": "2026-10-22T10:10:14.696Z",
   "library": {
     "published": {
       "revision": 427072,
@@ -15,8 +15,8 @@
       "committedAt": "2026-10-20T02:07:28Z",
       "ci": {
         "conclusion": "success",
-        "runUrl": "https://github.com/sbox-cool/sbox-network-storage/actions/runs/39577663891",
-        "engine": "sbox-public@2b655fa854ef2ced7e7b1f4010bb77d8b36cee44"
+        "runUrl": "https://github.com/sbox-cool/sbox-network-storage/actions/runs/39756441932",
+        "engine": "sbox-public@10af13f2e7fa4a134b4512ae0fee1116de36e54d"
       }
     },
     "pending": [],
@@ -42,10 +42,41 @@
       "url": "https://github.com/sbox-cool/sbox-network-storage-server/releases/tag/v0.5.5"
     },
     "main": {
-      "commit": "f87fc089fde2076f824cce79e4709f1a80dec0ec",
-      "committedAt": "2026-10-20T23:11:46Z"
+      "commit": "8893c363ff8ed302d532786ebafa7254943446e9",
+      "committedAt": "2026-10-22T09:28:12Z"
     },
-    "pending": [],
-    "pendingSince": null
+    "pending": [
+      {
+        "number": 186,
+        "title": "Make auth-session revocation immediate and durable",
+        "mergedAt": "2026-10-22T09:28:12Z",
+        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/186"
+      },
+      {
+        "number": 185,
+        "title": "Export and import media objects and their bytes",
+        "mergedAt": "2026-10-22T09:11:31Z",
+        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/185"
+      },
+      {
+        "number": 184,
+        "title": "Verify delegated client token before issuing or re-authenticating auth sessions",
+        "mergedAt": "2026-10-22T08:45:41Z",
+        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/184"
+      },
+      {
+        "number": 183,
+        "title": "Prevent duplicate external mutations on script reruns (#179)",
+        "mergedAt": "2026-10-22T08:21:03Z",
+        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/183"
+      },
+      {
+        "number": 182,
+        "title": "Accept chunked management mutation bodies (#181)",
+        "mergedAt": "2026-10-22T08:20:58Z",
+        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/182"
+      }
+    ],
+    "pendingSince": "2026-10-22T08:20:58Z"
   }
 }
