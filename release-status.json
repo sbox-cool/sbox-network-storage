@@ -1,12 +1,12 @@
 {
   "schema": 1,
-  "generatedAt": "2026-10-22T10:10:14.696Z",
+  "generatedAt": "2026-10-22T15:16:12.442Z",
   "library": {
     "published": {
-      "revision": 427072,
-      "version": "1.2.0",
-      "commit": "ddf9b617c0c4fdf26c9c0e91c5cd34fa915b1750",
-      "publishedAt": "2026-10-20T02:16:12.100Z",
+      "revision": null,
+      "version": null,
+      "commit": null,
+      "publishedAt": null,
       "url": "https://sbox.game/sboxcool/network-storage"
     },
     "main": {
@@ -19,7 +19,7 @@
         "engine": "sbox-public@10af13f2e7fa4a134b4512ae0fee1116de36e54d"
       }
     },
-    "pending": [],
+    "pending": null,
     "pendingSince": null,
     "installMain": {
       "zipUrl": "https://github.com/sbox-cool/sbox-network-storage/archive/refs/heads/main.zip",
@@ -32,8 +32,8 @@
       "date": "2026-10-13T15:41:13Z",
       "url": "https://github.com/Facepunch/sbox-public/tree/26.10.13"
     },
-    "libraryBehind": false,
-    "daysBehind": 0
+    "libraryBehind": null,
+    "daysBehind": null
   },
   "server": {
     "latestRelease": {
@@ -42,10 +42,22 @@
       "url": "https://github.com/sbox-cool/sbox-network-storage-server/releases/tag/v0.5.5"
     },
     "main": {
-      "commit": "8893c363ff8ed302d532786ebafa7254943446e9",
-      "committedAt": "2026-10-22T09:28:12Z"
+      "commit": "d2c321caa2a55b0bd1375b87aab7c51de38dab54",
+      "committedAt": "2026-10-22T10:58:20Z"
     },
     "pending": [
+      {
+        "number": 188,
+        "title": "sbox-cli-e2e: drive encryption switch through the management API for attached servers",
+        "mergedAt": "2026-10-22T10:58:21Z",
+        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/188"
+      },
+      {
+        "number": 187,
+        "title": "docs: record compat engine evidence for the review remediation (#182-#186)",
+        "mergedAt": "2026-10-22T10:21:45Z",
+        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/187"
+      },
       {
         "number": 186,
         "title": "Make auth-session revocation immediate and durable",
