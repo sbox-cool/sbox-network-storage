@@ -9,7 +9,7 @@ dedicated server started with `-mcp`, is running. Start with `ns_status` (game c
 | `ns_status` | Game and editor | Library version, configuration state (no keys), whether game code may reach the API. |
 | `ns_configure` | Game and editor | Configure project ID, API key and base URL, or auto-configure when all are empty. |
 | `ns_call_endpoint` | Game and editor | Call an endpoint; returns `ok`, `body`, `errorCode`, `errorMessage`. |
-| `ns_get_document` | Game and editor | Read a document from a collection. |
+| `ns_get_document` | Game and editor | Read a document from a collection; empty `documentId` reads the current player's document. |
 | `ns_game_values` | Game and editor | Read game values. |
 | `ns_editor_status` | Editor | Sync Tool config (no keys), local source counts, optional server check. |
 | `ns_sync_preflight` | Editor | Dry-run the batch push; writes nothing. |

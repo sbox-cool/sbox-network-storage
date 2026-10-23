@@ -73,8 +73,7 @@ public static partial class NetworkStorage
 					NetLog.Request( slug, $"POST (as {targetSteamId}) {bodyJson}" );
 					Log.Info( $"[NetworkStorage] {slug} request: POST (as {targetSteamId}) {ApiRoot}{routePath} body={bodyJson}" );
 				}
-				var content = Http.CreateJsonContent( input );
-				result = await RequestStringAsync(url, "POST", content, headers);
+				result = await RequestStringAsync(url, "POST", () => Http.CreateJsonContent( input ), headers);
 			}
 			else
 			{

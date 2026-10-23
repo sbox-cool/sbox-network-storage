@@ -64,8 +64,7 @@ public static partial class NetworkStorage
 
 			var headers = await BuildAuthHeaders();
 			var url = BuildUrl( $"/storage/{Uri.EscapeDataString( ProjectId )}/stats/heartbeat" );
-			var content = Http.CreateJsonContent( body );
-			await RequestStringAsync(url, "POST", content, headers);
+			await RequestStringAsync(url, "POST", () => Http.CreateJsonContent( body ), headers);
 			if ( NetworkStorageLogConfig.LogRequests )
 			{
 				var logLine = $"Reported session:{eventType} session={sessionId ?? "manual"} seconds={sessionSeconds:0}s";
@@ -127,8 +126,7 @@ public static partial class NetworkStorage
 
 			var headers = await BuildAuthHeaders();
 			var url = BuildUrl( $"/storage/{Uri.EscapeDataString( ProjectId )}/analytics/events" );
-			var content = Http.CreateJsonContent( body );
-			var raw = await RequestStringAsync(url, "POST", content, headers);
+			var raw = await RequestStringAsync(url, "POST", () => Http.CreateJsonContent( body ), headers);
 			RecordAnalyticsResponse( raw, 1 );
 			if ( NetworkStorageLogConfig.LogRequests )
 				NetLog.Info( "analytics", $"Reported {severity}:{normalized}" );

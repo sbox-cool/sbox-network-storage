@@ -1,3 +1,7 @@
+using System.Collections.Generic;
+using System.Net;
+using System.Net.Http;
+using System.Threading.Tasks;
 using Sandbox;
 
 [TestClass]
@@ -48,5 +52,33 @@ public class NetworkStorageRateLimitTests
 		Assert.AreEqual( 1.0, NetworkStorage.RateLimitDelaySeconds( "-1", "" ), 0.0 );
 		Assert.AreEqual( 1.0, NetworkStorage.RateLimitDelaySeconds( null, "not json" ), 0.0 );
 		Assert.AreEqual( 1.0, NetworkStorage.RateLimitDelaySeconds( null, "" ), 0.0 );
+	}
+
+	[TestMethod]
+	public async Task SendWithRetries_RetriedPostStillSendsOriginalBytes()
+	{
+		const string payload = "{\"ore\":\"moon_ore\",\"kg\":5}";
+		const string limited = "{\"ok\":false,\"status\":429,\"error\":{\"code\":\"RATE_LIMITED\"},\"retrySafe\":true,\"retryAfterSec\":0}";
+		const string accepted = "{\"ok\":true,\"data\":{\"minedKg\":5}}";
+		var received = new List<string>();
+		var sent = new List<HttpContent>();
+
+		var body = await NetworkStorage.SendWithRetriesAsync( "POST", () => new StringContent( payload ),
+			async content =>
+			{
+				// Like the engine, each send consumes and disposes the request body it was given.
+				Assert.IsFalse( sent.Exists( c => ReferenceEquals( c, content ) ) );
+				sent.Add( content );
+				received.Add( await content.ReadAsStringAsync() );
+				content.Dispose();
+				return received.Count == 1
+					? new HttpResponseMessage( HttpStatusCode.TooManyRequests ) { Content = new StringContent( limited ) }
+					: new HttpResponseMessage( HttpStatusCode.OK ) { Content = new StringContent( accepted ) };
+			} );
+
+		Assert.AreEqual( accepted, body );
+		Assert.AreEqual( 2, received.Count );
+		Assert.AreEqual( payload, received[0] );
+		Assert.AreEqual( payload, received[1] );
 	}
 }
