@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "generatedAt": "2026-10-23T22:09:54.038Z",
+  "generatedAt": "2026-10-23T23:26:57.840Z",
   "library": {
     "published": {
       "revision": 427072,
@@ -11,15 +11,21 @@
     },
     "main": {
       "version": "1.2.0",
-      "commit": "7f77770c81dd6ab84facfa05e9a87010b6f27983",
-      "committedAt": "2026-10-23T06:15:28Z",
+      "commit": "470a69426ebe9af83a2f6ae8e77047faa80c1430",
+      "committedAt": "2026-10-23T23:26:45Z",
       "ci": {
-        "conclusion": "success",
-        "runUrl": "https://github.com/sbox-cool/sbox-network-storage/actions/runs/39932363870",
-        "engine": "sbox-public@c538a1df038c1565f64e8227ad2caf7407e2f515"
+        "conclusion": "pending",
+        "runUrl": "https://github.com/sbox-cool/sbox-network-storage/actions/runs/40039719766",
+        "engine": null
       }
     },
     "pending": [
+      {
+        "number": 76,
+        "title": "fix(runtime): library runtime review backlog (#70-#74)",
+        "mergedAt": "2026-10-23T23:26:46Z",
+        "url": "https://github.com/sbox-cool/sbox-network-storage/pull/76"
+      },
       {
         "number": 64,
         "title": "docs: compact README; move guides into docs/",
@@ -49,10 +55,28 @@
       "url": "https://github.com/sbox-cool/sbox-network-storage-server/releases/tag/v0.5.5"
     },
     "main": {
-      "commit": "a5d246cff2490ffeef8d71fcc1a2cca1188f6a64",
-      "committedAt": "2026-10-23T11:07:10Z"
+      "commit": "1431c88b653a62ec411e622947aa4cb9316cbc74",
+      "committedAt": "2026-10-23T23:03:13Z"
     },
     "pending": [
+      {
+        "number": 222,
+        "title": "Protect owner definitions and roll back failed module upgrades",
+        "mergedAt": "2026-10-23T23:03:14Z",
+        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/222"
+      },
+      {
+        "number": 220,
+        "title": "Fix local NAT64 fetch and mapped webhook destination checks",
+        "mergedAt": "2026-10-23T23:03:10Z",
+        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/220"
+      },
+      {
+        "number": 219,
+        "title": "Preserve literal record keys in script get/put/delete",
+        "mergedAt": "2026-10-23T23:03:05Z",
+        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/219"
+      },
       {
         "number": 218,
         "title": "Restore legacy random-step weight and boundary rules",
