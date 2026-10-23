@@ -83,8 +83,13 @@ public partial class SyncToolWindow
 	{
 		var file = GetLocalFileForItem( id );
 		if ( string.IsNullOrWhiteSpace( file ) || !File.Exists( file ) ) return;
-		var backup = $"{file}.bak.{DateTime.Now:yyyyMMddHHmmss}";
-		File.Copy( file, backup, overwrite: false );
+		var stamp = DateTime.Now.ToString( "yyyyMMddHHmmss" );
+		File.Copy( file, $"{file}.bak.{stamp}", overwrite: false );
+
+		// A pull rewrites the endpoint's script file too, so its local copy gets the same backup.
+		var scriptFile = id.StartsWith( "ep_" ) ? SyncToolConfig.EndpointScriptFileFor( file ) : null;
+		if ( !string.IsNullOrWhiteSpace( scriptFile ) && File.Exists( scriptFile ) )
+			File.Copy( scriptFile, $"{scriptFile}.bak.{stamp}", overwrite: false );
 	}
 
 	private string GetLocalFileForItem( string id )

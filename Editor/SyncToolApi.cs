@@ -16,7 +16,8 @@ using Sandbox;
 /// </summary>
 public static class SyncToolApi
 {
-	private static readonly HttpClient _http = new() { Timeout = TimeSpan.FromSeconds( 30 ) };
+	// Redirects are not followed: requests carry x-api-key, and a followed redirect could replay it to another host or to plain HTTP.
+	private static readonly HttpClient _http = new( new HttpClientHandler { AllowAutoRedirect = false } ) { Timeout = TimeSpan.FromSeconds( 30 ) };
 	private static readonly ConcurrentDictionary<string, string> _lastErrorMessagesByPath = new( StringComparer.OrdinalIgnoreCase );
 	private static readonly ConcurrentDictionary<string, ConcurrentDictionary<string, string>> _lastResourceErrorMessagesByPath = new( StringComparer.OrdinalIgnoreCase );
 	private static readonly Lazy<string> _libraryRevision = new( ReadLibraryRevision );
@@ -129,6 +130,12 @@ public static class SyncToolApi
 		if ( !SyncToolConfig.IsValid )
 		{
 			Log.Warning( "[SyncTool] Config not valid - load .env first" );
+			return null;
+		}
+
+		if ( !SyncToolConfig.IsSecretSafeBaseUrl( SyncToolConfig.BaseUrl ) )
+		{
+			ReportLocalError( path, SyncToolConfig.InsecureBaseUrlMessage );
 			return null;
 		}
 
@@ -429,6 +436,12 @@ public static class SyncToolApi
 		if ( !SyncToolConfig.IsValid )
 		{
 			Log.Warning( "[SyncTool] Validate: config not valid" );
+			return null;
+		}
+
+		if ( !SyncToolConfig.IsSecretSafeBaseUrl( SyncToolConfig.BaseUrl ) )
+		{
+			ReportLocalError( "validate", SyncToolConfig.InsecureBaseUrlMessage );
 			return null;
 		}
 

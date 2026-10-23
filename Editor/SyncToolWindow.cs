@@ -74,6 +74,8 @@ public partial class SyncToolWindow : PaintedWindow
 
 		_publishTarget = normalized;
 		SyncToolConfig.SetPublishTarget( normalized );
+		// The game reads the target from the credentials file and NSConfig; regenerate so both match the selection.
+		TryRunCodeGeneration( "publish target change" );
 		_remoteEndpoints = null;
 		_remoteCollections = null;
 		_hasCheckedRemote = false;

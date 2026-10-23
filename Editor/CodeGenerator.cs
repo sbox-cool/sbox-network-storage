@@ -283,7 +283,7 @@ public static class CodeGenerator
 			var className = ToPascalCase( name ) + "Schema";
 
 			sb.AppendLine( $"/// <summary>{XmlEscape( description )}</summary>" );
-			sb.AppendLine( $"/// <remarks>Collection: {name} | Scope: {scope} | Access: {access}</remarks>" );
+			sb.AppendLine( $"/// <remarks>Collection: {XmlEscape( name )} | Scope: {XmlEscape( scope )} | Access: {XmlEscape( access )}</remarks>" );
 			sb.AppendLine( $"public static class {className}" );
 			sb.AppendLine( "{" );
 			sb.AppendLine( $"\tpublic const string CollectionName = \"{Escape( name )}\";" );
@@ -406,7 +406,7 @@ public static class CodeGenerator
 							var typeName = isInt ? "int" : "double";
 							var suffix = isInt ? "" : "";
 
-							sb.AppendLine( $"{indent}\t/// <summary>Key: {entry.Name} | Default: {valueStr}</summary>" );
+							sb.AppendLine( $"{indent}\t/// <summary>Key: {XmlEscape( entry.Name )} | Default: {valueStr}</summary>" );
 							sb.AppendLine( $"{indent}\tpublic const string {constName} = \"{Escape( entry.Name )}\";" );
 
 							if ( isInt )
@@ -418,7 +418,7 @@ public static class CodeGenerator
 					else if ( val.ValueKind == JsonValueKind.String )
 					{
 						var strVal = val.GetString() ?? "";
-						sb.AppendLine( $"{indent}\t/// <summary>Key: {entry.Name} | Default: \"{XmlEscape( strVal )}\"</summary>" );
+						sb.AppendLine( $"{indent}\t/// <summary>Key: {XmlEscape( entry.Name )} | Default: \"{XmlEscape( strVal )}\"</summary>" );
 						sb.AppendLine( $"{indent}\tpublic const string {constName} = \"{Escape( entry.Name )}\";" );
 						sb.AppendLine( $"{indent}\tpublic const string {constName}_Value = \"{Escape( strVal )}\";" );
 					}
@@ -465,7 +465,7 @@ public static class CodeGenerator
 				{
 					var colKey = GetString( col, "key" ) ?? "unknown";
 					var colType = GetString( col, "type" ) ?? "unknown";
-					sb.AppendLine( $"{indent}\t/// <summary>Column type: {colType}</summary>" );
+					sb.AppendLine( $"{indent}\t/// <summary>Column type: {XmlEscape( colType )}</summary>" );
 					sb.AppendLine( $"{indent}\tpublic const string Col_{ToPascalCase( colKey )} = \"{Escape( colKey )}\";" );
 				}
 			}
@@ -500,7 +500,7 @@ public static class CodeGenerator
 			var docParts = new List<string>();
 			if ( !string.IsNullOrWhiteSpace( endpoint.Description ) )
 				docParts.Add( XmlEscape( endpoint.Description ) );
-			docParts.Add( $"Method: {endpoint.Method}" );
+			docParts.Add( $"Method: {XmlEscape( endpoint.Method )}" );
 			if ( !endpoint.Enabled ) docParts.Add( "DISABLED" );
 
 			sb.AppendLine( $"\t/// <summary>{string.Join( " | ", docParts )}</summary>" );
@@ -751,20 +751,54 @@ public static class CodeGenerator
 		return null;
 	}
 
-	private static string Escape( string s ) => s?.Replace( "\\", "\\\\" ).Replace( "\"", "\\\"" ) ?? "";
+	// Escapes a value for a C# string literal. Line breaks and control characters cannot sit inside a regular
+	// literal, so they are written as escapes; U+2028 and U+2029 are escaped too, since C# treats them as line breaks.
+	private static string Escape( string s )
+	{
+		if ( string.IsNullOrEmpty( s ) ) return "";
+
+		var sb = new StringBuilder( s.Length );
+		foreach ( var c in s )
+		{
+			switch ( c )
+			{
+				case '\\': sb.Append( "\\\\" ); break;
+				case '"': sb.Append( "\\\"" ); break;
+				case '\n': sb.Append( "\\n" ); break;
+				case '\r': sb.Append( "\\r" ); break;
+				case '\t': sb.Append( "\\t" ); break;
+				default:
+					if ( IsLineOrControl( c ) )
+						sb.Append( $"\\u{(int)c:X4}" );
+					else
+						sb.Append( c );
+					break;
+			}
+		}
+		return sb.ToString();
+	}
 
 	private static string XmlEscape( string s )
 	{
 		if ( string.IsNullOrEmpty( s ) ) return "";
-		// Collapse newlines to spaces so multi-line YAML descriptions don't
-		// spill out of single-line /// <summary>…</summary> doc comments and
-		// leak into the generated C# as free-floating tokens.
-		return s.Replace( "\r\n", " " )
-			.Replace( "\n", " " )
-			.Replace( "\r", " " )
+
+		// A doc comment is one line. Every C# line break (CRLF counts once) and every other control character
+		// becomes a space, so text after a break cannot leave the comment and compile as code.
+		var sb = new StringBuilder( s.Length );
+		for ( var i = 0; i < s.Length; i++ )
+		{
+			if ( s[i] == '\r' && i + 1 < s.Length && s[i + 1] == '\n' )
+				i++;
+			sb.Append( IsLineOrControl( s[i] ) ? ' ' : s[i] );
+		}
+
+		return sb.ToString()
 			.Replace( "&", "&amp;" )
 			.Replace( "<", "&lt;" )
 			.Replace( ">", "&gt;" )
 			.Replace( "\"", "&quot;" );
 	}
+
+	// Control characters (including U+0085 NEL) plus the Unicode line and paragraph separators.
+	private static bool IsLineOrControl( char c ) => char.IsControl( c ) || c == '\u2028' || c == '\u2029';
 }

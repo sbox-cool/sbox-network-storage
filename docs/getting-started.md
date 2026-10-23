@@ -69,6 +69,7 @@ everything below) or create a project on [sboxcool.com](https://sboxcool.com). Y
 2. Enter the **Project ID**, **Public API Key** and **Secret Key**. For a self-hosted server, set
    **Base URL** to its scheme and host (for example `https://my-game.sboxns.com`, no path or
    trailing slash). Leave **CDN URL** empty unless you run one.
+   The editor sends the secret key only to an `https://` Base URL, or to `http://` on localhost or a loopback address. Any other Base URL is refused before a request is sent.
 3. Click **Save Configuration**, then **Test Connection**.
 
 Credentials are saved to `Editor/Network Storage/.env`. The `Editor/` folder is excluded from
