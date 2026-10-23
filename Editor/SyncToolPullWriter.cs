@@ -42,8 +42,8 @@ public static class SyncToolPullWriter
 			return SyncToolYamlRenderer.RenderFromJson( json );
 		}
 
-		// Same split the writer makes when it has no source path, so the preview matches what a pull writes.
-		var envelope = SyncToolConfig.SplitEndpointScript( slug, data, null, out var scriptFileName, out var scriptText );
+		// Same split the writer makes, with the same kept script name, so the preview matches what a pull writes.
+		var envelope = SyncToolConfig.SplitEndpointScript( slug, data, null, LocalEndpointScriptFileName( slug, null ), out var scriptFileName, out var scriptText );
 		var text = BuildSourceText( "endpoint", slug, envelope );
 		return scriptFileName == null ? text : $"{text}\n--- {scriptFileName} ---\n{scriptText}";
 	}
@@ -125,7 +125,7 @@ public static class SyncToolPullWriter
 		string scriptText = null;
 		var envelope = data;
 		if ( kind == "endpoint" )
-			envelope = SyncToolConfig.SplitEndpointScript( id, data, sourcePath, out scriptFileName, out scriptText );
+			envelope = SyncToolConfig.SplitEndpointScript( id, data, sourcePath, LocalEndpointScriptFileName( id, sourcePath ), out scriptFileName, out scriptText );
 
 		if ( !string.IsNullOrWhiteSpace( sourcePath ) )
 		{
@@ -155,6 +155,17 @@ public static class SyncToolPullWriter
 			SyncToolConfig.WriteEndpointScriptFile( dir, scriptFileName, scriptText );
 	}
 
+	// The script file name the envelope already uses. A pull keeps it, so a custom scriptFile is not orphaned.
+	// Reads the envelope being written when there is one; the preview has none, so it reads the endpoints folder.
+	private static string LocalEndpointScriptFileName( string slug, string sourcePath )
+	{
+		var envelope = string.IsNullOrWhiteSpace( sourcePath )
+			? FindExistingSourcePath( SyncToolConfig.Abs( SyncToolConfig.EndpointsPath ), "endpoint", slug )
+			: SyncToolConfig.Abs( sourcePath );
+		var scriptPath = envelope == null ? null : SyncToolConfig.EndpointScriptFileFor( envelope );
+		return scriptPath == null ? null : Path.GetFileName( scriptPath );
+	}
+
 	private static string FindExistingSourcePath( string absoluteFolder, string kind, string id )
 	{
 		if ( !Directory.Exists( absoluteFolder ) )
@@ -174,7 +185,7 @@ public static class SyncToolPullWriter
 			"workflow" => new HashSet<string>( StringComparer.OrdinalIgnoreCase ) { "id", "name", "description", "notes" },
 			_ => new HashSet<string>( StringComparer.OrdinalIgnoreCase ) { "id", "name", "description", "notes" }
 		};
-		var body = new Dictionary<string, object>( StringComparer.OrdinalIgnoreCase );
+		var body = new Dictionary<string, object>( StringComparer.Ordinal );
 		foreach ( var pair in data )
 		{
 			if ( !topLevelKeys.Contains( pair.Key ) && !pair.Key.StartsWith( "_", StringComparison.Ordinal ) )
@@ -285,7 +296,7 @@ public static class SyncToolPullWriter
 			return element.ValueKind switch
 			{
 				JsonValueKind.Object => element.EnumerateObject()
-					.ToDictionary( prop => prop.Name, prop => NormalizeYamlValue( prop.Value ), StringComparer.OrdinalIgnoreCase ),
+					.ToDictionary( prop => prop.Name, prop => NormalizeYamlValue( prop.Value ), StringComparer.Ordinal ),
 				JsonValueKind.Array => element.EnumerateArray().Select( item => NormalizeYamlValue( item ) ).ToList(),
 				JsonValueKind.String => element.GetString(),
 				JsonValueKind.Number when element.TryGetInt64( out var l ) => l,
@@ -297,10 +308,10 @@ public static class SyncToolPullWriter
 		}
 
 		if ( value is Dictionary<string, object> dict )
-			return dict.ToDictionary( pair => pair.Key, pair => NormalizeYamlValue( pair.Value ), StringComparer.OrdinalIgnoreCase );
+			return dict.ToDictionary( pair => pair.Key, pair => NormalizeYamlValue( pair.Value ), StringComparer.Ordinal );
 
 		if ( value is IDictionary<string, object> otherDict )
-			return otherDict.ToDictionary( pair => pair.Key, pair => NormalizeYamlValue( pair.Value ), StringComparer.OrdinalIgnoreCase );
+			return otherDict.ToDictionary( pair => pair.Key, pair => NormalizeYamlValue( pair.Value ), StringComparer.Ordinal );
 
 		if ( value is IEnumerable<object> sequence && value is not string )
 			return sequence.Select( item => NormalizeYamlValue( item ) ).ToList();

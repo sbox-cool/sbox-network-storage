@@ -28,13 +28,15 @@ public static partial class NetworkStorage
 			using var doc = JsonDocument.Parse( FileSystem.Data.ReadAllText( SigningKeyTrustFile ) );
 			foreach ( var entry in doc.RootElement.EnumerateObject() )
 			{
-				var jwk = entry.Value.GetProperty( "publicKeyJwk" );
-				var modulus = NetworkStorageRsaKey.NormalizeModulus( NetworkStorageSecuritySignature.Base64UrlDecode( jwk.GetProperty( "n" ).GetString() ?? "" ) );
-				var exponent = NetworkStorageSecuritySignature.Base64UrlDecode( jwk.GetProperty( "e" ).GetString() ?? "" );
-				if ( modulus is null || exponent.Length == 0 )
-					throw new FormatException( $"signing key for {entry.Name} is not an RSA-2048 public key" );
-
-				keys[entry.Name] = new TrustedSigningKey( NetworkStorageRsaKey.Fingerprint( modulus, exponent ), modulus, exponent );
+				// A bad entry is skipped alone; the roots that are still valid keep their trust.
+				try
+				{
+					keys[entry.Name] = ReadStoredSigningKey( entry.Value );
+				}
+				catch ( Exception ex )
+				{
+					Log.Warning( $"[NetworkStorage] ignoring unusable signing key trust entry for {entry.Name}: {ex.Message}" );
+				}
 			}
 		}
 		catch ( Exception ex )
@@ -45,6 +47,18 @@ public static partial class NetworkStorage
 		}
 
 		return keys;
+	}
+
+	// Reads one stored entry with the same size rule as TryReadSigningKey, so every key RememberTrustedSigningKey writes reads back.
+	private static TrustedSigningKey ReadStoredSigningKey( JsonElement entry )
+	{
+		var jwk = entry.GetProperty( "publicKeyJwk" );
+		var modulus = NetworkStorageRsaKey.NormalizeSigningModulus( NetworkStorageSecuritySignature.Base64UrlDecode( jwk.GetProperty( "n" ).GetString() ?? "" ) );
+		var exponent = NetworkStorageSecuritySignature.Base64UrlDecode( jwk.GetProperty( "e" ).GetString() ?? "" );
+		if ( modulus is null || exponent.Length == 0 )
+			throw new FormatException( "not an RSA public key of at least 1024 bits" );
+
+		return new TrustedSigningKey( NetworkStorageRsaKey.Fingerprint( modulus, exponent ), modulus, exponent );
 	}
 
 	// Records the signing key trusted for an API root and writes the whole store. A failed write keeps the key for this session only.

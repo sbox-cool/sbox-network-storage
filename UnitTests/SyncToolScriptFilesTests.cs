@@ -37,7 +37,7 @@ public class SyncToolScriptFilesTests
 	{
 		var data = new Dictionary<string, object> { ["runtime"] = "javascript", ["script"] = "return 1;\n", ["slug"] = "hello" };
 
-		var envelope = SyncToolConfig.SplitEndpointScript( "hello", data, "endpoints/hello.endpoint.yml", out var fileName, out var scriptText );
+		var envelope = SyncToolConfig.SplitEndpointScript( "hello", data, "endpoints/hello.endpoint.yml", null, out var fileName, out var scriptText );
 
 		Assert.AreEqual( "hello.endpoint.js", fileName );
 		Assert.AreEqual( "return 1;\n", scriptText );
@@ -47,11 +47,34 @@ public class SyncToolScriptFilesTests
 	}
 
 	[TestMethod]
+	public void SplitKeepsLocalScriptFileNameWhenItFitsTheRuntime()
+	{
+		var data = new Dictionary<string, object> { ["runtime"] = "javascript", ["script"] = "return 2;" };
+
+		var envelope = SyncToolConfig.SplitEndpointScript( "hello", data, "endpoints/hello.endpoint.yml", "custom-name.endpoint.js", out var fileName, out var scriptText );
+
+		Assert.AreEqual( "custom-name.endpoint.js", fileName );
+		Assert.AreEqual( "custom-name.endpoint.js", (string)envelope["scriptFile"] );
+		Assert.AreEqual( "return 2;", scriptText );
+	}
+
+	[TestMethod]
+	public void SplitFallsBackToDefaultNameWhenLocalNameDoesNotFitTheRuntime()
+	{
+		var data = new Dictionary<string, object> { ["runtime"] = "typescript", ["script"] = "export {};" };
+
+		var envelope = SyncToolConfig.SplitEndpointScript( "hello", data, "endpoints/hello.endpoint.yml", "custom-name.endpoint.js", out var fileName, out _ );
+
+		Assert.AreEqual( "hello.endpoint.ts", fileName );
+		Assert.AreEqual( "hello.endpoint.ts", (string)envelope["scriptFile"] );
+	}
+
+	[TestMethod]
 	public void SplitAcceptsParsedJsonValues()
 	{
 		var data = JsonSerializer.Deserialize<Dictionary<string, object>>( "{\"runtime\":\"typescript\",\"script\":\"export {};\"}" );
 
-		var envelope = SyncToolConfig.SplitEndpointScript( "hello", data, "endpoints/hello.endpoint.yml", out var fileName, out var scriptText );
+		var envelope = SyncToolConfig.SplitEndpointScript( "hello", data, "endpoints/hello.endpoint.yml", null, out var fileName, out var scriptText );
 
 		Assert.AreEqual( "hello.endpoint.ts", fileName );
 		Assert.AreEqual( "export {};", scriptText );
@@ -63,7 +86,7 @@ public class SyncToolScriptFilesTests
 	{
 		var data = new Dictionary<string, object> { ["runtime"] = "javascript", ["script"] = "return 1;" };
 
-		var envelope = SyncToolConfig.SplitEndpointScript( "hello", data, "endpoints/hello.json", out var fileName, out var scriptText );
+		var envelope = SyncToolConfig.SplitEndpointScript( "hello", data, "endpoints/hello.json", null, out var fileName, out var scriptText );
 
 		Assert.IsNull( fileName );
 		Assert.IsNull( scriptText );
@@ -75,7 +98,7 @@ public class SyncToolScriptFilesTests
 	{
 		var data = new Dictionary<string, object> { ["script"] = "x" };
 
-		var envelope = SyncToolConfig.SplitEndpointScript( "hello", data, "endpoints/hello.endpoint.yml", out var fileName, out _ );
+		var envelope = SyncToolConfig.SplitEndpointScript( "hello", data, "endpoints/hello.endpoint.yml", null, out var fileName, out _ );
 
 		Assert.IsNull( fileName );
 		Assert.AreEqual( "x", envelope["script"] );

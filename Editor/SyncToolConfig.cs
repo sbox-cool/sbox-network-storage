@@ -83,6 +83,21 @@ public static partial class SyncToolConfig
 
 	public static bool HasPublicKey => !string.IsNullOrEmpty( PublicApiKey );
 
+	/// <summary>
+	/// The secret key may only be sent to an https base URL, or to plain http on a loopback host.
+	/// Mirrors the runtime rule in NetworkStorageDedicatedServerSecret.CanTransportDedicatedServerSecretSecurely.
+	/// Keep the two in sync; sync.py secret_transport_allowed() applies the same rule.
+	/// </summary>
+	public static bool IsSecretSafeBaseUrl( string baseUrl )
+	{
+		if ( string.IsNullOrWhiteSpace( baseUrl ) || !Uri.TryCreate( baseUrl.Trim(), UriKind.Absolute, out var uri ) )
+			return false;
+
+		return uri.Scheme.Equals( "https", StringComparison.OrdinalIgnoreCase ) || uri.IsLoopback;
+	}
+
+	public const string InsecureBaseUrlMessage = "Refusing to send the secret key: Base URL must use https:// (http:// is only allowed for localhost or a loopback address).";
+
 	public static bool IsFullyConfigured => IsValid;
 
 	// ── Paths ──
@@ -422,6 +437,7 @@ public static partial class SyncToolConfig
 			merged["enableAuthSessions"] = EnableAuthSessions;
 			merged["enableEncryptedRequests"] = EnableEncryptedRequests;
 			merged["securityKeyFingerprint"] = SecurityKeyFingerprint;
+			merged["publishTarget"] = PublishTarget;
 
 			File.WriteAllText( credsPath, JsonSerializer.Serialize( merged, _jsonOptions ) );
 			Log.Info( "[SyncTool] Runtime credentials written to Assets/network-storage.credentials.json" );

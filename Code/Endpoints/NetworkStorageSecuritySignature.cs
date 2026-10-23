@@ -26,9 +26,9 @@ internal static partial class NetworkStorageSecuritySignature
 		if ( !signing.TryGetProperty( "publicKeyJwk", out var jwk ) || jwk.ValueKind != JsonValueKind.Object )
 			return false;
 
-		modulus = Base64UrlDecode( ReadString( jwk, "n" ) );
+		modulus = NetworkStorageRsaKey.NormalizeSigningModulus( Base64UrlDecode( ReadString( jwk, "n" ) ) );
 		exponent = Base64UrlDecode( ReadString( jwk, "e" ) );
-		return modulus.Length >= 128 && exponent.Length > 0;
+		return modulus is not null && exponent.Length > 0;
 	}
 
 	// Verifies the config's RSA-PKCS1 SHA-256 signature against the supplied key only. There is no
@@ -39,7 +39,7 @@ internal static partial class NetworkStorageSecuritySignature
 			return false;
 
 		var signature = Base64UrlDecode( signatureProp.GetString() );
-		if ( modulus.Length < 128 || exponent.Length == 0 || signature.Length == 0 )
+		if ( modulus.Length < NetworkStorageRsaKey.MinSigningModulusBytes || exponent.Length == 0 || signature.Length == 0 )
 			return false;
 
 		var digest = Sha256( Encoding.UTF8.GetBytes( StableStringifyWithoutSignature( config ) ) );

@@ -110,6 +110,7 @@ rotate without a game update.
   `ENCRYPTION_SIGNING_KEY_CHANGED`; the last trusted config is kept. Verify the server out of band
   before setting a new pin or resetting the trust store. Unpinned games that never receive a
   trusted config stay on v1.
+  The trust store checks each saved entry on its own: an unusable entry is logged and skipped, and the others keep their trust. A trusted signing key may have any RSA modulus of at least 128 bytes (RSA-1024 and larger). Encryption v2 still requires RSA-2048 keys.
 - A config that fails verification refuses every endpoint call, plain or encrypted. Calling
   `Configure` with a different pin, base URL, API version or project drops the held config and
   verifies again.

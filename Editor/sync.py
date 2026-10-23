@@ -22,18 +22,29 @@ del _sys
 
 import argparse
 import hashlib
+import ipaddress
 import json
 import os
 import re
 import sys
 import traceback
 from pathlib import Path
-from urllib.request import Request, urlopen
+from urllib.parse import urlsplit
+from urllib.request import HTTPRedirectHandler, Request, build_opener
 from urllib.error import HTTPError
 
 from sync_api_errors import SyncApiError, print_api_error
 from sync_sources import load_source_definitions, source_id_from_filename
 from endpoint_scripts import ScriptFileError, inline_script_sources
+
+
+# Redirects are refused: requests carry x-api-key, and a followed redirect could replay it to another host or to plain HTTP.
+class _NoRedirectHandler(HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+_secret_opener = build_opener(_NoRedirectHandler)
 
 # Read the runtime constant rather than maintaining a second release version.
 _library_root = Path(__file__).resolve().parent.parent
@@ -136,6 +147,38 @@ def api_url(config, path):
     return f"{config['baseUrl']}/{config['apiVersion']}/manage/{config['projectId']}/{path}"
 
 
+INSECURE_BASE_URL_MESSAGE = (
+    "Refusing to send the secret key: Base URL must use https:// "
+    "(http:// is only allowed for localhost or a loopback address)."
+)
+
+
+def secret_transport_allowed(base_url):
+    """True when the secret key may be sent to base_url: https, or http to a loopback host.
+
+    Mirrors SyncToolConfig.IsSecretSafeBaseUrl and the runtime rule in
+    NetworkStorageDedicatedServerSecret.CanTransportDedicatedServerSecretSecurely.
+    """
+    try:
+        parts = urlsplit(str(base_url or "").strip())
+    except ValueError:
+        return False
+    scheme = parts.scheme.lower()
+    host = parts.hostname or ""
+    if not host:
+        return False
+    if scheme == "https":
+        return True
+    if scheme != "http":
+        return False
+    if host == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return False
+
+
 def api_headers(config):
     headers = {
         "x-api-key": config["secretKey"],
@@ -152,13 +195,15 @@ def api_headers(config):
 
 def api_request(config, method, path, body=None):
     """Make an authenticated request to the management API."""
+    if not secret_transport_allowed(config["baseUrl"]):
+        raise SyncApiError(INSECURE_BASE_URL_MESSAGE)
     url = api_url(config, path)
     headers = api_headers(config)
     data = json.dumps(body).encode() if body else None
     req = Request(url, data=data, headers=headers, method=method)
 
     try:
-        with urlopen(req) as resp:
+        with _secret_opener.open(req) as resp:
             result = json.loads(resp.read().decode())
             log_response_diagnostics(result, path)
             return result

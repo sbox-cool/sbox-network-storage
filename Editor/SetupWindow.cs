@@ -259,7 +259,18 @@ public class SetupWindow : PaintedWindow
 
 		DrawFieldLabel( ref y, pad, w, "Base URL" );
 		PositionInput( _baseUrlInput, pad, y, w, fieldH );
-		y += fieldH + 6;
+		y += fieldH + 2;
+
+		// The secret key is refused for any base URL that is neither https nor loopback http
+		var baseUrlText = _baseUrlInput.Text?.Trim() ?? "";
+		if ( !string.IsNullOrEmpty( baseUrlText ) && !SyncToolConfig.IsSecretSafeBaseUrl( baseUrlText ) )
+		{
+			Paint.SetDefaultFont( size: 8 );
+			Paint.SetPen( Color.Red.WithAlpha( 0.9f ) );
+			Paint.DrawText( new Rect( pad, y, w, 12 ), "Secret key will not be sent: Base URL must be https:// (http:// only for localhost)", TextFlag.LeftCenter );
+			y += 14;
+		}
+		y += 4;
 
 		DrawFieldLabel( ref y, pad, w, "CDN URL" );
 		PositionInput( _cdnUrlInput, pad, y, w, fieldH );

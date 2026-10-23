@@ -27,6 +27,17 @@ internal static class NetworkStorageRsaKey
 		return trimmed.Length == ModulusBytes ? trimmed : null;
 	}
 
+	// Smallest signing key the security-config verifier accepts (RSA-1024). Signing keys of any size from here up are
+	// trusted, and the trust store reads them back under this same rule, so a stored key can always be reloaded.
+	internal const int MinSigningModulusBytes = 128;
+
+	// Returns the modulus without leading zero bytes when it is a usable signing key, or null.
+	internal static byte[] NormalizeSigningModulus( byte[] modulus )
+	{
+		var trimmed = StripLeadingZeros( modulus );
+		return trimmed.Length >= MinSigningModulusBytes ? trimmed : null;
+	}
+
 	// Lowercase hex SHA-256 of the SubjectPublicKeyInfo DER. This is the pinnable key fingerprint.
 	internal static string Fingerprint( byte[] modulus, byte[] exponent )
 		=> ToHex( NetworkStorageSecuritySignature.Sha256( SubjectPublicKeyInfo( modulus, exponent ) ) );
