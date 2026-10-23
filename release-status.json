@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "generatedAt": "2026-10-23T07:30:59.107Z",
+  "generatedAt": "2026-10-23T13:25:35.154Z",
   "library": {
     "published": {
       "revision": 427072,
@@ -15,8 +15,8 @@
       "committedAt": "2026-10-23T06:15:28Z",
       "ci": {
         "conclusion": "success",
-        "runUrl": "https://github.com/sbox-cool/sbox-network-storage/actions/runs/39910401784",
-        "engine": "sbox-public@a4fd4639950a0fe0f82144c2c82928ca2c5d7504"
+        "runUrl": "https://github.com/sbox-cool/sbox-network-storage/actions/runs/39932363870",
+        "engine": "sbox-public@c538a1df038c1565f64e8227ad2caf7407e2f515"
       }
     },
     "pending": [
@@ -49,10 +49,46 @@
       "url": "https://github.com/sbox-cool/sbox-network-storage-server/releases/tag/v0.5.5"
     },
     "main": {
-      "commit": "3971c77800b6ba1ca2fb4689b944fd3527ce62f0",
-      "committedAt": "2026-10-23T07:25:11Z"
+      "commit": "a5d246cff2490ffeef8d71fcc1a2cca1188f6a64",
+      "committedAt": "2026-10-23T11:07:10Z"
     },
     "pending": [
+      {
+        "number": 218,
+        "title": "Restore legacy random-step weight and boundary rules",
+        "mergedAt": "2026-10-23T11:07:11Z",
+        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/218"
+      },
+      {
+        "number": 217,
+        "title": "Enforce indirect endpoint write blocks and fully remove module records",
+        "mergedAt": "2026-10-23T11:07:07Z",
+        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/217"
+      },
+      {
+        "number": 216,
+        "title": "Preserve arrays and sibling values in indexed record operations",
+        "mergedAt": "2026-10-23T11:07:03Z",
+        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/216"
+      },
+      {
+        "number": 210,
+        "title": "fix: include schema v5-v12 tables in ProjectSnapshotSchema and reverse deletion order",
+        "mergedAt": "2026-10-23T11:06:59Z",
+        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/210"
+      },
+      {
+        "number": 214,
+        "title": "fix: reject trailing newlines in validation patterns",
+        "mergedAt": "2026-10-23T10:59:15Z",
+        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/214"
+      },
+      {
+        "number": 215,
+        "title": "Protect runtime data and key directories on Windows and Unix",
+        "mergedAt": "2026-10-23T07:33:32Z",
+        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/215"
+      },
       {
         "number": 213,
         "title": "Enforce disabled-key reads and operator-only MCP consent settings",
