@@ -60,8 +60,7 @@ public static partial class NetworkStorage
 					NetLog.Request( slug, $"POST {securityRequest.Mode} {bodyJson}" );
 					Log.Info( $"[NetworkStorage] {slug} request: POST {ApiRoot}{securityRequest.RouteLabel} mode={securityRequest.Mode} revision={NetworkStoragePackageInfo.RuntimeRevisionId?.ToString() ?? "unknown"} target={PublishTarget} body={bodyJson}" );
 				}
-				var content = Http.CreateJsonContent( securityRequest.Body );
-				result = await RequestStringAsync(url, "POST", content, headers);
+				result = await RequestStringAsync(url, "POST", () => Http.CreateJsonContent( securityRequest.Body ), headers);
 			}
 			else
 			{

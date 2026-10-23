@@ -28,37 +28,70 @@ public class SaveStateTracker
 	public string LastError { get; private set; }
 	public bool IsBusy => PendingCalls > 0;
 
+	private int _generation;
+
 	/// <summary>
 	/// Call an endpoint with automatic save state tracking and logging.
-	/// Sets State to Saving → Saved/Error. Logs to NetLog.
+	/// Sets State to Saving → Saved/Error. Logs to NetLog. An exception sets Error and is rethrown to the caller.
 	/// </summary>
 	public async Task<JsonElement?> Call( string slug, object input = null )
 	{
+		var generation = _generation;
 		PendingCalls++;
 		SetState( SaveState.Saving );
 
-		if ( NetworkStorageLogConfig.LogRequests )
-			NetLog.Info( slug, $"Calling endpoint... input={( input != null ? JsonSerializer.Serialize( input ) : "null" )}" );
-
-		var result = await NetworkStorage.CallEndpoint( slug, input );
-
-		PendingCalls--;
-		if ( result.HasValue )
+		JsonElement? result = null;
+		try
 		{
-			if ( PendingCalls <= 0 )
-				SetState( SaveState.Saved );
-			if ( NetworkStorageLogConfig.LogResponses )
-				NetLog.Info( slug, "Success" );
+			if ( NetworkStorageLogConfig.LogRequests )
+				NetLog.Info( slug, $"Calling endpoint... input={( input != null ? JsonSerializer.Serialize( input ) : "null" )}" );
+
+			result = await NetworkStorage.CallEndpoint( slug, input );
 		}
-		else
+		catch ( Exception ex )
 		{
-			var error = $"{slug} failed — server returned null";
-			SetState( SaveState.Error, error );
-			if ( NetworkStorageLogConfig.LogErrors )
-				NetLog.Error( slug, error );
+			Fail( generation, slug, $"{slug} failed — {ex.Message}" );
+			throw;
+		}
+		finally
+		{
+			// A Reset() while this call was in flight already cleared the count; do not drive it negative.
+			if ( generation == _generation )
+				PendingCalls--;
 		}
 
+		// A Reset() while this call was in flight owns the state now; a stale completion must not overwrite it.
+		if ( generation != _generation )
+			return result;
+
+		if ( !result.HasValue )
+		{
+			Fail( generation, slug, DescribeEndpointFailure( slug ) );
+			return null;
+		}
+
+		if ( PendingCalls <= 0 )
+			SetState( SaveState.Saved );
+		if ( NetworkStorageLogConfig.LogResponses )
+			NetLog.Info( slug, "Success" );
 		return result;
+	}
+
+	private void Fail( int generation, string slug, string error )
+	{
+		// A Reset() while this call was in flight owns the state now; a stale completion must not overwrite it.
+		if ( generation != _generation ) return;
+		SetState( SaveState.Error, error );
+		if ( NetworkStorageLogConfig.LogErrors )
+			NetLog.Error( slug, error );
+	}
+
+	private static string DescribeEndpointFailure( string slug )
+	{
+		if ( !NetworkStorage.TryGetLastEndpointError( slug, out var code, out var message ) )
+			return $"{slug} failed — server returned null";
+
+		return string.IsNullOrEmpty( message ) ? $"{slug} failed — {code}" : $"{slug} failed — {code}: {message}";
 	}
 
 	/// <summary>
@@ -69,7 +102,17 @@ public class SaveStateTracker
 	{
 		applyOptimistic?.Invoke();
 
-		var result = await Call( slug, input );
+		JsonElement? result;
+		try
+		{
+			result = await Call( slug, input );
+		}
+		catch
+		{
+			// Call has recorded the failure and rethrows it; the optimistic change must be reverted on that path too.
+			revert?.Invoke();
+			throw;
+		}
 
 		if ( result.HasValue )
 		{
@@ -83,6 +126,7 @@ public class SaveStateTracker
 
 	public void Reset()
 	{
+		_generation++;
 		SetState( SaveState.Idle );
 		PendingCalls = 0;
 		LastError = null;

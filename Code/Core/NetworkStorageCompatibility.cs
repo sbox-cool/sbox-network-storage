@@ -124,14 +124,23 @@ public static partial class NetworkStorage
 		OnLibraryStatusChanged?.Invoke( status );
 	}
 
-	internal static async Task<string> RequestStringAsync( string url, string method = "GET", HttpContent content = null,
+	internal static Task<string> RequestStringAsync( string url, string method = "GET", Func<HttpContent> createContent = null,
 		Dictionary<string, string> headers = null )
+		=> SendWithRetriesAsync( method, createContent, content => Http.RequestAsync( url, method, content, headers ) );
+
+	/// <summary>
+	/// Sends a request and retries rate limits. Content is created for each attempt because the engine disposes request
+	/// content after it is sent, so reusing one instance would fail the retry.
+	/// </summary>
+	internal static async Task<string> SendWithRetriesAsync( string method, Func<HttpContent> createContent,
+		Func<HttpContent, Task<HttpResponseMessage>> send )
 	{
 		var waited = 0.0;
 		for ( var retries = 0; ; retries++ )
 		{
 			var generation = _compatibilityGeneration;
-			using var response = await Http.RequestAsync( url, method, content, headers );
+			using var content = createContent?.Invoke();
+			using var response = await send( content );
 			if ( generation == _compatibilityGeneration ) ObserveCompatibilityHeaders( response );
 			// A 426 carries the server's remediation message in a structured body, which ParseResponse turns
 			// into the endpoint error. Every other HTTP failure keeps the historical exception.

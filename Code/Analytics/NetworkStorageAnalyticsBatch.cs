@@ -136,8 +136,8 @@ public static partial class NetworkStorage
 		{
 			var headers = await BuildAuthHeaders();
 			var url = BuildUrl( $"/storage/{Uri.EscapeDataString( ProjectId )}/analytics/events" );
-			var content = new StringContent( "{\"events\":[" + string.Join( ",", items ) + "]}", Encoding.UTF8, "application/json" );
-			var raw = await RequestStringAsync( url, "POST", content, headers );
+			var payload = "{\"events\":[" + string.Join( ",", items ) + "]}";
+			var raw = await RequestStringAsync( url, "POST", () => new StringContent( payload, Encoding.UTF8, "application/json" ), headers );
 			RecordAnalyticsResponse( raw, items.Count );
 			if ( NetworkStorageLogConfig.LogRequests )
 				NetLog.Info( "analytics", $"Reported batch events={items.Count}" );

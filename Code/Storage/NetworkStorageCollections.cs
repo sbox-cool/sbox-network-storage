@@ -84,11 +84,11 @@ public static partial class NetworkStorage
 			}
 			url = BuildUrl( path );
 
-			HttpContent content = null;
+			Func<HttpContent> createContent = null;
 			if ( body is not null )
 			{
 				bodyJson = JsonSerializer.Serialize( body );
-				content = Http.CreateJsonContent( body );
+				createContent = () => Http.CreateJsonContent( body );
 			}
 
 			if ( NetworkStorageLogConfig.LogRequests )
@@ -98,7 +98,7 @@ public static partial class NetworkStorage
 				Log.Info( $"[NetworkStorage] {tag} request: {method} {ApiRoot}{path}{suffix}" );
 			}
 
-			var raw = await RequestStringAsync(url, method, content, headers);
+			var raw = await RequestStringAsync(url, method, createContent, headers);
 			if ( NetworkStorageLogConfig.LogResponses )
 				Log.Info( $"[NetworkStorage] {tag} → {TruncateJson( raw, 300 )}" );
 

@@ -74,7 +74,7 @@ public static partial class NetworkStorage
 				Log.Warning( $"[NetworkStorage] {slug} PROXY FAILED — {ex.Message}" );
 				NetLog.Error( slug, $"Proxy error: {ex.Message}" );
 			}
-			RecordEndpointError( slug, "PROXY_FAILED", ex.Message );
+			RecordEndpointError( slug, ex is TimeoutException ? "PROXY_TIMEOUT" : "PROXY_FAILED", ex.Message );
 			return null;
 		}
 	}
@@ -133,7 +133,7 @@ public static partial class NetworkStorage
 				Log.Warning( $"[NetworkStorage] storage PROXY FAILED — {ex.Message}" );
 				NetLog.Error( "storage", $"Proxy error: {ex.Message}" );
 			}
-			RecordEndpointError( "storage", "PROXY_FAILED", ex.Message );
+			RecordEndpointError( "storage", ex is TimeoutException ? "PROXY_TIMEOUT" : "PROXY_FAILED", ex.Message );
 			return null;
 		}
 	}
