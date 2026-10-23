@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "generatedAt": "2026-10-23T06:15:38.973Z",
+  "generatedAt": "2026-10-23T07:30:59.107Z",
   "library": {
     "published": {
       "revision": 427072,
@@ -14,9 +14,9 @@
       "commit": "7f77770c81dd6ab84facfa05e9a87010b6f27983",
       "committedAt": "2026-10-23T06:15:28Z",
       "ci": {
-        "conclusion": "pending",
+        "conclusion": "success",
         "runUrl": "https://github.com/sbox-cool/sbox-network-storage/actions/runs/39910401784",
-        "engine": null
+        "engine": "sbox-public@a4fd4639950a0fe0f82144c2c82928ca2c5d7504"
       }
     },
     "pending": [
@@ -49,10 +49,34 @@
       "url": "https://github.com/sbox-cool/sbox-network-storage-server/releases/tag/v0.5.5"
     },
     "main": {
-      "commit": "aa189b9ad2d21f94e735334379075d501ef6fc12",
-      "committedAt": "2026-10-23T05:38:38Z"
+      "commit": "3971c77800b6ba1ca2fb4689b944fd3527ce62f0",
+      "committedAt": "2026-10-23T07:25:11Z"
     },
     "pending": [
+      {
+        "number": 213,
+        "title": "Enforce disabled-key reads and operator-only MCP consent settings",
+        "mergedAt": "2026-10-23T07:25:11Z",
+        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/213"
+      },
+      {
+        "number": 204,
+        "title": "Keep analytics batches when one event is invalid; ASCII-only Steam ID digits",
+        "mergedAt": "2026-10-23T06:40:15Z",
+        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/204"
+      },
+      {
+        "number": 191,
+        "title": "docs: compact README, add docs index and CLI reference",
+        "mergedAt": "2026-10-23T06:40:11Z",
+        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/191"
+      },
+      {
+        "number": 190,
+        "title": "Purge expired media rows and unreferenced blobs (M5 retention sweeper)",
+        "mergedAt": "2026-10-23T06:40:06Z",
+        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/190"
+      },
       {
         "number": 189,
         "title": "Allow dependent ns.fetch chains within one script pass",
