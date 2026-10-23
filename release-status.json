@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "generatedAt": "2026-10-23T01:30:24.850Z",
+  "generatedAt": "2026-10-23T06:15:38.973Z",
   "library": {
     "published": {
       "revision": 427072,
@@ -11,16 +11,23 @@
     },
     "main": {
       "version": "1.2.0",
-      "commit": "ddf9b617c0c4fdf26c9c0e91c5cd34fa915b1750",
-      "committedAt": "2026-10-20T02:07:28Z",
+      "commit": "7f77770c81dd6ab84facfa05e9a87010b6f27983",
+      "committedAt": "2026-10-23T06:15:28Z",
       "ci": {
-        "conclusion": "success",
-        "runUrl": "https://github.com/sbox-cool/sbox-network-storage/actions/runs/39756441932",
-        "engine": "sbox-public@10af13f2e7fa4a134b4512ae0fee1116de36e54d"
+        "conclusion": "pending",
+        "runUrl": "https://github.com/sbox-cool/sbox-network-storage/actions/runs/39910401784",
+        "engine": null
       }
     },
-    "pending": [],
-    "pendingSince": null,
+    "pending": [
+      {
+        "number": 64,
+        "title": "docs: compact README; move guides into docs/",
+        "mergedAt": "2026-10-23T06:15:29Z",
+        "url": "https://github.com/sbox-cool/sbox-network-storage/pull/64"
+      }
+    ],
+    "pendingSince": "2026-10-23T06:15:29Z",
     "installMain": {
       "zipUrl": "https://github.com/sbox-cool/sbox-network-storage/archive/refs/heads/main.zip",
       "docsUrl": "https://github.com/sbox-cool/sbox-network-storage#using-unreleased-features-main"
@@ -42,10 +49,16 @@
       "url": "https://github.com/sbox-cool/sbox-network-storage-server/releases/tag/v0.5.5"
     },
     "main": {
-      "commit": "d2c321caa2a55b0bd1375b87aab7c51de38dab54",
-      "committedAt": "2026-10-22T10:58:20Z"
+      "commit": "aa189b9ad2d21f94e735334379075d501ef6fc12",
+      "committedAt": "2026-10-23T05:38:38Z"
     },
     "pending": [
+      {
+        "number": 189,
+        "title": "Allow dependent ns.fetch chains within one script pass",
+        "mergedAt": "2026-10-23T05:38:38Z",
+        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/189"
+      },
       {
         "number": 188,
         "title": "sbox-cli-e2e: drive encryption switch through the management API for attached servers",
