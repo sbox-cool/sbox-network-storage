@@ -78,12 +78,12 @@ public static class NetworkStorageMcpTools
 	}
 
 	/// <summary>
-	/// Reads a document from a Network Storage collection. documentId empty returns the collection's documents.
+	/// Reads a document from a Network Storage collection. documentId empty reads the current player's document (their Steam ID).
 	/// Returns { ok, body, errorCode, errorMessage }; storage failures are returned as data (ok=false).
 	/// Next: ns_status if the request fails with a configuration error.
 	/// </summary>
 	/// <param name="collectionId">Collection ID (slug) to read from.</param>
-	/// <param name="documentId">Document ID. Leave empty to read the collection rather than one document.</param>
+	/// <param name="documentId">Document ID. Leave empty to read the current player's document (their Steam ID).</param>
 	[McpTool( "ns_get_document" )]
 	public static async Task<object> ns_get_document( string collectionId, string documentId = "" )
 	{

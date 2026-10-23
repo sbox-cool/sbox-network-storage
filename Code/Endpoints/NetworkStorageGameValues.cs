@@ -32,8 +32,8 @@ public static partial class NetworkStorage
 		}
 		catch ( Exception ex )
 		{
-			if ( ex is System.Net.Http.HttpRequestException { StatusCode: System.Net.HttpStatusCode.TooManyRequests } )
-				RecordEndpointError( "game-values", "RATE_LIMITED", ex.Message );
+			RecordEndpointError( "game-values", ex is System.Net.Http.HttpRequestException { StatusCode: System.Net.HttpStatusCode.TooManyRequests }
+				? "RATE_LIMITED" : "REQUEST_FAILED", ex.Message );
 			if ( NetworkStorageLogConfig.LogErrors )
 			{
 				Log.Warning( $"[NetworkStorage] GameValues: {ex.Message}" );

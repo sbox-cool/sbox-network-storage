@@ -22,7 +22,15 @@ namespace Sandbox;
 public sealed class NetworkStorageProxyComponent : Component
 {
 	// Pending requests awaiting a response from the host (client-side only)
-	private static readonly Dictionary<string, TaskCompletionSource<string>> _pending = new();
+	private static readonly Dictionary<string, PendingRequest> _pending = new();
+
+	/// <summary>
+	/// Maximum wait for a host response, so a lost RPC cannot leave a game save pending indefinitely.
+	/// </summary>
+	private static readonly TimeSpan ReplyTimeout = TimeSpan.FromSeconds( 30 );
+
+	/// <summary>A request awaiting the host's reply, with the component that sent it and the host it was sent to.</summary>
+	private sealed record PendingRequest( TaskCompletionSource<string> Reply, NetworkStorageProxyComponent Owner, Connection Host );
 
 	protected override void OnEnabled()
 	{
@@ -44,39 +52,77 @@ public sealed class NetworkStorageProxyComponent : Component
 		}
 	}
 
+	protected override void OnUpdate()
+	{
+		var host = Networking.IsActive ? Connection.Host : null;
+		lock ( _pending )
+		{
+			foreach ( var entry in _pending )
+				if ( ReferenceEquals( entry.Value.Owner, this ) && !ReferenceEquals( entry.Value.Host, host ) )
+					entry.Value.Reply.TrySetException( new InvalidOperationException( "The host changed or disconnected before it replied." ) );
+		}
+	}
+
+	protected override void OnDestroy()
+	{
+		if ( NetworkStorage.RequestProxy == ProxyEndpointRequest ) NetworkStorage.RequestProxy = null;
+		if ( NetworkStorage.DocumentProxy == ProxyDocumentRequest ) NetworkStorage.DocumentProxy = null;
+		lock ( _pending )
+		{
+			foreach ( var entry in _pending )
+				if ( ReferenceEquals( entry.Value.Owner, this ) )
+					entry.Value.Reply.TrySetException( new InvalidOperationException( "The proxy component was destroyed before the host replied." ) );
+		}
+	}
+
 	// ── Client-side: send requests to host ──
 
 	private async Task<string> ProxyEndpointRequest( string steamId, string clientToken, string slug, string inputJson )
 	{
 		var requestId = Guid.NewGuid().ToString( "N" );
-		var tcs = new TaskCompletionSource<string>();
-		_pending[requestId] = tcs;
+		var pending = TrackRequest( requestId );
 
-		if ( NetworkStorageLogConfig.LogProxy )
-			Log.Info( $"[NSProxy] Sending endpoint proxy: {slug} for {steamId} (req={requestId})" );
-		RpcRequestEndpoint( requestId, steamId, clientToken ?? "", slug, inputJson ?? "" );
-
-		var result = await tcs.Task;
-
-		_pending.Remove( requestId );
-		return result;
+		try
+		{
+			if ( NetworkStorageLogConfig.LogProxy )
+				Log.Info( $"[NSProxy] Sending endpoint proxy: {slug} for {steamId} (req={requestId})" );
+			RpcRequestEndpoint( requestId, steamId, clientToken ?? "", slug, inputJson ?? "" );
+			return await pending.Reply.Task.WaitAsync( ReplyTimeout );
+		}
+		finally
+		{
+			lock ( _pending ) _pending.Remove( requestId );
+		}
 	}
 
 	private async Task<string> ProxyDocumentRequest( string steamId, string clientToken, string collectionId, string documentId )
 	{
 		var requestId = Guid.NewGuid().ToString( "N" );
-		var tcs = new TaskCompletionSource<string>();
-		_pending[requestId] = tcs;
+		var pending = TrackRequest( requestId );
 
-		if ( NetworkStorageLogConfig.LogProxy )
-			Log.Info( $"[NSProxy] Sending document proxy: {collectionId}/{documentId} for {steamId} (req={requestId})" );
-		RpcRequestDocument( requestId, steamId, clientToken ?? "", collectionId, documentId );
-
-		var result = await tcs.Task;
-
-		_pending.Remove( requestId );
-		return result;
+		try
+		{
+			if ( NetworkStorageLogConfig.LogProxy )
+				Log.Info( $"[NSProxy] Sending document proxy: {collectionId}/{documentId} for {steamId} (req={requestId})" );
+			RpcRequestDocument( requestId, steamId, clientToken ?? "", collectionId, documentId );
+			return await pending.Reply.Task.WaitAsync( ReplyTimeout );
+		}
+		finally
+		{
+			lock ( _pending ) _pending.Remove( requestId );
+		}
 	}
+
+	/// <summary>Registers a request that waits for the host's reply.</summary>
+	private PendingRequest TrackRequest( string requestId )
+	{
+		var host = Networking.IsActive ? Connection.Host : null;
+		if ( host is null ) throw new InvalidOperationException( "No host connection is available for the proxy request." );
+		var pending = new PendingRequest( new TaskCompletionSource<string>( TaskCreationOptions.RunContinuationsAsynchronously ), this, host );
+		lock ( _pending ) _pending[requestId] = pending;
+		return pending;
+	}
+
 
 	// ── RPCs: client → host (request) ──
 
@@ -165,10 +211,13 @@ public sealed class NetworkStorageProxyComponent : Component
 	private void RpcRespondToClient( string requestId, string resultJson )
 	{
 		// All clients receive this, but only the one with the matching pending request processes it
-		if ( _pending.TryGetValue( requestId, out var tcs ) )
+		lock ( _pending )
 		{
-			var response = string.IsNullOrEmpty( resultJson ) ? null : resultJson;
-			tcs.TrySetResult( response );
+			if ( _pending.TryGetValue( requestId, out var pending ) )
+			{
+				var response = string.IsNullOrEmpty( resultJson ) ? null : resultJson;
+				pending.Reply.TrySetResult( response );
+			}
 		}
 	}
 }

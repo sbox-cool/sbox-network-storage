@@ -56,6 +56,8 @@ using the server's `Retry-After`. GET requests always retry; other methods only 
 marks the response `retrySafe`. A call that still fails is reported as `RATE_LIMITED` through
 `TryGetLastEndpointError`.
 
+Calls through the host (proxy mode) wait at most 30 seconds for the host's reply. A timeout is reported as `PROXY_TIMEOUT`; any other proxy failure, including the host changing or disconnecting while the call is in flight, is reported as `PROXY_FAILED`.
+
 ### Analytics batching
 
 When the server advertises `analytics-batch`, events are queued and sent together (up to 50 events
@@ -165,6 +167,8 @@ await tracker.CallAndApply( "sell-ore", input,
     applyServer: data => { /* apply authoritative response */ },
     revert: () => { /* undo on failure */ } );
 ```
+
+`Call` sets `State` to `Error` and rethrows when the endpoint throws; `CallAndApply` runs `revert` before rethrowing. A call that completes after `Reset()` no longer changes `State`.
 
 ### NetLog
 
