@@ -43,7 +43,7 @@ public static class SyncToolPullWriter
 		}
 
 		// Same split the writer makes, with the same kept script name, so the preview matches what a pull writes.
-		var envelope = SyncToolConfig.SplitEndpointScript( slug, data, null, LocalEndpointScriptFileName( slug, null ), out var scriptFileName, out var scriptText );
+		var envelope = SyncToolConfig.SplitEndpointScript( slug, data, null, out var scriptFileName, out var scriptText );
 		var text = BuildSourceText( "endpoint", slug, envelope );
 		return scriptFileName == null ? text : $"{text}\n--- {scriptFileName} ---\n{scriptText}";
 	}
@@ -125,7 +125,7 @@ public static class SyncToolPullWriter
 		string scriptText = null;
 		var envelope = data;
 		if ( kind == "endpoint" )
-			envelope = SyncToolConfig.SplitEndpointScript( id, data, sourcePath, LocalEndpointScriptFileName( id, sourcePath ), out scriptFileName, out scriptText );
+			envelope = SyncToolConfig.SplitEndpointScript( id, data, sourcePath, out scriptFileName, out scriptText );
 
 		if ( !string.IsNullOrWhiteSpace( sourcePath ) )
 		{
@@ -157,7 +157,7 @@ public static class SyncToolPullWriter
 
 	// The script file name the envelope already uses. A pull keeps it, so a custom scriptFile is not orphaned.
 	// Reads the envelope being written when there is one; the preview has none, so it reads the endpoints folder.
-	private static string LocalEndpointScriptFileName( string slug, string sourcePath )
+	internal static string ExistingEndpointScriptFileName( string slug, string sourcePath )
 	{
 		var envelope = string.IsNullOrWhiteSpace( sourcePath )
 			? FindExistingSourcePath( SyncToolConfig.Abs( SyncToolConfig.EndpointsPath ), "endpoint", slug )

@@ -23,4 +23,14 @@ public class SyncToolSecretTransportTests
 		Assert.IsFalse( SyncToolConfig.IsSecretSafeBaseUrl( "" ) );
 		Assert.IsFalse( SyncToolConfig.IsSecretSafeBaseUrl( null ) );
 	}
+
+	[TestMethod]
+	public void SecretIsRefusedForNonHttpSchemesEvenOnLoopbackHosts()
+	{
+		Assert.IsFalse( SyncToolConfig.IsSecretSafeBaseUrl( "file:///tmp" ) );
+		Assert.IsFalse( SyncToolConfig.IsSecretSafeBaseUrl( "file://localhost/tmp" ) );
+		Assert.IsFalse( SyncToolConfig.IsSecretSafeBaseUrl( "ftp://localhost" ) );
+		Assert.IsFalse( SyncToolConfig.IsSecretSafeBaseUrl( "ftp://localhost:21" ) );
+		Assert.IsFalse( SyncToolConfig.IsSecretSafeBaseUrl( "ws://127.0.0.1:8080" ) );
+	}
 }

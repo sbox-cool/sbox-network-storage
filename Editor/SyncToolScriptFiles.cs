@@ -153,9 +153,9 @@ public static partial class SyncToolConfig
 	/// to write, with <c>scriptFile</c> in place of <c>script</c>. Returns the data unchanged, with
 	/// <paramref name="scriptFileName"/> null, when there is nothing to split. A JSON envelope keeps its script
 	/// inline because a JSON envelope cannot reference a script file. The local envelope's script file name
-	/// (<paramref name="currentScriptFileName"/>) is kept when it still fits the runtime, so a custom name is not orphaned.
+	/// (the file name the existing envelope already uses, read from sourcePath or the endpoints folder) is kept when it still fits the runtime, so a custom name is not orphaned.
 	/// </summary>
-	public static Dictionary<string, object> SplitEndpointScript( string endpointId, Dictionary<string, object> data, string sourcePath, string currentScriptFileName, out string scriptFileName, out string scriptText )
+	public static Dictionary<string, object> SplitEndpointScript( string endpointId, Dictionary<string, object> data, string sourcePath, out string scriptFileName, out string scriptText )
 	{
 		scriptFileName = null;
 		scriptText = null;
@@ -168,6 +168,7 @@ public static partial class SyncToolConfig
 		if ( ext == null || text == null )
 			return data;
 
+		var currentScriptFileName = SyncToolPullWriter.ExistingEndpointScriptFileName( endpointId, sourcePath );
 		scriptFileName = currentScriptFileName != null && IsBareScriptFileName( currentScriptFileName ) && currentScriptFileName.EndsWith( ext, StringComparison.Ordinal )
 			? currentScriptFileName
 			: $"{endpointId}.endpoint{ext}";

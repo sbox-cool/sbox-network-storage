@@ -49,9 +49,11 @@ public class SyncToolScriptFilesTests
 	[TestMethod]
 	public void SplitKeepsLocalScriptFileNameWhenItFitsTheRuntime()
 	{
+		var folder = NewFolder();
+		var envelopePath = Write( folder, "hello.endpoint.yml", Header + "runtime: javascript\nscriptFile: custom-name.endpoint.js\n" );
 		var data = new Dictionary<string, object> { ["runtime"] = "javascript", ["script"] = "return 2;" };
 
-		var envelope = SyncToolConfig.SplitEndpointScript( "hello", data, "endpoints/hello.endpoint.yml", "custom-name.endpoint.js", out var fileName, out var scriptText );
+		var envelope = SyncToolConfig.SplitEndpointScript( "hello", data, envelopePath, out var fileName, out var scriptText );
 
 		Assert.AreEqual( "custom-name.endpoint.js", fileName );
 		Assert.AreEqual( "custom-name.endpoint.js", (string)envelope["scriptFile"] );
@@ -61,9 +63,11 @@ public class SyncToolScriptFilesTests
 	[TestMethod]
 	public void SplitFallsBackToDefaultNameWhenLocalNameDoesNotFitTheRuntime()
 	{
+		var folder = NewFolder();
+		var envelopePath = Write( folder, "hello.endpoint.yml", Header + "runtime: javascript\nscriptFile: custom-name.endpoint.js\n" );
 		var data = new Dictionary<string, object> { ["runtime"] = "typescript", ["script"] = "export {};" };
 
-		var envelope = SyncToolConfig.SplitEndpointScript( "hello", data, "endpoints/hello.endpoint.yml", "custom-name.endpoint.js", out var fileName, out _ );
+		var envelope = SyncToolConfig.SplitEndpointScript( "hello", data, envelopePath, out var fileName, out _ );
 
 		Assert.AreEqual( "hello.endpoint.ts", fileName );
 		Assert.AreEqual( "hello.endpoint.ts", (string)envelope["scriptFile"] );

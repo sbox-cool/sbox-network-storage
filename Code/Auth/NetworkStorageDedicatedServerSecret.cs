@@ -208,8 +208,14 @@ public static partial class NetworkStorage
 
 	private static bool CanTransportDedicatedServerSecretSecurely()
 	{
-		return Uri.TryCreate( ApiRoot, UriKind.Absolute, out var uri ) &&
-			(string.Equals( uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase ) || uri.IsLoopback);
+		if ( !Uri.TryCreate( ApiRoot, UriKind.Absolute, out var uri ) )
+			return false;
+
+		if ( string.Equals( uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase ) )
+			return true;
+
+		// Plain http is allowed only to a loopback host. Any other scheme is refused, even when its host is loopback.
+		return string.Equals( uri.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase ) && uri.IsLoopback;
 	}
 
 }

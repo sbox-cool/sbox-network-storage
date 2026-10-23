@@ -93,7 +93,11 @@ public static partial class SyncToolConfig
 		if ( string.IsNullOrWhiteSpace( baseUrl ) || !Uri.TryCreate( baseUrl.Trim(), UriKind.Absolute, out var uri ) )
 			return false;
 
-		return uri.Scheme.Equals( "https", StringComparison.OrdinalIgnoreCase ) || uri.IsLoopback;
+		if ( uri.Scheme.Equals( "https", StringComparison.OrdinalIgnoreCase ) )
+			return true;
+
+		// Plain http is allowed only to a loopback host. Any other scheme is refused, even when its host is loopback.
+		return uri.Scheme.Equals( "http", StringComparison.OrdinalIgnoreCase ) && uri.IsLoopback;
 	}
 
 	public const string InsecureBaseUrlMessage = "Refusing to send the secret key: Base URL must use https:// (http:// is only allowed for localhost or a loopback address).";

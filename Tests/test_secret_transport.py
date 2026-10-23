@@ -35,6 +35,18 @@ class SecretTransportTests(unittest.TestCase):
             with self.subTest(base_url=base_url):
                 self.assertFalse(sync.secret_transport_allowed(base_url))
 
+    def test_non_http_schemes_are_refused_even_for_loopback_hosts(self):
+        # A loopback host alone is not enough: only plain http is allowed to loopback.
+        for base_url in [
+            "file:///tmp",
+            "file://localhost/tmp",
+            "ftp://localhost",
+            "ftp://localhost:21",
+            "ws://127.0.0.1:8080",
+        ]:
+            with self.subTest(base_url=base_url):
+                self.assertFalse(sync.secret_transport_allowed(base_url))
+
     def test_api_request_refuses_insecure_base_url_before_any_network_io(self):
         config = {
             "baseUrl": "http://api.example.com",
