@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "generatedAt": "2026-10-24T10:57:57.903Z",
+  "generatedAt": "2026-10-24T14:31:46.736Z",
   "library": {
     "published": {
       "revision": 427072,
@@ -61,10 +61,16 @@
       "url": "https://github.com/sbox-cool/sbox-network-storage-server/releases/tag/v0.5.6"
     },
     "main": {
-      "commit": "332c632d5a9bdf4269ca53fe70ce2abeb0ce1ff9",
-      "committedAt": "2026-10-24T10:29:57Z"
+      "commit": "01994503800aafec43bab1b74e392961eb1ec3c8",
+      "committedAt": "2026-10-24T11:15:15Z"
     },
     "pending": [
+      {
+        "number": 237,
+        "title": "Record 0.5.6 release source compatibility evidence",
+        "mergedAt": "2026-10-24T11:15:15Z",
+        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/237"
+      },
       {
         "number": 236,
         "title": "Prepare 0.5.6 security patch release",
