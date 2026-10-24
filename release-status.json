@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "generatedAt": "2026-10-24T05:52:00.958Z",
+  "generatedAt": "2026-10-24T10:57:57.903Z",
   "library": {
     "published": {
       "revision": 427072,
@@ -15,7 +15,7 @@
       "committedAt": "2026-10-23T23:39:00Z",
       "ci": {
         "conclusion": "success",
-        "runUrl": "https://github.com/sbox-cool/sbox-network-storage/actions/runs/40040854199",
+        "runUrl": "https://github.com/sbox-cool/sbox-network-storage/actions/runs/40080425757",
         "engine": "sbox-public@adc1e8a8378519518f92a695089d6a819fb964af"
       }
     },
@@ -56,196 +56,22 @@
   },
   "server": {
     "latestRelease": {
-      "version": "0.5.5",
-      "publishedAt": "2026-10-20T23:10:16Z",
-      "url": "https://github.com/sbox-cool/sbox-network-storage-server/releases/tag/v0.5.5"
+      "version": "0.5.6",
+      "publishedAt": "2026-10-24T10:53:45Z",
+      "url": "https://github.com/sbox-cool/sbox-network-storage-server/releases/tag/v0.5.6"
     },
     "main": {
-      "commit": "e5840ecf68f4bf2ee8cf8dde16cd6589931ef863",
-      "committedAt": "2026-10-24T04:39:29Z"
+      "commit": "332c632d5a9bdf4269ca53fe70ce2abeb0ce1ff9",
+      "committedAt": "2026-10-24T10:29:57Z"
     },
     "pending": [
       {
-        "number": 234,
-        "title": "Operations: inspect and rehearse native database backups safely",
-        "mergedAt": "2026-10-24T04:39:29Z",
-        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/234"
-      },
-      {
-        "number": 233,
-        "title": "CLI: preview database migrations without initializing runtime state",
-        "mergedAt": "2026-10-24T04:30:44Z",
-        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/233"
-      },
-      {
-        "number": 223,
-        "title": "Bump CodeQL init and analyze together to 4.39.0",
-        "mergedAt": "2026-10-24T04:05:13Z",
-        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/223"
-      },
-      {
-        "number": 229,
-        "title": "Add owner security controls",
-        "mergedAt": "2026-10-24T01:21:40Z",
-        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/229"
-      },
-      {
-        "number": 228,
-        "title": "fix: make manual updates and rollbacks instance-safe",
-        "mergedAt": "2026-10-24T00:50:02Z",
-        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/228"
-      },
-      {
-        "number": 226,
-        "title": "fix: serialize media quota accounting",
-        "mergedAt": "2026-10-24T00:43:56Z",
-        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/226"
-      },
-      {
-        "number": 227,
-        "title": "feat: configure trusted reverse proxies",
-        "mergedAt": "2026-10-24T00:39:16Z",
-        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/227"
-      },
-      {
-        "number": 225,
-        "title": "Bump AWSSDK.S3 from 3.7.305.10 to 4.0.104.6",
-        "mergedAt": "2026-10-23T23:57:55Z",
-        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/225"
-      },
-      {
-        "number": 221,
-        "title": "Delete complete project data, keys, and blobs with retryable cleanup",
-        "mergedAt": "2026-10-23T23:34:15Z",
-        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/221"
-      },
-      {
-        "number": 222,
-        "title": "Protect owner definitions and roll back failed module upgrades",
-        "mergedAt": "2026-10-23T23:03:14Z",
-        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/222"
-      },
-      {
-        "number": 220,
-        "title": "Fix local NAT64 fetch and mapped webhook destination checks",
-        "mergedAt": "2026-10-23T23:03:10Z",
-        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/220"
-      },
-      {
-        "number": 219,
-        "title": "Preserve literal record keys in script get/put/delete",
-        "mergedAt": "2026-10-23T23:03:05Z",
-        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/219"
-      },
-      {
-        "number": 218,
-        "title": "Restore legacy random-step weight and boundary rules",
-        "mergedAt": "2026-10-23T11:07:11Z",
-        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/218"
-      },
-      {
-        "number": 217,
-        "title": "Enforce indirect endpoint write blocks and fully remove module records",
-        "mergedAt": "2026-10-23T11:07:07Z",
-        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/217"
-      },
-      {
-        "number": 216,
-        "title": "Preserve arrays and sibling values in indexed record operations",
-        "mergedAt": "2026-10-23T11:07:03Z",
-        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/216"
-      },
-      {
-        "number": 210,
-        "title": "fix: include schema v5-v12 tables in ProjectSnapshotSchema and reverse deletion order",
-        "mergedAt": "2026-10-23T11:06:59Z",
-        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/210"
-      },
-      {
-        "number": 214,
-        "title": "fix: reject trailing newlines in validation patterns",
-        "mergedAt": "2026-10-23T10:59:15Z",
-        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/214"
-      },
-      {
-        "number": 215,
-        "title": "Protect runtime data and key directories on Windows and Unix",
-        "mergedAt": "2026-10-23T07:33:32Z",
-        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/215"
-      },
-      {
-        "number": 213,
-        "title": "Enforce disabled-key reads and operator-only MCP consent settings",
-        "mergedAt": "2026-10-23T07:25:11Z",
-        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/213"
-      },
-      {
-        "number": 204,
-        "title": "Keep analytics batches when one event is invalid; ASCII-only Steam ID digits",
-        "mergedAt": "2026-10-23T06:40:15Z",
-        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/204"
-      },
-      {
-        "number": 191,
-        "title": "docs: compact README, add docs index and CLI reference",
-        "mergedAt": "2026-10-23T06:40:11Z",
-        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/191"
-      },
-      {
-        "number": 190,
-        "title": "Purge expired media rows and unreferenced blobs (M5 retention sweeper)",
-        "mergedAt": "2026-10-23T06:40:06Z",
-        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/190"
-      },
-      {
-        "number": 189,
-        "title": "Allow dependent ns.fetch chains within one script pass",
-        "mergedAt": "2026-10-23T05:38:38Z",
-        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/189"
-      },
-      {
-        "number": 188,
-        "title": "sbox-cli-e2e: drive encryption switch through the management API for attached servers",
-        "mergedAt": "2026-10-22T10:58:21Z",
-        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/188"
-      },
-      {
-        "number": 187,
-        "title": "docs: record compat engine evidence for the review remediation (#182-#186)",
-        "mergedAt": "2026-10-22T10:21:45Z",
-        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/187"
-      },
-      {
-        "number": 186,
-        "title": "Make auth-session revocation immediate and durable",
-        "mergedAt": "2026-10-22T09:28:12Z",
-        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/186"
-      },
-      {
-        "number": 185,
-        "title": "Export and import media objects and their bytes",
-        "mergedAt": "2026-10-22T09:11:31Z",
-        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/185"
-      },
-      {
-        "number": 184,
-        "title": "Verify delegated client token before issuing or re-authenticating auth sessions",
-        "mergedAt": "2026-10-22T08:45:41Z",
-        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/184"
-      },
-      {
-        "number": 183,
-        "title": "Prevent duplicate external mutations on script reruns (#179)",
-        "mergedAt": "2026-10-22T08:21:03Z",
-        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/183"
-      },
-      {
-        "number": 182,
-        "title": "Accept chunked management mutation bodies (#181)",
-        "mergedAt": "2026-10-22T08:20:58Z",
-        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/182"
+        "number": 236,
+        "title": "Prepare 0.5.6 security patch release",
+        "mergedAt": "2026-10-24T10:29:58Z",
+        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/236"
       }
     ],
-    "pendingSince": "2026-10-22T08:20:58Z"
+    "pendingSince": "2026-10-24T10:29:58Z"
   }
 }
