@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "generatedAt": "2026-10-24T00:42:28.203Z",
+  "generatedAt": "2026-10-24T05:52:00.958Z",
   "library": {
     "published": {
       "revision": 427072,
@@ -61,10 +61,46 @@
       "url": "https://github.com/sbox-cool/sbox-network-storage-server/releases/tag/v0.5.5"
     },
     "main": {
-      "commit": "16a89aeef8dd14629dec51813fe8dc18c7e80502",
-      "committedAt": "2026-10-24T00:39:16Z"
+      "commit": "e5840ecf68f4bf2ee8cf8dde16cd6589931ef863",
+      "committedAt": "2026-10-24T04:39:29Z"
     },
     "pending": [
+      {
+        "number": 234,
+        "title": "Operations: inspect and rehearse native database backups safely",
+        "mergedAt": "2026-10-24T04:39:29Z",
+        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/234"
+      },
+      {
+        "number": 233,
+        "title": "CLI: preview database migrations without initializing runtime state",
+        "mergedAt": "2026-10-24T04:30:44Z",
+        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/233"
+      },
+      {
+        "number": 223,
+        "title": "Bump CodeQL init and analyze together to 4.39.0",
+        "mergedAt": "2026-10-24T04:05:13Z",
+        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/223"
+      },
+      {
+        "number": 229,
+        "title": "Add owner security controls",
+        "mergedAt": "2026-10-24T01:21:40Z",
+        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/229"
+      },
+      {
+        "number": 228,
+        "title": "fix: make manual updates and rollbacks instance-safe",
+        "mergedAt": "2026-10-24T00:50:02Z",
+        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/228"
+      },
+      {
+        "number": 226,
+        "title": "fix: serialize media quota accounting",
+        "mergedAt": "2026-10-24T00:43:56Z",
+        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/226"
+      },
       {
         "number": 227,
         "title": "feat: configure trusted reverse proxies",
