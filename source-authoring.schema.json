@@ -56,10 +56,11 @@
         "id": { "type": "string" },
         "type": {
           "type": "string",
+          "description": "Step type the backends execute. while, until, foreach, call, return, and return_on are not supported: use a condition with goto or return routes, or a workflow step.",
           "enum": [
             "read", "write", "delete", "transform", "condition", "assert", "lookup", "lookup_many", "filter", "workflow",
             "compute", "random", "random_select", "webhook", "response", "sleep", "object", "array", "merge",
-            "sort", "switch", "block", "while", "until", "foreach", "call", "return", "return_on"
+            "sort", "switch", "block"
           ]
         },
         "when": { "type": [ "object", "string" ] },

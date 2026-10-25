@@ -8,6 +8,8 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "Editor"))
 
 from source_compiler import (  # noqa: E402
+    CANONICAL_STEP_TYPES,
+    UNSUPPORTED_STEP_TYPES,
     compile_legacy_json,
     compile_path,
     compile_source_text,
@@ -79,87 +81,83 @@ response:
         self.assertEqual("internal", canonical["exposure"])
         self.assertEqual(250, compiled["executionPlan"]["budgetEstimate"]["maxSleepMs"])
 
-    def test_source_yaml_route_walk_uses_native_nodes(self):
-        path = ROOT / "Examples" / "SourceAuthoring" / "factory-route-walk.workflow.yml"
+    def test_unsupported_loop_example_is_rejected(self):
+        path = ROOT / "Examples" / "SourceAuthoring" / "Invalid" / "unsupported-loop-steps.workflow.yml"
         compiled = compile_path(path)
-        flat_types = json.dumps(compiled["executionPlan"])
+        flagged = [d for d in compiled["diagnostics"] if d["code"] == "INVALID_STEP_TYPE"]
 
-        self.assertTrue(compiled["ok"], compiled["diagnostics"])
-        self.assertIn('"while"', flat_types)
-        self.assertIn('"foreach"', flat_types)
-        self.assertIn('"return"', flat_types)
-        self.assertGreater(compiled["executionPlan"]["budgetEstimate"]["maxIterations"], 0)
+        self.assertFalse(compiled["ok"])
+        self.assertEqual(2, len(flagged), compiled["diagnostics"])
+        self.assertIn('"while"', flagged[0]["message"])
+        self.assertIn('"return"', flagged[1]["message"])
 
-        exported, diagnostics = export_legacy_json(compiled)
-        self.assertIsNone(exported)
-        self.assertEqual("JSON_EXPORT_UNSUPPORTED", diagnostics[0]["code"])
-
-    def test_canonical_control_flow_nodes_and_budget_failure(self):
+    def test_unsupported_control_flow_step_types_are_flagged(self):
         source = """
 sourceVersion: 1
 kind: workflow
 id: runtime-control-flow
 steps:
-  - id: guard_block
-    type: block
-    body:
-      - id: normalize
-        type: call
-        target: route.normalize
-        params:
-          routeId: "{{input.routeId}}"
-      - id: each_node
-        type: foreach
-        from: "{{normalize.nodes}}"
-        item: node
-        maxIterations: 5
-        body:
-          - id: usable
-            type: condition
-            field: "{{node.enabled}}"
-            operator: equals
-            value: true
-            then:
-              - id: write_node
-                type: write
-                collection: routes
-                ops:
-                  - op: set
-                    path: "{{node.id}}"
-                    value: "{{node}}"
-      - id: wait_for_ready
-        type: while
-        condition: "{{state.loading}}"
-        maxIterations: 3
-        body:
-          - id: poll_done
-            type: until
-            condition: "{{state.ready}}"
-            maxIterations: 2
-            body:
-              - id: done
-                type: return
-                value:
-                  ok: true
-                  source: runtime
+  - id: normalize
+    type: call
+    target: route.normalize
+  - id: each_node
+    type: foreach
+    from: "{{normalize.nodes}}"
+    item: node
+    maxIterations: 5
+    body: []
+  - id: wait_for_ready
+    type: while
+    condition: "{{state.loading}}"
+    maxIterations: 3
+    body: []
+  - id: poll_done
+    type: until
+    condition: "{{state.ready}}"
+    maxIterations: 2
+    body: []
+  - id: done
+    type: return
+    value:
+      ok: true
+  - id: done_on
+    type: return_on
+    value:
+      ok: true
 """
         compiled = compile_source_text(source, "workflows/runtime-control-flow.workflow.yml")
-        plan_json = json.dumps(compiled["executionPlan"])
+        flagged = [d for d in compiled["diagnostics"] if d["code"] == "INVALID_STEP_TYPE"]
 
-        self.assertTrue(compiled["ok"], compiled["diagnostics"])
-        for node_type in ("block", "call", "foreach", "condition", "write", "while", "until", "return"):
-            self.assertIn(f'"type": "{node_type}"', plan_json)
-        self.assertEqual(10, compiled["executionPlan"]["budgetEstimate"]["maxIterations"])
-        self.assertEqual(1, compiled["executionPlan"]["budgetEstimate"]["nestedCalls"])
+        self.assertFalse(compiled["ok"])
+        self.assertEqual(6, len(flagged))
+        for node_type in ("call", "foreach", "while", "until", "return", "return_on"):
+            self.assertTrue(any(f'"{node_type}"' in d["message"] for d in flagged), node_type)
 
-        over_budget = source.replace("maxIterations: 3", "maxIterations: 1200")
-        failed = compile_source_text(over_budget, "workflows/runtime-control-flow.workflow.yml")
+    def test_sleep_budget_failure_is_reported(self):
+        source = """
+sourceVersion: 1
+kind: workflow
+id: sleepy
+steps:
+  - id: pause
+    type: sleep
+    ms: 250
+"""
+        self.assertTrue(compile_source_text(source, "workflows/sleepy.workflow.yml")["ok"])
+        failed = compile_source_text(source, "workflows/sleepy.workflow.yml", budget_limits={"maxSleepMs": 100})
 
         self.assertFalse(failed["ok"])
         self.assertTrue(any(
-            d["code"] == "BUDGET_EXCEEDED" and d.get("budgetCategory") == "maxIterations"
+            d["code"] == "BUDGET_EXCEEDED" and d.get("budgetCategory") == "maxSleepMs"
             for d in failed["diagnostics"]
         ))
+
+    def test_schema_step_types_match_compiler_and_exclude_unsupported_types(self):
+        schema = json.loads((ROOT / "source-authoring.schema.json").read_text(encoding="utf-8"))
+        schema_types = set(schema["$defs"]["step"]["properties"]["type"]["enum"])
+
+        self.assertEqual(CANONICAL_STEP_TYPES, schema_types)
+        self.assertFalse(schema_types & UNSUPPORTED_STEP_TYPES)
 
     def test_invalid_yaml_anchor_rejected(self):
         path = ROOT / "Examples" / "SourceAuthoring" / "Invalid" / "unsupported-anchor.workflow.yml"
@@ -252,7 +250,7 @@ kind: workflow
 id: check
 steps:
   - id: ok
-    type: return
+    type: object
     value:
       ok: true
 """
