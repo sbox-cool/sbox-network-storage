@@ -108,10 +108,20 @@ rotate without a game update.
   ignored. With a pin, endpoint calls are refused with `ENCRYPTION_KEY_UNVERIFIED` until a config
   signed by that key loads.
 - **Without a pin**, the first signing key seen per API root is trusted and saved in the game's
-  data folder (`network-storage-signing-key-trust.json`). A later change warns and is refused with
-  `ENCRYPTION_SIGNING_KEY_CHANGED`; the last trusted config is kept. Verify the server out of band
-  before setting a new pin or resetting the trust store. Unpinned games that never receive a
-  trusted config stay on v1.
+  data folder (`network-storage-signing-key-trust.json`). A config signed by a different key is
+  refused with `ENCRYPTION_SIGNING_KEY_CHANGED`, and the last trusted config is kept. The one
+  exception is an announced rotation. The server signs a statement with the key it replaces, naming
+  the new key and an expiry, and carries the statements in the signed config (`signing.rotations`,
+  oldest first, at most 8). The library follows the chain from the trusted key to the config's key.
+  A statement that is malformed, not signed by the key it replaces, or expired at the config's
+  `generatedAt` is refused with `ENCRYPTION_SIGNING_KEY_ROTATION_INVALID`; the log names the reason.
+  Expiry uses the server-signed `generatedAt`, never the device clock. A game offline past a
+  statement's expiry stays refused until it resets the trust or ships a pin.
+- **Reset the trust** after verifying the server identity out of band with
+  `NetworkStorage.ResetSigningKeyTrust()`. It forgets the key trusted for the current API root and
+  makes the next call fetch the config again; that config is trusted on first use. Pins are not
+  changed, so a pinned game still refuses a different key.
+- Unpinned games that never receive a trusted config stay on v1.
   The trust store checks each saved entry on its own: an unusable entry is logged and skipped, and the others keep their trust. A trusted signing key may have any RSA modulus of at least 128 bytes (RSA-1024 and larger). Encryption v2 still requires RSA-2048 keys.
 - A config that fails verification refuses every endpoint call, plain or encrypted. Calling
   `Configure` with a different pin, base URL, API version or project drops the held config and
