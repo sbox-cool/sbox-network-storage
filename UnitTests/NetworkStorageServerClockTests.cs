@@ -101,10 +101,10 @@ public class NetworkStorageServerClockTests
 	{
 		var serverNow = DateTimeOffset.UtcNow.AddMinutes( 10 );
 
-		var body = await NetworkStorage.SendWithRetriesAsync( "GET", () => null,
+		var reply = await NetworkStorage.SendWithRetriesAsync( "GET", () => null,
 			_ => Task.FromResult( DateResponse( serverNow, age: false ) ) );
 
-		Assert.AreEqual( "{\"ok\":true,\"data\":{}}", body );
+		Assert.AreEqual( "{\"ok\":true,\"data\":{}}", reply.Body );
 		Assert.AreEqual( 600.0, ( NetworkStorage.ServerUtcNow - DateTimeOffset.UtcNow ).TotalSeconds, 3.0 );
 	}
 

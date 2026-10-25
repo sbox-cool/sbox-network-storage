@@ -1,4 +1,5 @@
 using System;
+using System.Net.Http;
 using System.Text.Json;
 using System.Threading.Tasks;
 
@@ -18,7 +19,11 @@ public static partial class NetworkStorage
 	private static async Task<JsonElement?> CallEndpointInternal( string slug, object input, bool allowSecurityRetry, bool allowClockRetry = true )
 	{
 		var endpoint = ResolveEndpointReference( slug );
-		ApplyEndpointReferenceConfiguration( endpoint );
+		if ( !ApplyEndpointReferenceConfiguration( endpoint ) )
+		{
+			RecordInvalidEndpoint( endpoint );
+			return null;
+		}
 		slug = endpoint.Slug;
 
 		EnsureConfigured();
@@ -49,18 +54,34 @@ public static partial class NetworkStorage
 			var hasDedicatedSecret = shouldUseDedicatedSecret && TryAddDedicatedServerSecretHeaders( headers, endpoint );
 			url = BuildUrl( securityRequest.RoutePath, hasDedicatedSecret );
 
-			string result;
-			requestStartedAt = RealTime.Now;
 			// Encrypted calls always POST: the envelope is the body, so a call without input still needs one.
-			if ( input is not null || securityRequest.Encrypted )
+			var usePost = input is not null || securityRequest.Encrypted;
+			// Each send attempt uses the request it was built for. Attempts after the first call Reseal(), so a retried
+			// encrypted request never reuses an encryptedRequestId the server may already have consumed.
+			var attempt = securityRequest;
+			var attempts = 0;
+			Func<HttpContent> createContent = null;
+			if ( usePost )
 			{
-				bodyJson = JsonSerializer.Serialize( securityRequest.Body );
-				if ( NetworkStorageLogConfig.LogRequests )
+				createContent = () =>
 				{
-					NetLog.Request( slug, $"POST {securityRequest.Mode} {bodyJson}" );
-					Log.Info( $"[NetworkStorage] {slug} request: POST {ApiRoot}{securityRequest.RouteLabel} mode={securityRequest.Mode} revision={NetworkStoragePackageInfo.RuntimeRevisionId?.ToString() ?? "unknown"} target={PublishTarget} body={bodyJson}" );
-				}
-				result = await RequestStringAsync(url, "POST", () => Http.CreateJsonContent( securityRequest.Body ), headers);
+					if ( attempts++ > 0 && attempt.Reseal is not null )
+						attempt = attempt.Reseal();
+					bodyJson = JsonSerializer.Serialize( attempt.Body );
+					if ( NetworkStorageLogConfig.LogRequests )
+					{
+						NetLog.Request( slug, $"POST {attempt.Mode} {bodyJson}" );
+						Log.Info( $"[NetworkStorage] {slug} request: POST {ApiRoot}{attempt.RouteLabel} mode={attempt.Mode} revision={NetworkStoragePackageInfo.RuntimeRevisionId?.ToString() ?? "unknown"} target={PublishTarget} body={bodyJson}" );
+					}
+					return Http.CreateJsonContent( attempt.Body );
+				};
+			}
+
+			requestStartedAt = RealTime.Now;
+			RawReply reply;
+			if ( usePost )
+			{
+				reply = await SendRawContentAsync( url, "POST", createContent, headers );
 			}
 			else
 			{
@@ -69,27 +90,36 @@ public static partial class NetworkStorage
 					NetLog.Request( slug, "GET" );
 					Log.Info( $"[NetworkStorage] {slug} request: GET {ApiRoot}/endpoints/{ProjectId}/{slug}" );
 				}
-				result = await RequestStringAsync(url, "GET", null, headers);
+				reply = await SendRawAsync( url, "GET", null, headers );
 			}
 
-			result = UnsealEndpointResponse( securityRequest.ResponseContext, slug, result );
-			if ( result is null )
-				return null;
-			if ( NetworkStorageLogConfig.LogResponses )
-				Log.Info( $"[NetworkStorage] {slug} → {result}" );
-			var parsed = ParseResponse( slug, result );
-			if ( parsed.HasValue )
+			var responseBody = reply.Body;
+			if ( reply.Ok )
 			{
-				NetworkStorageAnalyticsRuntime.RecordEndpointDiagnostic( slug, ok: true, elapsedMs: requestStartedAt > 0 ? (RealTime.Now - requestStartedAt) * 1000.0 : 0 );
+				responseBody = UnsealEndpointResponse( attempt.ResponseContext, slug, reply.Body );
+				if ( responseBody is null )
+					return null;
 				if ( NetworkStorageLogConfig.LogResponses )
-					NetLog.Response( slug, TruncateJson( parsed.Value ) );
-				return parsed;
+					Log.Info( $"[NetworkStorage] {slug} → {responseBody}" );
+				var parsed = ParseResponse( slug, responseBody );
+				if ( parsed.HasValue )
+				{
+					NetworkStorageAnalyticsRuntime.RecordEndpointDiagnostic( slug, ok: true, elapsedMs: requestStartedAt > 0 ? (RealTime.Now - requestStartedAt) * 1000.0 : 0 );
+					if ( NetworkStorageLogConfig.LogResponses )
+						NetLog.Response( slug, TruncateJson( parsed.Value ) );
+					return parsed;
+				}
+			}
+			else
+			{
+				RecordReplyFailure( slug, reply, "HTTP_ERROR" );
 			}
 
-			// Security mismatch: config was auto-updated by ParseResponse → LogServerError, retry once
-			if ( allowSecurityRetry && TryGetLastEndpointError( slug, out var code, out _ ) && IsSecurityConfigMismatchCode( code ) )
+			// A security refusal the server marks retrySafe was rejected before the handler ran. Rebuild once with the
+			// updated config. Any other refusal is final.
+			if ( allowSecurityRetry && responseBody is not null && IsRetrySafeSecurityRefusal( responseBody ) )
 			{
-				Log.Info( $"[NetworkStorage] {slug} security mismatch detected ({code}), retrying with updated config..." );
+				Log.Info( $"[NetworkStorage] {slug} security config refused ({ReadErrorCode( responseBody )}), retrying once with updated config..." );
 				await EnsureRuntimeSecurityConfigAsync( "security-retry", forceRefresh: true );
 				return await CallEndpointInternal( slug, input, allowSecurityRetry: false, allowClockRetry: allowClockRetry );
 			}
@@ -101,21 +131,6 @@ public static partial class NetworkStorage
 				return await CallEndpointInternal( slug, input, allowSecurityRetry, allowClockRetry: false );
 			}
 
-			return null;
-		}
-		catch ( System.Net.Http.HttpRequestException httpEx )
-		{
-			var status = httpEx.StatusCode.HasValue ? $"{(int)httpEx.StatusCode.Value} {httpEx.StatusCode.Value}" : "unknown";
-			if ( NetworkStorageLogConfig.LogErrors )
-			{
-				Log.Warning( $"[NetworkStorage] {slug} FAILED — HTTP {status}" );
-				Log.Warning( $"[NetworkStorage]   URL: {url ?? $"{ApiRoot}/endpoints/{ProjectId}/{slug}"}" );
-				Log.Warning( $"[NetworkStorage]   Method: {( input is not null ? "POST" : "GET" )}" );
-				if ( bodyJson != null )
-					Log.Warning( $"[NetworkStorage]   Body: {bodyJson}" );
-				NetLog.Error( slug, $"HTTP {status}" );
-			}
-			RecordEndpointError( slug, httpEx.StatusCode == System.Net.HttpStatusCode.TooManyRequests ? "RATE_LIMITED" : "HTTP_ERROR", $"HTTP {status}" );
 			return null;
 		}
 		catch ( Exception ex )

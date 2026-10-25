@@ -207,7 +207,7 @@ public static partial class NetworkStorage
 		if ( data.RevisionOutdated )
 		{
 			NetworkStoragePackageInfo.UpdateFromRevisionBlock( data );
-			OnRevisionOutdated?.Invoke( data );
+			InvokeSafely( OnRevisionOutdated, data, nameof( OnRevisionOutdated ) );
 		}
 	}
 }

@@ -54,11 +54,16 @@ public static partial class NetworkStorage
 				Log.Info( $"[NetworkStorage] {tag} request: GET {ApiRoot}{path}{suffix}" );
 			}
 
-			var raw = await RequestStringAsync(url, "GET", null, headers);
+			var reply = await SendRawAsync( url, "GET", null, headers );
 			if ( NetworkStorageLogConfig.LogResponses )
-				Log.Info( $"[NetworkStorage] {tag} → {TruncateJson( raw, 300 )}" );
+				Log.Info( $"[NetworkStorage] {tag} → HTTP {reply.Status} {TruncateJson( reply.Body ?? reply.TransportError ?? "", 300 )}" );
+			if ( !reply.Ok )
+			{
+				RecordReplyFailure( tag, reply, "REQUEST_FAILED" );
+				return null;
+			}
 
-			var parsed = ParseResponse( tag, raw );
+			var parsed = ParseResponse( tag, reply.Body );
 			if ( parsed.HasValue && NetworkStorageLogConfig.LogResponses )
 				NetLog.Response( tag, TruncateJson( parsed.Value ) );
 			return parsed;

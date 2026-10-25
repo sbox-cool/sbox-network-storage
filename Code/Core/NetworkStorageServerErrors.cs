@@ -16,21 +16,31 @@ public static partial class NetworkStorage
 		{
 			if ( err.ValueKind == JsonValueKind.Object )
 			{
-				code = err.TryGetProperty( "code", out var c ) ? c.GetString() ?? "UNKNOWN" : "UNKNOWN";
-				message = err.TryGetProperty( "message", out var m ) ? m.GetString() ?? "" : "";
-				authFailureKind = err.TryGetProperty( "authFailureKind", out var authKind )
-					? authKind.GetString() ?? ""
-					: "";
+				code = ReadStringProperty( err, "code" ) ?? "UNKNOWN";
+				message = ReadStringProperty( err, "message" ) ?? "";
+				authFailureKind = ReadStringProperty( err, "authFailureKind" ) ?? "";
 			}
 			else if ( err.ValueKind == JsonValueKind.String )
 			{
-				code = err.GetString() ?? "UNKNOWN";
+				// A bare string is the error code when it has code shape. Otherwise it is the message, under REQUEST_FAILED.
+				var text = err.GetString() ?? "";
+				if ( IsErrorCodeToken( text ) )
+				{
+					code = text;
+				}
+				else
+				{
+					code = "REQUEST_FAILED";
+					message = text;
+				}
 			}
 		}
 
-		// Top-level message (server copies error.message here for convenience)
-		if ( string.IsNullOrEmpty( message ) && json.TryGetProperty( "message", out var topMsg ) )
-			message = topMsg.GetString() ?? "";
+		// Top-level message, then detail (the server copies error.message here for convenience)
+		if ( string.IsNullOrEmpty( message ) )
+			message = ReadStringProperty( json, "message" ) ?? "";
+		if ( string.IsNullOrEmpty( message ) )
+			message = ReadStringProperty( json, "detail" ) ?? "";
 
 		if ( json.TryGetProperty( "status", out var statusProp ) && statusProp.ValueKind == JsonValueKind.Number )
 			statusProp.TryGetInt32( out statusCode );
@@ -43,24 +53,21 @@ public static partial class NetworkStorage
 
 		if ( IsSecurityConfigMismatchCode( code ) )
 		{
-			JsonElement expected = default;
+			var expected = default(JsonElement);
 			string expectedConfigVersion = null;
-			if ( err.ValueKind == JsonValueKind.Object )
+			if ( err.ValueKind == JsonValueKind.Object && err.TryGetProperty( "security", out var secObj ) && secObj.ValueKind == JsonValueKind.Object )
 			{
-				if ( err.TryGetProperty( "security", out var secObj ) )
-				{
-					if ( secObj.TryGetProperty( "configVersion", out var cv ) )
-						expectedConfigVersion = cv.GetString();
-					secObj.TryGetProperty( "expected", out expected );
-				}
-				if ( expected.ValueKind != JsonValueKind.Object )
-					err.TryGetProperty( "expected", out expected );
+				expectedConfigVersion = ReadStringProperty( secObj, "configVersion" );
+				if ( secObj.TryGetProperty( "expected", out var secExpected ) )
+					expected = secExpected;
 			}
-			if ( expected.ValueKind != JsonValueKind.Object && json.TryGetProperty( "security", out var topSec ) )
+			if ( expected.ValueKind != JsonValueKind.Object && err.ValueKind == JsonValueKind.Object && err.TryGetProperty( "expected", out var errExpected ) )
+				expected = errExpected;
+			if ( expected.ValueKind != JsonValueKind.Object && json.TryGetProperty( "security", out var topSec ) && topSec.ValueKind == JsonValueKind.Object )
 			{
-				if ( expectedConfigVersion == null && topSec.TryGetProperty( "configVersion", out var cv ) )
-					expectedConfigVersion = cv.GetString();
-				topSec.TryGetProperty( "expected", out expected );
+				expectedConfigVersion ??= ReadStringProperty( topSec, "configVersion" );
+				if ( topSec.TryGetProperty( "expected", out var topExpected ) )
+					expected = topExpected;
 			}
 			ApplyServerExpectedSecurityConfig( code, expected, expectedConfigVersion );
 		}
@@ -84,6 +91,12 @@ public static partial class NetworkStorage
 		ObserveServerUnixSeconds( serverTime, DateTimeOffset.UtcNow );
 		RecordEndpointError( slug, code, message, serverTime );
 	}
+
+	// Reads a string property. A missing property, a non-string value, or a non-object reads as null.
+	private static string ReadStringProperty( JsonElement obj, string property )
+		=> obj.ValueKind == JsonValueKind.Object && obj.TryGetProperty( property, out var value ) && value.ValueKind == JsonValueKind.String
+			? value.GetString()
+			: null;
 
 	private static bool IsExpectedStorageNotFound( string slug, string code, int statusCode, string message )
 	{

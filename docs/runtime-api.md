@@ -39,7 +39,7 @@ if ( result.HasValue )
 | `Configure(projectId, apiKey, ...)` | Set credentials once at startup. See [getting started](getting-started.md#configure). |
 | `IsConfigured` / `ApiRoot` | Whether `Configure` ran; the full API URL (`.../v3`, or `.../api` with `apiVersion` `api`). |
 | `CallEndpoint(slugOrUrl, input?)` | Call an endpoint by slug or dashboard URL. Returns `JsonElement?`. |
-| `TryGetLastEndpointError(...)` | The last error code and message for a call (endpoint slug, `storage` or `game-values`). |
+| `TryGetLastEndpointError(...)` | The last error code and message for a call. Keys: an endpoint slug, `storage`, `storage-save`, `storage-update`, `storage-delete`, `storage-records`, `storage-record-create`, `storage-record-delete`, `storage-record-rename`, `query:{id}`, `game-values`, `CAPABILITY_UNAVAILABLE`, `INVALID_QUERY`, `INVALID_ENDPOINT`. |
 | `GetGameValues()` | All game value groups and tables in one request. |
 | `GetDocument(collectionId, documentId?)` | Read a document; defaults to the current player's Steam ID. |
 | `SaveDocument` / `UpdateDocument` / `DeleteDocument` | Replace a document, apply `set`/`inc`/`push`/`pull`/`remove` operations, or delete one row. Public deletes need record deletes enabled on the server. |
@@ -48,13 +48,48 @@ if ( result.HasValue )
 | `NetworkStorageAnalytics.Warning/Error/SessionStart/SessionEnd` | Warnings, caught exceptions and session boundaries on the player timeline. |
 | `LibraryVersion` / `MinServerVersion` | Library SemVer (`1.2.0`) and the oldest supported self-hosted server (`0.4.0`, metadata only). |
 | `ServerVersion` / `LibraryStatus` / `OnLibraryStatusChanged` / `HasCapability(name)` | What the server reported; see [server compatibility](#server-compatibility-status). |
+| `SendAsync(NetworkStorageRequest)` | Send any `/v3` (or `api.root`) request and get a `NetworkStorageResult` back. Never throws; see [generic requests](#generic-requests). |
 
 ### Retries and errors
 
 Rate-limited calls (HTTP 429) are retried at most twice, with the total wait capped at 5 seconds,
-using the server's `Retry-After`. GET requests always retry; other methods only when the server
-marks the response `retrySafe`. A call that still fails is reported as `RATE_LIMITED` through
-`TryGetLastEndpointError`.
+using the server's `Retry-After` header, then `retryAfterSeconds`, then `retryAfterSec` in the body. GET requests
+always retry; other methods only when the server marks the response `retrySafe`. A GET that gets a 503 with
+`Retry-After` is retried the same way. A call that still fails is reported as `RATE_LIMITED` through `TryGetLastEndpointError`.
+
+Failed replies keep the server's error code. A JSON error code (`{"ok":false,"error":{"code":...}}`, or a bare
+`"error":"CODE"` string when the value is code-shaped) is reported as-is, with the server's message. A non-2xx
+reply without a JSON code is reported with the call's fallback code (`HTTP_ERROR` for endpoints, `REQUEST_FAILED`
+for storage, queries and game values; `NOT_FOUND` for a missing document), and the HTTP status appears in the
+message (for example `HTTP 413 RequestEntityTooLarge`). 429 without a code is `RATE_LIMITED`. Transport failures are `REQUEST_FAILED`.
+
+A document read returns the stored JSON exactly as saved, including top-level arrays and keys named `ok`, `body`
+or `error`. An endpoint reply is unwrapped to its `body` only when it has `ok: true` and a `timing` object.
+
+A security refusal (`SECURITY_*`) is retried once after a config refresh only when the server marks it `retrySafe: true`.
+
+Storage writes send `x-ns-write-mode` (`replace` for `SaveDocument`, `ops` for `UpdateDocument`) so the server does not
+infer the mode from the body. Every non-GET storage or `SendAsync` request sends an `Idempotency-Key` that is reused
+across retries of the same logical call; every request sends an `X-Correlation-ID`.
+
+A listener on a library event that throws is logged; the throw does not reach the request that raised the event. Later
+listeners on the same event are skipped, so keep listeners small.
+
+### Generic requests
+
+`NetworkStorage.SendAsync(new NetworkStorageRequest { ... })` sends one request to the storage API and returns a
+`NetworkStorageResult` (`Ok`, `Status`, `Code`, `Message`, `Body`, `RetryAfterSeconds`, `RequestId`). It never throws.
+
+- `Method`: `GET` (default), `POST`, `PUT`, `PATCH` or `DELETE`. `Path` starts with `/`, for example `/storage/{collection}`.
+- `Query`: extra query parameters. `apiKey`, `revisionTarget`, `includeStaged` and `secret` are reserved.
+- `Body`: JSON-serialised body for non-GET requests.
+- `Auth`: `Player` (default; the signed-in player's token), `Public` (project key only) or `DedicatedSecret` (dedicated server secret).
+- `IdempotencyKey`: optional, 1 to 128 visible characters; generated when omitted.
+- `UseServerRoot`: send to the server's `api.root` (path only, from server info) instead of the `ApiRoot` URL.
+
+Refusals before a request is sent use codes `INVALID_REQUEST`, `INVALID_METHOD`, `INVALID_PATH`, `NOT_CONFIGURED`,
+`API_ROOT_UNAVAILABLE`, `DEDICATED_SECRET_REQUIRED` and `DEDICATED_SECRET_UNAVAILABLE`. `/endpoints/...` is refused
+with `USE_CALL_ENDPOINT`; use `CallEndpoint`. `/manage/...` is refused with `UNSUPPORTED_PATH`.
 
 Calls through the host (proxy mode) wait at most 30 seconds for the host's reply. A timeout is reported as `PROXY_TIMEOUT`; any other proxy failure, including the host changing or disconnecting while the call is in flight, is reported as `PROXY_FAILED`.
 

@@ -57,17 +57,18 @@ public static partial class NetworkStorage
 		};
 	}
 
-	private static void ApplyEndpointReferenceConfiguration( EndpointReference endpoint )
+	// False when the reference has no endpoint slug. The caller records INVALID_ENDPOINT; nothing is thrown to game code.
+	private static bool ApplyEndpointReferenceConfiguration( EndpointReference endpoint )
 	{
-		if ( endpoint?.IsUrl != true ) return;
+		if ( endpoint is null || string.IsNullOrWhiteSpace( endpoint.Slug ) )
+			return false;
 
-		if ( string.IsNullOrWhiteSpace( endpoint.Slug ) )
-			throw new ArgumentException( "Endpoint URL must include a slug after /endpoints/{projectId}/{slug}, or a slug query parameter." );
+		if ( endpoint.IsUrl != true ) return true;
 
 		if ( !IsConfigured && !string.IsNullOrWhiteSpace( endpoint.ProjectId ) && !string.IsNullOrWhiteSpace( endpoint.PublicApiKey ) )
 		{
 			Configure( endpoint.ProjectId, endpoint.PublicApiKey, endpoint.BaseUrl, endpoint.ApiVersion );
-			return;
+			return true;
 		}
 
 		if ( IsConfigured && !string.IsNullOrWhiteSpace( endpoint.ProjectId ) &&
@@ -75,6 +76,13 @@ public static partial class NetworkStorage
 		{
 			Log.Warning( "[NetworkStorage] Endpoint URL project id differs from configured project id; using configured credentials." );
 		}
+
+		return true;
+	}
+
+	private static void RecordInvalidEndpoint( EndpointReference endpoint )
+	{
+		RecordEndpointError( endpoint?.Raw, "INVALID_ENDPOINT", "Endpoint reference needs a slug: a slug, an /endpoints/{projectId}/{slug} URL, or a slug query parameter." );
 	}
 
 	private static Dictionary<string, string> ParseQueryString( string query )
