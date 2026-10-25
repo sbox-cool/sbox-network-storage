@@ -350,4 +350,29 @@ public class SyncToolScriptFilesTests
 		Assert.IsFalse( stripped.TryGetProperty( "scriptFile", out _ ) );
 		Assert.AreEqual( "javascript", stripped.GetProperty( "runtime" ).GetString() );
 	}
+
+	[TestMethod]
+	public void SourceLoaderKeepsCaseVariantNestedKeys()
+	{
+		var folder = NewFolder();
+		try
+		{
+			var yaml = Write( folder, "casekeys.collection.yml",
+				"sourceVersion: 1\nKind: collection\nid: casekeys\nschema:\n  Foo:\n    type: number\n  foo:\n    type: string\n" );
+			var json = Write( folder, "casekeys.json",
+				"{\"sourceVersion\":1,\"KIND\":\"collection\",\"id\":\"casekeys\",\"schema\":{\"Foo\":{\"type\":\"number\"},\"foo\":{\"type\":\"string\"}}}" );
+
+			foreach ( var path in new[] { yaml, json } )
+			{
+				Assert.IsTrue( SyncToolConfig.TryLoadSourceCanonicalResource( "collection", path, out var resource ), path );
+				var schema = resource.GetProperty( "schema" );
+				Assert.AreEqual( "number", schema.GetProperty( "Foo" ).GetProperty( "type" ).GetString(), path );
+				Assert.AreEqual( "string", schema.GetProperty( "foo" ).GetProperty( "type" ).GetString(), path );
+			}
+		}
+		finally
+		{
+			Directory.Delete( folder, true );
+		}
+	}
 }
