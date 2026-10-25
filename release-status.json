@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "generatedAt": "2026-10-24T23:12:48.411Z",
+  "generatedAt": "2026-10-25T01:10:22.074Z",
   "library": {
     "published": {
       "revision": 427072,
@@ -56,28 +56,28 @@
   },
   "server": {
     "latestRelease": {
-      "version": "0.5.6",
-      "publishedAt": "2026-10-24T10:53:45Z",
-      "url": "https://github.com/sbox-cool/sbox-network-storage-server/releases/tag/v0.5.6"
+      "version": "0.5.7",
+      "publishedAt": "2026-10-24T23:49:57Z",
+      "url": "https://github.com/sbox-cool/sbox-network-storage-server/releases/tag/v0.5.7"
     },
     "main": {
-      "commit": "01994503800aafec43bab1b74e392961eb1ec3c8",
-      "committedAt": "2026-10-24T11:15:15Z"
+      "commit": "6c9fe89c75e674f1b0c8179d6358fa16d830b81d",
+      "committedAt": "2026-10-25T00:23:12Z"
     },
     "pending": [
       {
-        "number": 237,
-        "title": "Record 0.5.6 release source compatibility evidence",
-        "mergedAt": "2026-10-24T11:15:15Z",
-        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/237"
+        "number": 239,
+        "title": "Record tagged 0.5.7 engine evidence",
+        "mergedAt": "2026-10-25T00:23:13Z",
+        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/239"
       },
       {
-        "number": 236,
-        "title": "Prepare 0.5.6 security patch release",
-        "mergedAt": "2026-10-24T10:29:58Z",
-        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/236"
+        "number": 238,
+        "title": "Record 0.5.7 maintenance release source engine evidence",
+        "mergedAt": "2026-10-24T23:19:04Z",
+        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/238"
       }
     ],
-    "pendingSince": "2026-10-24T10:29:58Z"
+    "pendingSince": "2026-10-24T23:19:04Z"
   }
 }
