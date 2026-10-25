@@ -102,6 +102,29 @@ public static partial class SyncToolConfig
 
 	public const string InsecureBaseUrlMessage = "Refusing to send the secret key: Base URL must use https:// (http:// is only allowed for localhost or a loopback address).";
 
+	/// <summary>
+	/// Whether s&amp;box game code may reach the server, from the engine's own rule (Http.IsAllowed); the same check the
+	/// MCP tools report as httpAllowed. Null when the URL cannot be built or the check fails. The Sync Tool itself is not
+	/// restricted by this. See server docs/client-setup.md "Client reachability".
+	/// </summary>
+	public static bool? IsGameClientReachable( string baseUrl, string apiVersion )
+	{
+		if ( string.IsNullOrWhiteSpace( baseUrl ) )
+			return null;
+
+		try
+		{
+			return Http.IsAllowed( new Uri( $"{baseUrl.Trim().TrimEnd( '/' )}/{apiVersion}/server-info" ) );
+		}
+		catch ( Exception )
+		{
+			return null;
+		}
+	}
+
+	public const string GameClientUnreachableLine1 = "Sync Tool still works, but game code cannot reach this Base URL.";
+	public const string GameClientUnreachableLine2 = "Game calls fail with 'Access ... is not allowed'. Use a domain, or localhost on port 8080.";
+
 	public static bool IsFullyConfigured => IsValid;
 
 	// ── Paths ──

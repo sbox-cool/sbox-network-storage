@@ -28,6 +28,10 @@ Changing the publish target (Live or Next) regenerates the game's generated code
 
 The secret key is sent only to an `https://` Base URL, or to `http://localhost` or a loopback address such as `http://127.0.0.1:5000`. Any other Base URL is refused before a request is made, and Setup shows a warning. Redirects are not followed, so the key is never replayed to another host.
 
+## Game reachability
+
+Setup and the Sync Tool header warn when s&box game code cannot reach the Base URL. The check uses the engine's own rule, so it matches what game calls can do. The warning never blocks anything: the Sync Tool still works, but game calls fail with `Access ... is not allowed`. Use a domain on any port, or localhost on port 80, 443, 8080 or 8443. IP-literal hosts are refused.
+
 ## Source files
 
 ```text
