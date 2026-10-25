@@ -9,8 +9,9 @@ namespace Sandbox;
 /// Bridges NetworkStorage proxy delegates to s&amp;box RPCs.
 ///
 /// When proxy mode is enabled (Editor → Network Storage → Settings):
-/// - Non-host clients route API calls through this component via [Rpc.Broadcast]
-/// - The host receives the request, calls CallEndpointAs / GetDocumentAs, and sends the result back
+/// - Non-host clients send API calls through this component as [Rpc.Host] requests, which reach only the host
+/// - The host rejects a request unless its SteamID matches the sending connection, then calls ReadEndpointAs / ReadDocumentAs
+/// - The host sends each reply as an envelope to the requesting connection only (Rpc.FilterInclude), and the client accepts it only from the host it asked
 /// - The client awaits the result via a TaskCompletionSource keyed by request ID
 ///
 /// Security: The client's auth token is forwarded to the host, which includes it in the
@@ -126,26 +127,50 @@ public sealed class NetworkStorageProxyComponent : Component
 
 	// ── RPCs: client → host (request) ──
 
-	[Rpc.Broadcast]
+	// [Rpc.Host] delivers the request only to the host, so the client token and request never reach other peers.
+	[Rpc.Host]
 	private void RpcRequestEndpoint( string requestId, string steamId, string clientToken, string slug, string inputJson )
 	{
 		// Only the host processes proxy requests
 		if ( !Networking.IsHost ) return;
 
-		_ = HandleEndpointRequest( requestId, steamId, clientToken, slug, inputJson );
+		// Rpc.Caller is only valid during this call, so read it before any await.
+		var caller = Rpc.Caller;
+		if ( !IsFromCaller( steamId, caller ) )
+		{
+			RejectRequest( caller, requestId, NetworkStorageProxyEnvelope.EndpointKind, steamId );
+			return;
+		}
+
+		_ = HandleEndpointRequest( caller, requestId, steamId, clientToken, slug, inputJson );
 	}
 
-	[Rpc.Broadcast]
+	[Rpc.Host]
 	private void RpcRequestDocument( string requestId, string steamId, string clientToken, string collectionId, string documentId )
 	{
 		if ( !Networking.IsHost ) return;
 
-		_ = HandleDocumentRequest( requestId, steamId, clientToken, collectionId, documentId );
+		var caller = Rpc.Caller;
+		if ( !IsFromCaller( steamId, caller ) )
+		{
+			RejectRequest( caller, requestId, NetworkStorageProxyEnvelope.DocumentKind, steamId );
+			return;
+		}
+
+		_ = HandleDocumentRequest( caller, requestId, steamId, clientToken, collectionId, documentId );
 	}
+
+	/// <summary>True when the request's claimed SteamID is the SteamID of the connection that sent it.</summary>
+	private static bool IsFromCaller( string steamId, Connection caller )
+		=> caller is not null && SteamIdMatches( steamId, caller.SteamId.ToString() );
+
+	/// <summary>Compares a request's claimed SteamID with its sender's. An empty claim never matches.</summary>
+	internal static bool SteamIdMatches( string requestSteamId, string callerSteamId )
+		=> !string.IsNullOrEmpty( requestSteamId ) && requestSteamId == callerSteamId;
 
 	// ── Host-side: process and respond ──
 
-	private async Task HandleEndpointRequest( string requestId, string steamId, string clientToken, string slug, string inputJson )
+	private async Task HandleEndpointRequest( Connection caller, string requestId, string steamId, string clientToken, string slug, string inputJson )
 	{
 		if ( NetworkStorageLogConfig.LogProxy )
 			Log.Info( $"[NSProxy] Host processing endpoint: {slug} for {steamId} (req={requestId})" );
@@ -156,68 +181,76 @@ public sealed class NetworkStorageProxyComponent : Component
 			if ( !string.IsNullOrEmpty( inputJson ) )
 				input = JsonSerializer.Deserialize<JsonElement>( inputJson );
 
-			var result = await NetworkStorage.CallEndpointAs( steamId, clientToken, slug, input );
-			var resultJson = result.HasValue ? result.Value.ToString() : CreateEndpointErrorJson( slug );
+			var read = await NetworkStorage.ReadEndpointAs( steamId, clientToken, slug, input );
+			var envelope = read.Body is not null
+				? NetworkStorageProxyEnvelope.Success( NetworkStorageProxyEnvelope.EndpointKind, read.Body )
+				: NetworkStorageProxyEnvelope.Failure( NetworkStorageProxyEnvelope.EndpointKind, read.ErrorCode ?? "PROXY_FAILED", read.ErrorMessage ?? "Host returned no result." );
 
-			RpcRespondToClient( requestId, resultJson );
+			RespondToCaller( caller, requestId, envelope );
 		}
 		catch ( Exception ex )
 		{
 			if ( NetworkStorageLogConfig.LogErrors )
 				Log.Warning( $"[NSProxy] Host endpoint error: {slug} for {steamId} — {ex.Message}" );
-			RpcRespondToClient( requestId, "" );
+			RespondToCaller( caller, requestId, NetworkStorageProxyEnvelope.Failure( NetworkStorageProxyEnvelope.EndpointKind, "PROXY_FAILED", "The host could not process the request." ) );
 		}
 	}
 
-	private async Task HandleDocumentRequest( string requestId, string steamId, string clientToken, string collectionId, string documentId )
+	private async Task HandleDocumentRequest( Connection caller, string requestId, string steamId, string clientToken, string collectionId, string documentId )
 	{
 		if ( NetworkStorageLogConfig.LogProxy )
 			Log.Info( $"[NSProxy] Host processing document: {collectionId}/{documentId} for {steamId} (req={requestId})" );
 
 		try
 		{
-			var result = await NetworkStorage.GetDocumentAs( steamId, clientToken, collectionId, documentId );
-			var resultJson = result.HasValue ? result.Value.ToString() : "";
+			var read = await NetworkStorage.ReadDocumentAs( steamId, clientToken, collectionId, documentId );
+			var envelope = read.DocumentJson is not null
+				? NetworkStorageProxyEnvelope.Success( NetworkStorageProxyEnvelope.DocumentKind, read.DocumentJson )
+				: NetworkStorageProxyEnvelope.Failure( NetworkStorageProxyEnvelope.DocumentKind, read.ErrorCode ?? "PROXY_FAILED", read.ErrorMessage ?? "Host returned no document." );
 
-			RpcRespondToClient( requestId, resultJson );
+			RespondToCaller( caller, requestId, envelope );
 		}
 		catch ( Exception ex )
 		{
 			if ( NetworkStorageLogConfig.LogErrors )
 				Log.Warning( $"[NSProxy] Host document error: {collectionId}/{documentId} for {steamId} — {ex.Message}" );
-			RpcRespondToClient( requestId, "" );
+			RespondToCaller( caller, requestId, NetworkStorageProxyEnvelope.Failure( NetworkStorageProxyEnvelope.DocumentKind, "PROXY_FAILED", "The host could not process the request." ) );
 		}
+	}
+
+	/// <summary>Refuses a request whose claimed SteamID does not match its sender, and tells that sender why.</summary>
+	private void RejectRequest( Connection caller, string requestId, string kind, string steamId )
+	{
+		if ( NetworkStorageLogConfig.LogErrors )
+			Log.Warning( $"[NSProxy] Rejected {kind} request {requestId}: claimed steamId {steamId} does not match its sender." );
+		RespondToCaller( caller, requestId, NetworkStorageProxyEnvelope.Failure( kind, "PROXY_REJECTED", "The request's steamId does not match the sending connection." ) );
 	}
 
 	// ── RPC: host → client (response) ──
 
-	private static string CreateEndpointErrorJson( string slug )
+	/// <summary>Sends an envelope to the requesting connection only. With no known caller the reply is dropped and the requester times out.</summary>
+	private void RespondToCaller( Connection caller, string requestId, string envelope )
 	{
-		if ( !NetworkStorage.TryGetLastEndpointError( slug, out var code, out var message ) )
-			return "";
+		if ( caller is null ) return;
 
-		// The server clock lets the calling client correct a stale request id; absent when the refusal carried none.
-		var serverTime = NetworkStorage.LastEndpointServerTime( slug );
-		return JsonSerializer.Serialize( new
+		using ( Rpc.FilterInclude( caller ) )
 		{
-			ok = false,
-			error = serverTime > 0
-				? (object)new { code, message, serverTime }
-				: new { code, message }
-		} );
+			RpcRespondToClient( requestId, envelope );
+		}
 	}
 
+	// Broadcast so the host can address it with Rpc.FilterInclude; the host's filter limits recipients to the requester.
 	[Rpc.Broadcast]
-	private void RpcRespondToClient( string requestId, string resultJson )
+	private void RpcRespondToClient( string requestId, string envelope )
 	{
-		// All clients receive this, but only the one with the matching pending request processes it
 		lock ( _pending )
 		{
-			if ( _pending.TryGetValue( requestId, out var pending ) )
-			{
-				var response = string.IsNullOrEmpty( resultJson ) ? null : resultJson;
-				pending.Reply.TrySetResult( response );
-			}
+			if ( !_pending.TryGetValue( requestId, out var pending ) ) return;
+
+			// Only the host this request was sent to may answer it.
+			if ( pending.Host.Id != Rpc.CallerId ) return;
+
+			pending.Reply.TrySetResult( envelope );
 		}
 	}
 }

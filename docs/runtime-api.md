@@ -93,7 +93,7 @@ with `USE_CALL_ENDPOINT`; use `CallEndpoint`. `/manage/...` is refused with `UNS
 These checks also apply to percent-encoded route segments. Dot segments and encoded
 separators, queries, fragments or control characters are refused with `INVALID_PATH`.
 
-Calls through the host (proxy mode) wait at most 30 seconds for the host's reply. A timeout is reported as `PROXY_TIMEOUT`; any other proxy failure, including the host changing or disconnecting while the call is in flight, is reported as `PROXY_FAILED`.
+Calls through the host (proxy mode) wait at most 30 seconds for the host's reply. A timeout is reported as `PROXY_TIMEOUT`. `PROXY_FAILED` means the host could not answer: it returned nothing, replied in a format this game build does not understand, or failed while handling the call. Endpoint and document calls relay the server's own error code and message through the host (for example `NOT_FOUND` or `HTTP_ERROR`), so games see the same codes as in direct mode. A host that refuses a request whose claimed Steam ID does not match the sending connection reports `PROXY_REJECTED`. Document reads through the host return the stored JSON unchanged. Proxy requests are sent only to the host and replies only to the requesting player; game builds older than this release still broadcast requests to every player.
 
 ### Analytics batching
 
