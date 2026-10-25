@@ -220,7 +220,7 @@ public static partial class NetworkStorage
 	{
 		await _serverInfoTask;
 		if ( HasCapability( capability ) ) return true;
-		RecordEndpointError( operation, "CAPABILITY_UNAVAILABLE",
+		RecordEndpointErrorUnderCode( operation, "CAPABILITY_UNAVAILABLE",
 			$"Server {ServerVersion ?? "unknown"} does not advertise '{capability}'. Update the server to use this feature." );
 		return false;
 	}

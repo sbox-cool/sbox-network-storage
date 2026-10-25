@@ -145,6 +145,22 @@ public static partial class NetworkStorage
 		NetworkStorageAnalyticsRuntime.RecordEndpointDiagnostic( slug, ok: false, code: safeCode, message: safeMessage );
 	}
 
+	/// <summary>
+	/// Records a validation error under the call's key and under its code (<c>INVALID_ENDPOINT</c>, <c>INVALID_QUERY</c>,
+	/// <c>CAPABILITY_UNAVAILABLE</c>), so a call without a usable key, such as a blank endpoint reference, stays readable.
+	/// </summary>
+	private static void RecordEndpointErrorUnderCode( string slug, string code, string message )
+	{
+		if ( string.IsNullOrWhiteSpace( slug ) )
+		{
+			RecordEndpointError( code, code, message );
+			return;
+		}
+
+		RecordEndpointError( slug, code, message );
+		_lastEndpointErrors[code] = new EndpointErrorInfo { Code = code, Message = message ?? "" };
+	}
+
 	private sealed class EndpointErrorInfo
 	{
 		public string Code { get; init; }

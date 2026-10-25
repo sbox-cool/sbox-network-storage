@@ -120,4 +120,17 @@ public class NetworkStorageHardeningTests
 			NetworkStorageLogConfig.LogErrors = logErrors;
 		}
 	}
+
+	[TestMethod]
+	public async Task CallEndpoint_InvalidReferenceIsReadableUnderItsCode()
+	{
+		Assert.IsNull( await NetworkStorage.CallEndpoint( "" ) );
+		Assert.IsTrue( NetworkStorage.TryGetLastEndpointError( "INVALID_ENDPOINT", out var code, out _ ) );
+		Assert.AreEqual( "INVALID_ENDPOINT", code );
+
+		const string dashboardUrl = "https://sboxcool.com/dashboard/projects/proj_x/endpoints/";
+		Assert.IsNull( await NetworkStorage.CallEndpoint( dashboardUrl ) );
+		Assert.IsTrue( NetworkStorage.TryGetLastEndpointError( dashboardUrl, out code, out _ ) );
+		Assert.AreEqual( "INVALID_ENDPOINT", code );
+	}
 }

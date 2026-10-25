@@ -82,7 +82,7 @@ public static partial class NetworkStorage
 
 	private static void RecordInvalidEndpoint( EndpointReference endpoint )
 	{
-		RecordEndpointError( endpoint?.Raw, "INVALID_ENDPOINT", "Endpoint reference needs a slug: a slug, an /endpoints/{projectId}/{slug} URL, or a slug query parameter." );
+		RecordEndpointErrorUnderCode( endpoint?.Raw, "INVALID_ENDPOINT", "Endpoint reference needs a slug: a slug, an /endpoints/{projectId}/{slug} URL, or a slug query parameter." );
 	}
 
 	private static Dictionary<string, string> ParseQueryString( string query )

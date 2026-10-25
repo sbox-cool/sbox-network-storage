@@ -22,7 +22,7 @@ public static partial class NetworkStorage
 
 		if ( string.IsNullOrWhiteSpace( queryId ) )
 		{
-			RecordEndpointError( "query", "INVALID_QUERY", "queryId is required." );
+			RecordEndpointErrorUnderCode( "query", "INVALID_QUERY", "queryId is required." );
 			return null;
 		}
 

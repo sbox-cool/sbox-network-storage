@@ -39,7 +39,7 @@ if ( result.HasValue )
 | `Configure(projectId, apiKey, ...)` | Set credentials once at startup. See [getting started](getting-started.md#configure). |
 | `IsConfigured` / `ApiRoot` | Whether `Configure` ran; the full API URL (`.../v3`, or `.../api` with `apiVersion` `api`). |
 | `CallEndpoint(slugOrUrl, input?)` | Call an endpoint by slug or dashboard URL. Returns `JsonElement?`. |
-| `TryGetLastEndpointError(...)` | The last error code and message for a call. Keys: an endpoint slug, `storage`, `storage-save`, `storage-update`, `storage-delete`, `storage-records`, `storage-record-create`, `storage-record-delete`, `storage-record-rename`, `query:{id}`, `game-values`, `CAPABILITY_UNAVAILABLE`, `INVALID_QUERY`, `INVALID_ENDPOINT`. |
+| `TryGetLastEndpointError(...)` | The last error code and message for a call. Keys: an endpoint slug, `storage`, `storage-save`, `storage-update`, `storage-delete`, `storage-records`, `storage-record-create`, `storage-record-delete`, `storage-record-rename`, `query`, `query:{id}`, `game-values`. `INVALID_ENDPOINT`, `INVALID_QUERY` and `CAPABILITY_UNAVAILABLE` are also keys holding the latest error with that code, so a blank endpoint reference or query id stays readable. |
 | `GetGameValues()` | All game value groups and tables in one request. |
 | `GetDocument(collectionId, documentId?)` | Read a document; defaults to the current player's Steam ID. |
 | `SaveDocument` / `UpdateDocument` / `DeleteDocument` | Replace a document, apply `set`/`inc`/`push`/`pull`/`remove` operations, or delete one row. Public deletes need record deletes enabled on the server. |
