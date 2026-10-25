@@ -196,14 +196,14 @@ public sealed class NetworkStorageProxyComponent : Component
 		if ( !NetworkStorage.TryGetLastEndpointError( slug, out var code, out var message ) )
 			return "";
 
+		// The server clock lets the calling client correct a stale request id; absent when the refusal carried none.
+		var serverTime = NetworkStorage.LastEndpointServerTime( slug );
 		return JsonSerializer.Serialize( new
 		{
 			ok = false,
-			error = new
-			{
-				code,
-				message
-			}
+			error = serverTime > 0
+				? (object)new { code, message, serverTime }
+				: new { code, message }
 		} );
 	}
 
