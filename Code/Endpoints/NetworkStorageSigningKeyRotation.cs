@@ -28,17 +28,38 @@ public static partial class NetworkStorage
 		if ( !DateTimeOffset.TryParse( ReadString( config, "generatedAt" ), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var generatedAt ) )
 			return RotationRefusal( "the security config has no valid generatedAt" );
 
+		// A chain can start before the trusted key: a client that took K1 meets K0->K1 and K1->K2 when K1->K2 is added.
+		// Statements before the trusted key are not on its path to the config key; they are skipped, not trusted.
 		var current = trusted;
+		var following = false;
 		foreach ( var statement in rotations.EnumerateArray() )
 		{
+			if ( !following )
+			{
+				if ( !StatementFollows( statement, current ) )
+					continue;
+
+				following = true;
+			}
+
 			if ( !TryFollowRotation( statement, current, generatedAt, out var next, out var reason ) )
 				return RotationRefusal( reason );
 			current = next;
 		}
 
+		if ( !following )
+			return RotationRefusal( "no statement follows the trusted key" );
+
 		return current.Fingerprint == embedded.Fingerprint
 			? null
 			: RotationRefusal( "the statements do not end at the security config's signing key" );
+	}
+
+	// True when the statement is the one that leaves `current`.
+	private static bool StatementFollows( JsonElement statement, TrustedSigningKey current )
+	{
+		return statement.ValueKind == JsonValueKind.Object
+			&& string.Equals( NormalizeSecurityKeyFingerprint( ReadString( statement, "previousFingerprint" ) ), current.Fingerprint, StringComparison.Ordinal );
 	}
 
 	// Checks one statement against the key it must follow: its previous fingerprint, the next key it names, expiry at the

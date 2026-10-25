@@ -101,6 +101,22 @@ public class NetworkStorageSigningKeyRotationTests
 	}
 
 	[TestMethod]
+	public void ClientThatAlreadyFollowedAnEarlierRotationStillFollowsTheChain()
+	{
+		// A client that trusts B after K0->B was announced meets the longer chain K0->B, B->C.
+		var a = new Signer();
+		var b = new Signer();
+		var c = new Signer();
+		var rotations = new List<object>
+		{
+			Sealed( Link( a, b, GeneratedAt.AddDays( 1 ) ), a ),
+			Sealed( Link( b, c, GeneratedAt.AddDays( 1 ) ), b ),
+		};
+
+		Assert.IsNull( NetworkStorage.FollowSigningKeyRotations( ConfigFor( c, Iso( GeneratedAt ), rotations ), b.Trusted, c.Trusted ) );
+	}
+
+	[TestMethod]
 	public void ChainThatStopsBeforeConfigKeyIsRejected()
 	{
 		var a = new Signer();
