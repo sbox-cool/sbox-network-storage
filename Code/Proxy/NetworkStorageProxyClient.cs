@@ -11,7 +11,7 @@ public static partial class NetworkStorage
 	/// <summary>
 	/// Route an endpoint call through the game host via the registered RequestProxy delegate.
 	/// </summary>
-	private static async Task<JsonElement?> CallEndpointViaProxy( string slug, object input, bool allowSecurityRetry = true )
+	private static async Task<JsonElement?> CallEndpointViaProxy( string slug, object input, bool allowSecurityRetry = true, bool allowClockRetry = true )
 	{
 		var steamId = Game.SteamId.ToString();
 		var securityRequest = await BuildEndpointSecurityRequest( slug, input ?? new { }, allowAuthSession: false );
@@ -63,7 +63,12 @@ public static partial class NetworkStorage
 			if ( !parsed.HasValue && allowSecurityRetry && TryGetLastEndpointError( slug, out var code, out _ ) && IsSecurityConfigMismatchCode( code ) )
 			{
 				await EnsureRuntimeSecurityConfigAsync( "proxy-security-retry", forceRefresh: true );
-				return await CallEndpointViaProxy( slug, input, allowSecurityRetry: false );
+				return await CallEndpointViaProxy( slug, input, allowSecurityRetry: false, allowClockRetry: allowClockRetry );
+			}
+			if ( !parsed.HasValue && allowClockRetry && LastEndpointErrorWasStaleRequest( slug ) )
+			{
+				Log.Info( $"[NetworkStorage] {slug} request id was outside the server replay window, retrying with server time." );
+				return await CallEndpointViaProxy( slug, input, allowSecurityRetry, allowClockRetry: false );
 			}
 			return parsed;
 		}

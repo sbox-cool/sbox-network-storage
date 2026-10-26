@@ -19,7 +19,7 @@ public static partial class NetworkStorage
 	/// </summary>
 	public static string CreateEncryptedRequestId()
 	{
-		return CreateEncryptedRequestId( DateTimeOffset.UtcNow, DefaultEncryptedRequestRandomLength );
+		return CreateEncryptedRequestId( ServerUtcNow, DefaultEncryptedRequestRandomLength );
 	}
 
 	/// <summary>

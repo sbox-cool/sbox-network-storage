@@ -79,7 +79,10 @@ public static partial class NetworkStorage
 				NetLog.Error( slug, logMessage );
 			}
 		}
-		RecordEndpointError( slug, code, message );
+		// Only an out-of-window encrypted request carries the server clock; learn it so the next id is in the window.
+		var serverTime = code == "ENCRYPTED_REQUEST_STALE" ? ReadServerTimeSeconds( json ) : 0;
+		ObserveServerUnixSeconds( serverTime, DateTimeOffset.UtcNow );
+		RecordEndpointError( slug, code, message, serverTime );
 	}
 
 	private static bool IsExpectedStorageNotFound( string slug, string code, int statusCode, string message )

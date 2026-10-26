@@ -21,6 +21,10 @@ public static partial class NetworkStorage
 		return false;
 	}
 
+	/// <summary>The server clock (unix seconds) carried by the last refusal for slug, or 0 when it reported none.</summary>
+	internal static long LastEndpointServerTime( string slug )
+		=> _lastEndpointErrors.TryGetValue( slug, out var error ) ? error.ServerTime : 0;
+
 	/// <summary>
 	/// Parse a server response. Returns the response data on success, null on any error.
 	/// Detects errors via: ok=false, error object, or non-JSON responses.
@@ -143,7 +147,7 @@ public static partial class NetworkStorage
 			_lastEndpointErrors.Remove( slug );
 	}
 
-	private static void RecordEndpointError( string slug, string code, string message )
+	private static void RecordEndpointError( string slug, string code, string message, long serverTime = 0 )
 	{
 		if ( string.IsNullOrEmpty( slug ) )
 			return;
@@ -155,7 +159,8 @@ public static partial class NetworkStorage
 		_lastEndpointErrors[slug] = new EndpointErrorInfo
 		{
 			Code = safeCode,
-			Message = safeMessage
+			Message = safeMessage,
+			ServerTime = serverTime
 		};
 		NetworkStorageAnalyticsRuntime.RecordEndpointDiagnostic( slug, ok: false, code: safeCode, message: safeMessage );
 	}
@@ -164,6 +169,7 @@ public static partial class NetworkStorage
 	{
 		public string Code { get; init; }
 		public string Message { get; init; }
+		public long ServerTime { get; init; }
 	}
 
 	private static string TruncateJson( JsonElement el ) => TruncateJson( el.ToString() ?? "", 120 );

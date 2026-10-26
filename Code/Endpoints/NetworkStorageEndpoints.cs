@@ -15,7 +15,7 @@ public static partial class NetworkStorage
 	public static Task<JsonElement?> CallEndpoint( string slug, object input = null )
 		=> CallEndpointInternal( slug, input, allowSecurityRetry: true );
 
-	private static async Task<JsonElement?> CallEndpointInternal( string slug, object input, bool allowSecurityRetry )
+	private static async Task<JsonElement?> CallEndpointInternal( string slug, object input, bool allowSecurityRetry, bool allowClockRetry = true )
 	{
 		var endpoint = ResolveEndpointReference( slug );
 		ApplyEndpointReferenceConfiguration( endpoint );
@@ -91,7 +91,14 @@ public static partial class NetworkStorage
 			{
 				Log.Info( $"[NetworkStorage] {slug} security mismatch detected ({code}), retrying with updated config..." );
 				await EnsureRuntimeSecurityConfigAsync( "security-retry", forceRefresh: true );
-				return await CallEndpointInternal( slug, input, allowSecurityRetry: false );
+				return await CallEndpointInternal( slug, input, allowSecurityRetry: false, allowClockRetry: allowClockRetry );
+			}
+			// The refusal came before the request was used and carries the server clock, so one retry with a
+			// freshly built envelope is safe.
+			if ( allowClockRetry && LastEndpointErrorWasStaleRequest( slug ) )
+			{
+				Log.Info( $"[NetworkStorage] {slug} request id was outside the server replay window, retrying with server time." );
+				return await CallEndpointInternal( slug, input, allowSecurityRetry, allowClockRetry: false );
 			}
 
 			return null;
