@@ -18,7 +18,7 @@ public static partial class NetworkStorage
 	public static string ApiVersion { get; private set; } = "v3";
 
 	/// <summary>Library SemVer, independent of the s&amp;box package and game revisions.</summary>
-	public const string LibraryVersion = "1.2.0";
+	public const string LibraryVersion = "1.2.1";
 
 	/// <summary>Oldest self-hosted server baseline; newer features require capability checks.</summary>
 	public const string MinServerVersion = "0.4.0";

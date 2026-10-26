@@ -12,6 +12,9 @@ public static class SyncToolTransforms
 	private static readonly HashSet<string> ServerManagedFields = new() { "id", "createdAt", "version" };
 	private static readonly HashSet<string> AuthoringOnlyFields = new() { "authoringMode", "sourceFormat", "sourcePath", "sourceText", "sourceVersion" };
 
+	/// <summary>True for fields that describe a source file (sourceText, sourcePath, ...) rather than the resource.</summary>
+	public static bool IsAuthoringOnlyField( string name ) => AuthoringOnlyFields.Contains( name );
+
 	/// <summary>
 	/// Strip server-managed and authoring-only fields from local Dictionary data for fair comparison.
 	/// </summary>

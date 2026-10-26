@@ -32,6 +32,10 @@ copy new files over an old install**: files moved between versions (for example 
 `NetLog.cs` and `NetworkStorageClient.cs` now live under `Code/Core/`) would exist twice and the
 project fails to compile with duplicate-type errors (CS0121).
 
+**Restart the editor after every update.** The editor loads the library's menu and `ns_*` MCP tools at
+startup. After an in-session update the project can compile while the Network Storage menu and tools
+stay missing, and `instance_status` can remain `IsLoading`, until the editor restarts.
+
 Library versions before `1.0.309133` do not start on s&box editor 26.10 or later
 (`Constructor on type 'SyncToolWindow' not found`). Update the library.
 
@@ -70,6 +74,7 @@ everything below) or create a project on [sboxcool.com](https://sboxcool.com). Y
    **Base URL** to its scheme and host (for example `https://my-game.sboxns.com`, no path or
    trailing slash). Leave **CDN URL** empty unless you run one.
    The editor sends the secret key only to an `https://` Base URL, or to `http://` on localhost or a loopback address. Any other Base URL is refused before a request is sent.
+   If game code cannot reach the Base URL (for example an IP address, or localhost on another port), Setup and the Sync Tool header show a warning. The Sync Tool still works. See [Game reachability](sync-tool.md#game-reachability).
 3. Click **Save Configuration**, then **Test Connection**.
 
 Credentials are saved to `Editor/Network Storage/.env`. The `Editor/` folder is excluded from

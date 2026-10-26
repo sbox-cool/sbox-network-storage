@@ -156,12 +156,18 @@ public static class SyncToolPullWriter
 	}
 
 	// The script file name the envelope already uses. A pull keeps it, so a custom scriptFile is not orphaned.
-	// Reads the envelope being written when there is one; the preview has none, so it reads the endpoints folder.
+	// The server reports sourcePath as a bare file name: the envelope is then that file in the endpoints folder,
+	// where SaveSourceResource writes it. Without a path (the preview), the endpoints folder is searched by id.
 	internal static string ExistingEndpointScriptFileName( string slug, string sourcePath )
 	{
-		var envelope = string.IsNullOrWhiteSpace( sourcePath )
-			? FindExistingSourcePath( SyncToolConfig.Abs( SyncToolConfig.EndpointsPath ), "endpoint", slug )
-			: SyncToolConfig.Abs( sourcePath );
+		var endpointsFolder = SyncToolConfig.Abs( SyncToolConfig.EndpointsPath );
+		string envelope = null;
+		if ( !string.IsNullOrWhiteSpace( sourcePath ) )
+		{
+			envelope = new[] { SyncToolConfig.Abs( sourcePath ), Path.Combine( endpointsFolder, Path.GetFileName( sourcePath.Replace( '\\', '/' ) ) ) }
+				.FirstOrDefault( File.Exists );
+		}
+		envelope ??= FindExistingSourcePath( endpointsFolder, "endpoint", slug );
 		var scriptPath = envelope == null ? null : SyncToolConfig.EndpointScriptFileFor( envelope );
 		return scriptPath == null ? null : Path.GetFileName( scriptPath );
 	}
@@ -188,7 +194,8 @@ public static class SyncToolPullWriter
 		var body = new Dictionary<string, object>( StringComparer.Ordinal );
 		foreach ( var pair in data )
 		{
-			if ( !topLevelKeys.Contains( pair.Key ) && !pair.Key.StartsWith( "_", StringComparison.Ordinal ) )
+			if ( !topLevelKeys.Contains( pair.Key ) && !pair.Key.StartsWith( "_", StringComparison.Ordinal )
+				&& !SyncToolTransforms.IsAuthoringOnlyField( pair.Key ) )
 				body[pair.Key] = pair.Value;
 		}
 

@@ -37,7 +37,7 @@ public class SyncToolScriptFilesTests
 	{
 		var data = new Dictionary<string, object> { ["runtime"] = "javascript", ["script"] = "return 1;\n", ["slug"] = "hello" };
 
-		var envelope = SyncToolConfig.SplitEndpointScript( "hello", data, "endpoints/hello.endpoint.yml", null, out var fileName, out var scriptText );
+		var envelope = SyncToolConfig.SplitEndpointScript( "hello", data, "endpoints/hello.endpoint.yml", out var fileName, out var scriptText );
 
 		Assert.AreEqual( "hello.endpoint.js", fileName );
 		Assert.AreEqual( "return 1;\n", scriptText );
@@ -78,7 +78,7 @@ public class SyncToolScriptFilesTests
 	{
 		var data = JsonSerializer.Deserialize<Dictionary<string, object>>( "{\"runtime\":\"typescript\",\"script\":\"export {};\"}" );
 
-		var envelope = SyncToolConfig.SplitEndpointScript( "hello", data, "endpoints/hello.endpoint.yml", null, out var fileName, out var scriptText );
+		var envelope = SyncToolConfig.SplitEndpointScript( "hello", data, "endpoints/hello.endpoint.yml", out var fileName, out var scriptText );
 
 		Assert.AreEqual( "hello.endpoint.ts", fileName );
 		Assert.AreEqual( "export {};", scriptText );
@@ -90,7 +90,7 @@ public class SyncToolScriptFilesTests
 	{
 		var data = new Dictionary<string, object> { ["runtime"] = "javascript", ["script"] = "return 1;" };
 
-		var envelope = SyncToolConfig.SplitEndpointScript( "hello", data, "endpoints/hello.json", null, out var fileName, out var scriptText );
+		var envelope = SyncToolConfig.SplitEndpointScript( "hello", data, "endpoints/hello.json", out var fileName, out var scriptText );
 
 		Assert.IsNull( fileName );
 		Assert.IsNull( scriptText );
@@ -102,7 +102,7 @@ public class SyncToolScriptFilesTests
 	{
 		var data = new Dictionary<string, object> { ["script"] = "x" };
 
-		var envelope = SyncToolConfig.SplitEndpointScript( "hello", data, "endpoints/hello.endpoint.yml", null, out var fileName, out _ );
+		var envelope = SyncToolConfig.SplitEndpointScript( "hello", data, "endpoints/hello.endpoint.yml", out var fileName, out _ );
 
 		Assert.IsNull( fileName );
 		Assert.AreEqual( "x", envelope["script"] );
@@ -349,5 +349,30 @@ public class SyncToolScriptFilesTests
 
 		Assert.IsFalse( stripped.TryGetProperty( "scriptFile", out _ ) );
 		Assert.AreEqual( "javascript", stripped.GetProperty( "runtime" ).GetString() );
+	}
+
+	[TestMethod]
+	public void SourceLoaderKeepsCaseVariantNestedKeys()
+	{
+		var folder = NewFolder();
+		try
+		{
+			var yaml = Write( folder, "casekeys.collection.yml",
+				"sourceVersion: 1\nKind: collection\nid: casekeys\nschema:\n  Foo:\n    type: number\n  foo:\n    type: string\n" );
+			var json = Write( folder, "casekeys.json",
+				"{\"sourceVersion\":1,\"KIND\":\"collection\",\"id\":\"casekeys\",\"schema\":{\"Foo\":{\"type\":\"number\"},\"foo\":{\"type\":\"string\"}}}" );
+
+			foreach ( var path in new[] { yaml, json } )
+			{
+				Assert.IsTrue( SyncToolConfig.TryLoadSourceCanonicalResource( "collection", path, out var resource ), path );
+				var schema = resource.GetProperty( "schema" );
+				Assert.AreEqual( "number", schema.GetProperty( "Foo" ).GetProperty( "type" ).GetString(), path );
+				Assert.AreEqual( "string", schema.GetProperty( "foo" ).GetProperty( "type" ).GetString(), path );
+			}
+		}
+		finally
+		{
+			Directory.Delete( folder, true );
+		}
 	}
 }

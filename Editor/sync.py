@@ -28,10 +28,11 @@ import os
 import re
 import sys
 import traceback
+import uuid
 from pathlib import Path
 from urllib.parse import urlsplit
 from urllib.request import HTTPRedirectHandler, Request, build_opener
-from urllib.error import HTTPError
+from urllib.error import HTTPError, URLError
 
 from sync_api_errors import SyncApiError, print_api_error
 from sync_sources import load_source_definitions, source_id_from_filename
@@ -187,10 +188,14 @@ def api_headers(config):
         "User-Agent": "sbox-network-storage-sync/1.0",
         "x-ns-library-version": LIBRARY_VERSION,
         "x-ns-client-type": "editor",
+        "X-Correlation-ID": uuid.uuid4().hex,
     }
     if LIBRARY_REVISION is not None:
         headers["x-ns-library-revision"] = LIBRARY_REVISION
     return headers
+
+
+API_TIMEOUT_SECONDS = 30
 
 
 def api_request(config, method, path, body=None):
@@ -199,18 +204,31 @@ def api_request(config, method, path, body=None):
         raise SyncApiError(INSECURE_BASE_URL_MESSAGE)
     url = api_url(config, path)
     headers = api_headers(config)
+    if method.upper() in {"POST", "PUT", "PATCH", "DELETE"}:
+        headers["Idempotency-Key"] = uuid.uuid4().hex
     data = json.dumps(body).encode() if body else None
     req = Request(url, data=data, headers=headers, method=method)
 
     try:
-        with _secret_opener.open(req) as resp:
-            result = json.loads(resp.read().decode())
-            log_response_diagnostics(result, path)
-            return result
+        with _secret_opener.open(req, timeout=API_TIMEOUT_SECONDS) as resp:
+            raw = resp.read()
     except HTTPError as e:
-        error_body = e.read().decode() if e.fp else ""
+        error_body = e.read().decode(errors="replace") if e.fp else ""
         print_api_error(e.code, error_body)
         raise SyncApiError(f"API request failed: HTTP {e.code}") from None
+    except (URLError, OSError) as e:
+        # Network failures and timeouts become a sync error rather than an unhandled traceback.
+        reason = e.reason if isinstance(e, URLError) else e
+        raise SyncApiError(f"API request failed: {reason}") from None
+
+    if not raw.strip():
+        return {}
+    try:
+        result = json.loads(raw.decode())
+    except ValueError as e:
+        raise SyncApiError(f"API response was not JSON: {e}") from None
+    log_response_diagnostics(result, path)
+    return result
 
 
 def log_response_diagnostics(result, path):

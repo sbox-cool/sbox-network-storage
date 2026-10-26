@@ -58,7 +58,7 @@ public static class NetworkStorageRevisionHandler
 		if ( settings.Enabled && showDefaultMessage )
 		{
 			ShowWarningUI( info );
-			OnShowRevisionWarning?.Invoke( info );
+			NetworkStorage.InvokeSafely( OnShowRevisionWarning, info, nameof( OnShowRevisionWarning ) );
 		}
 
 		// Show the built-in default UI panel when configured

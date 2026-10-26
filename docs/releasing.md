@@ -19,6 +19,10 @@ checkout omits the optional `x-ns-library-revision` header. Restart the editor a
 library: package metadata is cached for the session. Runtime never reads `.version`, because game
 filesystem mounts do not reliably expose the library source directory.
 
+The integration candidate for the next patch reports `1.2.1`. It is not a published
+Library Manager package until the native run, source tag and sbox.game publication
+below are complete. Leave `.version` unchanged until a real package revision exists.
+
 ## Release sequence
 
 1. Bump `LibraryVersion` in `Code/Core/NetworkStorageClient.cs`.

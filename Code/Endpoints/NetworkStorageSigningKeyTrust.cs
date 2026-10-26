@@ -11,7 +11,7 @@ public static partial class NetworkStorage
 	private const string SigningKeyTrustFile = "network-storage-signing-key-trust.json";
 
 	// Signing key accepted for an API root when no pin is configured.
-	private sealed record TrustedSigningKey( string Fingerprint, byte[] Modulus, byte[] Exponent );
+	internal sealed record TrustedSigningKey( string Fingerprint, byte[] Modulus, byte[] Exponent );
 
 	private static Dictionary<string, TrustedSigningKey> _trustedSigningKeys;
 
@@ -65,7 +65,24 @@ public static partial class NetworkStorage
 	private static void RememberTrustedSigningKey( string apiRoot, TrustedSigningKey key )
 	{
 		TrustedSigningKeys[apiRoot] = key;
+		SaveSigningKeyTrust();
+	}
 
+	// Forgets the signing key trusted for the current API root, so the next signed config is trusted on first use again.
+	// Call it only after verifying the server identity: the next config is then accepted from whichever key it carries.
+	// A game that must refuse a key change should ship a securityKeyFingerprint pin instead.
+	public static void ResetSigningKeyTrust()
+	{
+		var apiRoot = ApiRoot;
+		if ( TrustedSigningKeys.Remove( apiRoot ) )
+			SaveSigningKeyTrust();
+
+		ResetRuntimeSecurityConfig();
+		Log.Warning( $"[NetworkStorage] signing key trust for {apiRoot} was reset; the next security config is trusted on first use." );
+	}
+
+	private static void SaveSigningKeyTrust()
+	{
 		var store = new Dictionary<string, object>();
 		foreach ( var (root, trusted) in TrustedSigningKeys )
 		{
@@ -86,7 +103,7 @@ public static partial class NetworkStorage
 		}
 		catch ( Exception ex )
 		{
-			Log.Warning( $"[NetworkStorage] could not save signing key trust to {SigningKeyTrustFile}: {ex.Message}. The key is trusted for this session only." );
+			Log.Warning( $"[NetworkStorage] could not save signing key trust to {SigningKeyTrustFile}: {ex.Message}. Trust changes last for this session only." );
 		}
 	}
 }

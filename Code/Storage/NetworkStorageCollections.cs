@@ -15,7 +15,7 @@ public static partial class NetworkStorage
 	/// collections can be edited when the key has collection execute permission.
 	/// </summary>
 	public static Task<JsonElement?> SaveDocument( string collectionId, string documentId, object data )
-		=> SendStorageRequest( "storage-save", "POST", StorageDocumentPath( collectionId, documentId ), data ?? new { } );
+		=> SendStorageRequest( "storage-save", "POST", StorageDocumentPath( collectionId, documentId ), data ?? new { }, "replace" );
 
 	/// <summary>Alias for SaveDocument.</summary>
 	public static Task<JsonElement?> SetDocument( string collectionId, string documentId, object data )
@@ -28,7 +28,7 @@ public static partial class NetworkStorage
 	public static Task<JsonElement?> UpdateDocument( string collectionId, string documentId, IEnumerable<NetworkStorageOperation> operations )
 	{
 		var ops = operations?.Where( op => op is not null ).ToArray() ?? Array.Empty<NetworkStorageOperation>();
-		return SendStorageRequest( "storage-update", "POST", StorageDocumentPath( collectionId, documentId ), new { ops } );
+		return SendStorageRequest( "storage-update", "POST", StorageDocumentPath( collectionId, documentId ), new { ops }, "ops" );
 	}
 
 	/// <summary>Apply server-side operations to a collection document.</summary>
@@ -65,7 +65,12 @@ public static partial class NetworkStorage
 	public static Task<JsonElement?> RenameRecord( string collectionId, string recordId, string recordName, string steamId = null )
 		=> SendStorageRequest( "storage-record-rename", "PATCH", $"{StorageRecordIndexPath( collectionId, steamId )}/{EscapeRouteSegment( recordId )}", new { recordName } );
 
-	private static async Task<JsonElement?> SendStorageRequest( string tag, string method, string path, object body = null )
+	/// <summary>
+	/// Sends one storage request. A write carries an <c>Idempotency-Key</c> generated once for this call, so internal
+	/// retries reuse it. <paramref name="writeMode"/> sets <c>x-ns-write-mode</c> ("replace" or "ops") on document writes,
+	/// so the server does not have to infer the mode from the body.
+	/// </summary>
+	private static async Task<JsonElement?> SendStorageRequest( string tag, string method, string path, object body = null, string writeMode = null )
 	{
 		EnsureConfigured();
 		ClearLastEndpointError( tag );
@@ -75,14 +80,17 @@ public static partial class NetworkStorage
 		string bodyJson = null;
 		try
 		{
-			var usesDedicatedSecret = TryBuildDedicatedStorageHeaders( out var headers );
+			var usesDedicatedSecret = TryBuildDedicatedStorageHeaders( out var authHeaders );
 			if ( !usesDedicatedSecret )
 			{
 				if ( TryRejectDedicatedServerPlayerAuth( tag ) )
 					return null;
-				headers = await BuildAuthHeaders();
+				authHeaders = await BuildAuthHeaders();
 			}
 			url = BuildUrl( path );
+
+			var headers = new Dictionary<string, string>( authHeaders ?? new Dictionary<string, string>() );
+			if ( writeMode is not null ) headers["x-ns-write-mode"] = writeMode;
 
 			Func<HttpContent> createContent = null;
 			if ( body is not null )
@@ -98,11 +106,16 @@ public static partial class NetworkStorage
 				Log.Info( $"[NetworkStorage] {tag} request: {method} {ApiRoot}{path}{suffix}" );
 			}
 
-			var raw = await RequestStringAsync(url, method, createContent, headers);
+			var reply = await SendRawContentAsync( url, method, createContent, headers );
 			if ( NetworkStorageLogConfig.LogResponses )
-				Log.Info( $"[NetworkStorage] {tag} → {TruncateJson( raw, 300 )}" );
+				Log.Info( $"[NetworkStorage] {tag} → HTTP {reply.Status} {TruncateJson( reply.Body ?? reply.TransportError ?? "", 300 )}" );
+			if ( !reply.Ok )
+			{
+				RecordReplyFailure( tag, reply, "REQUEST_FAILED" );
+				return null;
+			}
 
-			var parsed = ParseResponse( tag, raw );
+			var parsed = ParseResponse( tag, reply.Body );
 			if ( parsed.HasValue && NetworkStorageLogConfig.LogResponses )
 				NetLog.Response( tag, TruncateJson( parsed.Value ) );
 			return parsed;

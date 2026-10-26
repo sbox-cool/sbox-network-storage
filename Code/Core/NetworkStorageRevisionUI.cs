@@ -48,7 +48,7 @@ public static partial class NetworkStorage
 	public static async Task RefreshRevisionLobbyListAsync()
 	{
 		// Fire the request — game code should handle this
-		OnRefreshLobbyListRequested?.Invoke();
+		InvokeSafely( OnRefreshLobbyListRequested, nameof( OnRefreshLobbyListRequested ) );
 
 		// Default implementation: log and return
 		await Task.CompletedTask;
@@ -94,7 +94,7 @@ public static partial class NetworkStorage
 		NetworkStoragePackageInfo.UpdateFromRevisionBlock( data );
 
 		// Fire the event for custom hooks
-		OnRevisionOutdated?.Invoke( data );
+		InvokeSafely( OnRevisionOutdated, data, nameof( OnRevisionOutdated ) );
 
 		// Open the default UI
 		NetworkStorageOutdatedUI.ForceOpen( parent );
@@ -123,6 +123,6 @@ public static partial class NetworkStorage
 		};
 
 		// Fire the event only — no UI, no package info update
-		OnRevisionOutdated?.Invoke( data );
+		InvokeSafely( OnRevisionOutdated, data, nameof( OnRevisionOutdated ) );
 	}
 }

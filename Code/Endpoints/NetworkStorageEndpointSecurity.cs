@@ -17,6 +17,7 @@ public static partial class NetworkStorage
 		public EncryptedResponseContext ResponseContext { get; init; }
 		public string RoutePath { get; init; }
 		public string RouteLabel { get; init; }
+		public Func<EndpointSecurityRequest> Reseal { get; init; }
 	}
 
 	private sealed class RuntimeAuthSession
@@ -68,47 +69,61 @@ public static partial class NetworkStorage
 			};
 		}
 
-		var encryptedRequestId = CreateEncryptedRequestId();
-		payload["encryptedRequestId"] = encryptedRequestId;
+		var routePath = $"/endpoints/{ProjectId}/{EscapeRouteSegment( slug )}";
+		var routeLabel = $"/endpoints/{ProjectId}/{slug}";
 		payload["_endpointSlug"] = slug;
-		if ( NetworkStorageLogConfig.LogRequests )
-			Log.Info( $"[NetworkStorage] {slug} encrypted request id={encryptedRequestId} mode={mode}" );
-		if ( RuntimeEnableEncryptedRequests && _runtimeSecurityConfig?.EncryptionKey is { } encryptionKey )
+
+		// Every attempt seals a fresh copy with a fresh encryptedRequestId. A retry therefore never replays an id
+		// the server already consumed. Retries call Reseal() instead of reusing Body.
+		EndpointSecurityRequest SealRequest()
 		{
-			payload.Remove( "security" );
-			var v2Envelope = SealEndpointRequestV2( encryptionKey, slug, payload, session, out var responseContext );
+			var attemptPayload = new Dictionary<string, object>( payload );
+			var encryptedRequestId = CreateEncryptedRequestId();
+			attemptPayload["encryptedRequestId"] = encryptedRequestId;
+			if ( NetworkStorageLogConfig.LogRequests )
+				Log.Info( $"[NetworkStorage] {slug} encrypted request id={encryptedRequestId} mode={mode}" );
+
+			if ( _runtimeSecurityConfig?.EncryptionKey is { } encryptionKey )
+			{
+				attemptPayload.Remove( "security" );
+				var v2Envelope = SealEndpointRequestV2( encryptionKey, slug, attemptPayload, session, out var responseContext );
+				return new EndpointSecurityRequest
+				{
+					Body = new Dictionary<string, object>
+					{
+						["security"] = BuildClientSecurityContext( mode ),
+						["encrypted"] = true,
+						["envelope"] = v2Envelope
+					},
+					Headers = headers,
+					Mode = mode,
+					Encrypted = true,
+					ResponseContext = responseContext,
+					RoutePath = routePath,
+					RouteLabel = routeLabel,
+					Reseal = SealRequest
+				};
+			}
+
+			var envelope = CreateEncryptedEndpointEnvelope( slug, attemptPayload, session );
 			return new EndpointSecurityRequest
 			{
 				Body = new Dictionary<string, object>
 				{
 					["security"] = BuildClientSecurityContext( mode ),
 					["encrypted"] = true,
-					["envelope"] = v2Envelope
+					["envelope"] = envelope
 				},
 				Headers = headers,
 				Mode = mode,
 				Encrypted = true,
-				ResponseContext = responseContext,
-				RoutePath = $"/endpoints/{ProjectId}/{EscapeRouteSegment( slug )}",
-				RouteLabel = $"/endpoints/{ProjectId}/{slug}"
+				RoutePath = routePath,
+				RouteLabel = routeLabel,
+				Reseal = SealRequest
 			};
 		}
 
-		var envelope = CreateEncryptedEndpointEnvelope( slug, payload, session );
-		return new EndpointSecurityRequest
-		{
-			Body = new Dictionary<string, object>
-			{
-				["security"] = BuildClientSecurityContext( mode ),
-				["encrypted"] = true,
-				["envelope"] = envelope
-			},
-			Headers = headers,
-			Mode = mode,
-			Encrypted = true,
-			RoutePath = $"/endpoints/{ProjectId}/{EscapeRouteSegment( slug )}",
-			RouteLabel = $"/endpoints/{ProjectId}/{slug}"
-		};
+		return SealRequest();
 	}
 
 	private static Dictionary<string, object> BuildClientSecurityContext( string mode ) => new()

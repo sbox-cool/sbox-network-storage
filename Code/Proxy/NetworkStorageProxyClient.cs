@@ -14,11 +14,23 @@ public static partial class NetworkStorage
 	private static async Task<JsonElement?> CallEndpointViaProxy( string slug, object input, bool allowSecurityRetry = true, bool allowClockRetry = true )
 	{
 		var steamId = Game.SteamId.ToString();
-		var securityRequest = await BuildEndpointSecurityRequest( slug, input ?? new { }, allowAuthSession: false );
-		if ( securityRequest is null )
+		EndpointSecurityRequest securityRequest;
+		string inputJson;
+		try
+		{
+			securityRequest = await BuildEndpointSecurityRequest( slug, input ?? new { }, allowAuthSession: false );
+			if ( securityRequest is null )
+				return null;
+			inputJson = JsonSerializer.Serialize( securityRequest.Body );
+		}
+		catch ( Exception ex )
+		{
+			if ( NetworkStorageLogConfig.LogErrors )
+				Log.Warning( $"[NetworkStorage] {slug} PROXY request build failed — {ex.Message}" );
+			RecordEndpointError( slug, ex is TimeoutException ? "PROXY_TIMEOUT" : "PROXY_FAILED", ex.Message );
 			return null;
+		}
 		string proxySlug = slug;
-		string inputJson = JsonSerializer.Serialize( securityRequest.Body );
 
 		// Get the client's auth token as consent proof (included in HMAC signature)
 		string clientToken = null;
@@ -52,7 +64,14 @@ public static partial class NetworkStorage
 				return null;
 			}
 
-			result = UnsealEndpointResponse( securityRequest.ResponseContext, slug, result );
+			var reply = NetworkStorageProxyEnvelope.Read( result, NetworkStorageProxyEnvelope.EndpointKind );
+			if ( !reply.Ok )
+			{
+				RecordEndpointError( slug, reply.ErrorCode, reply.ErrorMessage );
+				return null;
+			}
+
+			result = UnsealEndpointResponse( securityRequest.ResponseContext, slug, reply.Body );
 			if ( result is null )
 				return null;
 			if ( NetworkStorageLogConfig.LogProxy )
@@ -60,7 +79,7 @@ public static partial class NetworkStorage
 			var parsed = ParseResponse( slug, result );
 			if ( parsed.HasValue && NetworkStorageLogConfig.LogProxy )
 				NetLog.Response( slug, $"PROXY OK — {TruncateJson( parsed.Value )}" );
-			if ( !parsed.HasValue && allowSecurityRetry && TryGetLastEndpointError( slug, out var code, out _ ) && IsSecurityConfigMismatchCode( code ) )
+			if ( !parsed.HasValue && allowSecurityRetry && IsRetrySafeSecurityRefusal( result ) )
 			{
 				await EnsureRuntimeSecurityConfigAsync( "proxy-security-retry", forceRefresh: true );
 				return await CallEndpointViaProxy( slug, input, allowSecurityRetry: false, allowClockRetry: allowClockRetry );
@@ -124,12 +143,19 @@ public static partial class NetworkStorage
 				return null;
 			}
 
+			var reply = NetworkStorageProxyEnvelope.Read( result, NetworkStorageProxyEnvelope.DocumentKind );
+			if ( !reply.Ok )
+			{
+				RecordEndpointError( "storage", reply.ErrorCode, reply.ErrorMessage );
+				return null;
+			}
+
 			if ( NetworkStorageLogConfig.LogProxy )
-				Log.Info( $"[NetworkStorage] storage PROXY → {TruncateJson( result, 200 )}" );
-			var parsed = ParseResponse( "storage", result );
-			if ( parsed.HasValue && NetworkStorageLogConfig.LogProxy )
-				NetLog.Response( "storage", $"PROXY OK ({result.Length} bytes)" );
-			return parsed;
+				Log.Info( $"[NetworkStorage] storage PROXY → {TruncateJson( reply.Body, 200 )}" );
+			var document = JsonSerializer.Deserialize<JsonElement>( reply.Body );
+			if ( NetworkStorageLogConfig.LogProxy )
+				NetLog.Response( "storage", $"PROXY OK ({reply.Body.Length} bytes)" );
+			return document;
 		}
 		catch ( Exception ex )
 		{
