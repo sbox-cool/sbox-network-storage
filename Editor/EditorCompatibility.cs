@@ -158,7 +158,7 @@ public static class EditorCompatibility
 		string serverVersion, IReadOnlyCollection<string> capabilities, string serverMinimum )
 	{
 		var packageNewer = localRevision.HasValue && latestRevision.HasValue && latestRevision.Value > localRevision.Value;
-		var update = packageNewer ? $" A newer revision (1.0.{latestRevision}) is published." : "";
+		var update = packageNewer ? $" A newer revision (1.0.{latestRevision}) is published. Restart the editor after updating." : "";
 		var serverWarning = ServerWarning( serverVersion, capabilities );
 		switch ( status )
 		{
@@ -175,7 +175,7 @@ public static class EditorCompatibility
 		}
 
 		if ( packageNewer )
-			return new Notice( "info", "Library update available", $"A newer library revision (1.0.{latestRevision}) is published.{( serverWarning is null ? "" : " " + serverWarning )}" );
+			return new Notice( "info", "Library update available", $"A newer library revision (1.0.{latestRevision}) is published. Restart the editor after updating.{( serverWarning is null ? "" : " " + serverWarning )}" );
 		return serverWarning is null ? null : new Notice( "warning", "Server is older than this library", serverWarning );
 	}
 
