@@ -32,6 +32,10 @@ copy new files over an old install**: files moved between versions (for example 
 `NetLog.cs` and `NetworkStorageClient.cs` now live under `Code/Core/`) would exist twice and the
 project fails to compile with duplicate-type errors (CS0121).
 
+**Restart the editor after every update.** The editor loads the library's menu and `ns_*` MCP tools at
+startup. After an in-session update the project can compile while the Network Storage menu and tools
+stay missing, and `instance_status` can remain `IsLoading`, until the editor restarts.
+
 Library versions before `1.0.309133` do not start on s&box editor 26.10 or later
 (`Constructor on type 'SyncToolWindow' not found`). Update the library.
 
