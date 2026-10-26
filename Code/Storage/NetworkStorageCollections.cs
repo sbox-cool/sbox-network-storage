@@ -91,7 +91,6 @@ public static partial class NetworkStorage
 
 			var headers = new Dictionary<string, string>( authHeaders ?? new Dictionary<string, string>() );
 			if ( writeMode is not null ) headers["x-ns-write-mode"] = writeMode;
-			if ( !string.Equals( method, "GET", StringComparison.OrdinalIgnoreCase ) ) headers["Idempotency-Key"] = NewRequestToken();
 
 			Func<HttpContent> createContent = null;
 			if ( body is not null )

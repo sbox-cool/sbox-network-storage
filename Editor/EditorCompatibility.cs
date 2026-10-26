@@ -108,6 +108,7 @@ public static class EditorCompatibility
 			using var request = new HttpRequestMessage( HttpMethod.Get, $"{root}/v3/server-info" );
 			request.Headers.Add( "x-ns-library-version", NetworkStorage.LibraryVersion );
 			request.Headers.Add( "x-ns-client-type", "editor" );
+			request.Headers.Add( "X-Correlation-ID", Guid.NewGuid().ToString( "N" ) );
 			using var response = await _http.SendAsync( request );
 			if ( response.IsSuccessStatusCode )
 			{

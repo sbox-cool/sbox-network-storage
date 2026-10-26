@@ -138,8 +138,8 @@ public static partial class NetworkStorage
 					break;
 			}
 
-			var isWrite = method != "GET";
-			if ( isWrite ) headers["Idempotency-Key"] = request.IdempotencyKey ?? NewRequestToken();
+			if ( method != "GET" && request.IdempotencyKey is not null )
+				headers["Idempotency-Key"] = request.IdempotencyKey;
 
 			Func<HttpContent> createContent = null;
 			if ( request.Body is not null )

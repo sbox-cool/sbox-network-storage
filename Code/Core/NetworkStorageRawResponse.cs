@@ -28,18 +28,20 @@ public static partial class NetworkStorage
 	}
 
 	/// <summary>
-	/// Sends a request whose content is built per attempt. Adds an <c>X-Correlation-ID</c> for the logical call unless the
-	/// caller set one; retries of the same call reuse it.
+	/// Sends a request whose content is built per attempt. Adds correlation and write-idempotency tokens unless the
+	/// caller set them; transport retries reuse the same headers and tokens.
 	/// </summary>
 	internal static Task<RawReply> SendRawContentAsync( string url, string method, Func<HttpContent> createContent, Dictionary<string, string> headers )
 	{
 		headers ??= new Dictionary<string, string>();
 		if ( !headers.ContainsKey( "X-Correlation-ID" ) ) headers["X-Correlation-ID"] = NewRequestToken();
+		if ( method is "POST" or "PUT" or "PATCH" or "DELETE" && !headers.ContainsKey( "Idempotency-Key" ) )
+			headers["Idempotency-Key"] = NewRequestToken();
 		return SendWithRetriesAsync( method, createContent, content => Http.RequestAsync( url, method, content, headers ) );
 	}
 
-	/// <summary>A fresh opaque token (base64url of 16 random bytes) for correlation ids and idempotency keys.</summary>
-	internal static string NewRequestToken() => Base64UrlEncode( NetworkStorageSecureRandom.Bytes( 16 ) );
+	/// <summary>A fresh opaque token for correlation ids and idempotency keys.</summary>
+	internal static string NewRequestToken() => Guid.NewGuid().ToString( "N" );
 
 	/// <summary>Status text for a reply without a server error body, e.g. "HTTP 413 RequestEntityTooLarge".</summary>
 	internal static string HttpStatusMessage( int status ) => $"HTTP {status} {(HttpStatusCode)status}";

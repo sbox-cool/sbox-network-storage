@@ -69,8 +69,11 @@ or `error`. An endpoint reply is unwrapped to its `body` only when it has `ok: t
 A security refusal (`SECURITY_*`) is retried once after a config refresh only when the server marks it `retrySafe: true`.
 
 Storage writes send `x-ns-write-mode` (`replace` for `SaveDocument`, `ops` for `UpdateDocument`) so the server does not
-infer the mode from the body. Every non-GET storage or `SendAsync` request sends an `Idempotency-Key` that is reused
-across retries of the same logical call; every request sends an `X-Correlation-ID`.
+infer the mode from the body. Runtime `POST`, `PUT`, `PATCH` and `DELETE` requests send an `Idempotency-Key`,
+including endpoint calls and analytics, and transport retries reuse it. Direct endpoint security/clock retries
+also retain the logical call's key. Sync Tool and Python management writes send one key per call.
+Every runtime, Sync Tool and Python API request sends an `X-Correlation-ID`, including server-info reads.
+These headers are metadata; they do not add server-side deduplication or change authentication.
 
 A listener on a library event that throws is logged; the throw does not reach the request that raised the event. Later
 listeners on the same event are skipped, so keep listeners small.

@@ -28,6 +28,7 @@ import os
 import re
 import sys
 import traceback
+import uuid
 from pathlib import Path
 from urllib.parse import urlsplit
 from urllib.request import HTTPRedirectHandler, Request, build_opener
@@ -187,6 +188,7 @@ def api_headers(config):
         "User-Agent": "sbox-network-storage-sync/1.0",
         "x-ns-library-version": LIBRARY_VERSION,
         "x-ns-client-type": "editor",
+        "X-Correlation-ID": uuid.uuid4().hex,
     }
     if LIBRARY_REVISION is not None:
         headers["x-ns-library-revision"] = LIBRARY_REVISION
@@ -202,6 +204,8 @@ def api_request(config, method, path, body=None):
         raise SyncApiError(INSECURE_BASE_URL_MESSAGE)
     url = api_url(config, path)
     headers = api_headers(config)
+    if method.upper() in {"POST", "PUT", "PATCH", "DELETE"}:
+        headers["Idempotency-Key"] = uuid.uuid4().hex
     data = json.dumps(body).encode() if body else None
     req = Request(url, data=data, headers=headers, method=method)
 

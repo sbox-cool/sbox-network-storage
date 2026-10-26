@@ -54,7 +54,7 @@ public static partial class NetworkStorage
 		try
 		{
 			using var timeout = new CancellationTokenSource( TimeSpan.FromSeconds( 5 ) );
-			var headers = new Dictionary<string, string> { ["x-ns-library-version"] = LibraryVersion };
+			var headers = new Dictionary<string, string> { ["x-ns-library-version"] = LibraryVersion, ["X-Correlation-ID"] = NewRequestToken() };
 			var sentAt = DateTimeOffset.UtcNow;
 			using var response = await Http.RequestAsync( $"{baseUrl}/{apiVersion}/server-info", "GET", null, headers, timeout.Token );
 			if ( generation == _compatibilityGeneration ) ObserveServerDateHeader( response, sentAt, DateTimeOffset.UtcNow );

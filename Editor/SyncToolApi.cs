@@ -26,6 +26,9 @@ public static class SyncToolApi
 	{
 		request.Headers.Add( "x-ns-library-version", NetworkStorage.LibraryVersion );
 		request.Headers.Add( "x-ns-client-type", "editor" );
+		request.Headers.Add( "X-Correlation-ID", Guid.NewGuid().ToString( "N" ) );
+		if ( request.Method == HttpMethod.Post || request.Method == HttpMethod.Put || request.Method == HttpMethod.Patch || request.Method == HttpMethod.Delete )
+			request.Headers.Add( "Idempotency-Key", Guid.NewGuid().ToString( "N" ) );
 		if ( _libraryRevision.Value is { } libraryRevision )
 			request.Headers.Add( "x-ns-library-revision", libraryRevision );
 	}

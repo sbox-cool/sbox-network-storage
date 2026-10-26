@@ -16,7 +16,7 @@ public static partial class NetworkStorage
 	public static Task<JsonElement?> CallEndpoint( string slug, object input = null )
 		=> CallEndpointInternal( slug, input, allowSecurityRetry: true );
 
-	private static async Task<JsonElement?> CallEndpointInternal( string slug, object input, bool allowSecurityRetry, bool allowClockRetry = true )
+	private static async Task<JsonElement?> CallEndpointInternal( string slug, object input, bool allowSecurityRetry, bool allowClockRetry = true, string idempotencyKey = null )
 	{
 		var endpoint = ResolveEndpointReference( slug );
 		if ( !ApplyEndpointReferenceConfiguration( endpoint ) )
@@ -56,6 +56,7 @@ public static partial class NetworkStorage
 
 			// Encrypted calls always POST: the envelope is the body, so a call without input still needs one.
 			var usePost = input is not null || securityRequest.Encrypted;
+			if ( usePost ) headers["Idempotency-Key"] = idempotencyKey ??= NewRequestToken();
 			// Each send attempt uses the request it was built for. Attempts after the first call Reseal(), so a retried
 			// encrypted request never reuses an encryptedRequestId the server may already have consumed.
 			var attempt = securityRequest;
@@ -121,14 +122,14 @@ public static partial class NetworkStorage
 			{
 				Log.Info( $"[NetworkStorage] {slug} security config refused ({ReadErrorCode( responseBody )}), retrying once with updated config..." );
 				await EnsureRuntimeSecurityConfigAsync( "security-retry", forceRefresh: true );
-				return await CallEndpointInternal( slug, input, allowSecurityRetry: false, allowClockRetry: allowClockRetry );
+				return await CallEndpointInternal( slug, input, allowSecurityRetry: false, allowClockRetry: allowClockRetry, idempotencyKey: idempotencyKey );
 			}
 			// The refusal came before the request was used and carries the server clock, so one retry with a
 			// freshly built envelope is safe.
 			if ( allowClockRetry && LastEndpointErrorWasStaleRequest( slug ) )
 			{
 				Log.Info( $"[NetworkStorage] {slug} request id was outside the server replay window, retrying with server time." );
-				return await CallEndpointInternal( slug, input, allowSecurityRetry, allowClockRetry: false );
+				return await CallEndpointInternal( slug, input, allowSecurityRetry, allowClockRetry: false, idempotencyKey: idempotencyKey );
 			}
 
 			return null;
