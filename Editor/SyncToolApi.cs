@@ -874,9 +874,10 @@ public static class SyncToolApi
 			code = error.ValueKind == JsonValueKind.String ? error.GetString()
 				: error.ValueKind == JsonValueKind.Object ? GetStringProperty( error, "code" )
 				: null;
+			message = GetStringProperty( error, "message" );
 		}
 
-		message = GetStringProperty( body, "message" );
+		message = GetStringProperty( body, "message" ) ?? message;
 	}
 
 	private static int? GetIntProperty( JsonElement element, params string[] keys )

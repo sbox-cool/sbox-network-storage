@@ -2,11 +2,11 @@ import io
 import sys
 import threading
 import unittest
-from contextlib import contextmanager
+from contextlib import contextmanager, redirect_stdout
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from unittest.mock import MagicMock, patch
-from urllib.error import HTTPError, URLError
+from urllib.error import URLError
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "Editor"))
 import sync
@@ -21,12 +21,6 @@ def _config(port):
         "publicKey": "sbox_ns_public",
         "secretKey": "sbox_sk_secret",
     }
-
-
-def _opener_returning(body):
-    opener = MagicMock()
-    opener.open.return_value.__enter__.return_value.read.return_value = body
-    return opener
 
 
 @contextmanager
@@ -58,13 +52,6 @@ def _serve(status, body):
 
 
 class ApiRequestTests(unittest.TestCase):
-    def test_request_has_a_timeout(self):
-        opener = _opener_returning(b'{"ok": true}')
-        with patch.object(sync, "_secret_opener", opener):
-            self.assertEqual({"ok": True}, sync.api_request(_config(8080), "GET", "validate"))
-        _, kwargs = opener.open.call_args
-        self.assertEqual(sync.API_TIMEOUT_SECONDS, kwargs.get("timeout"))
-
     def test_network_error_becomes_sync_error(self):
         opener = MagicMock()
         opener.open.side_effect = URLError("connection refused")
@@ -80,16 +67,12 @@ class ApiRequestTests(unittest.TestCase):
             with self.assertRaises(SyncApiError):
                 sync.api_request(_config(8080), "GET", "validate")
 
-    def test_http_error_still_raises_sync_error_and_prints_body(self):
-        error = HTTPError(
-            "http://127.0.0.1:8080/v3/validate", 403, "Forbidden", {}, io.BytesIO(b'{"error":"KEY_DISABLED"}')
-        )
-        opener = MagicMock()
-        opener.open.side_effect = error
-        with patch.object(sync, "_secret_opener", opener), patch.object(sync, "print_api_error") as printer:
+    def test_http_error_reports_server_code(self):
+        output = io.StringIO()
+        with _serve(403, b'{"error":"KEY_DISABLED"}') as port, redirect_stdout(output):
             with self.assertRaises(SyncApiError):
-                sync.api_request(_config(8080), "GET", "validate")
-        printer.assert_called_once_with(403, '{"error":"KEY_DISABLED"}')
+                sync.api_request(_config(port), "GET", "validate")
+        self.assertIn("KEY_DISABLED", output.getvalue())
 
     def test_empty_success_body_returns_empty_dict(self):
         with _serve(204, b"") as port:

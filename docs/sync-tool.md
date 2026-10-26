@@ -24,6 +24,10 @@ Sync moves resource definitions, not player data. Player records live in the ser
 Pull backs up each local file it overwrites, and an endpoint's script file too, as `<name>.bak.<yyyyMMddHHmmss>`.
 Changing the publish target (Live or Next) regenerates the game's generated code, so the game reads the same target as the editor.
 
+Setup and Sync Tool validation preserve the server's error code and message, including
+an object-shaped `error` with `code` and `message`. A top-level `message` takes
+precedence when both forms are present. Non-JSON errors fall back to the HTTP status.
+
 ## Secret key transport
 
 The secret key is sent only to an `https://` Base URL, or to `http://localhost` or a loopback address such as `http://127.0.0.1:5000`. Any other Base URL is refused before a request is made, and Setup shows a warning. Redirects are not followed, so the key is never replayed to another host.
