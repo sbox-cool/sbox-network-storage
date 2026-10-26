@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "generatedAt": "2026-10-26T00:22:33.398Z",
+  "generatedAt": "2026-10-26T02:30:01.728Z",
   "library": {
     "published": {
       "revision": 427072,
@@ -11,15 +11,21 @@
     },
     "main": {
       "version": "1.2.0",
-      "commit": "6efc43f065a348b38d51056bfccd162644d03de1",
-      "committedAt": "2026-10-23T23:39:00Z",
+      "commit": "2c4f58f06652829d785c0ab81fd9996c0a4ffabb",
+      "committedAt": "2026-10-26T02:29:50Z",
       "ci": {
-        "conclusion": "success",
-        "runUrl": "https://github.com/sbox-cool/sbox-network-storage/actions/runs/40180185574",
-        "engine": "sbox-public@747d840b2bebeb73ba60f059957bc45c39f3a0de"
+        "conclusion": "pending",
+        "runUrl": "https://github.com/sbox-cool/sbox-network-storage/actions/runs/40259374646",
+        "engine": null
       }
     },
     "pending": [
+      {
+        "number": 82,
+        "title": "Reject unsupported loop/call/return step types in source authoring (#81)",
+        "mergedAt": "2026-10-26T02:29:50Z",
+        "url": "https://github.com/sbox-cool/sbox-network-storage/pull/82"
+      },
       {
         "number": 77,
         "title": "Editor and library review backlog: #65 #66 #67 #68 #69 #75",
