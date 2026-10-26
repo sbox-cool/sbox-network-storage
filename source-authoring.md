@@ -130,6 +130,23 @@ Use canonical `routes` for branching and rejects. Legacy `onFail` is still accep
 
 A generic condition failure (`CONDITION_FAILED` / `Condition check failed.`) is treated as actionable debugging signal and reports to error webhooks. Domain-specific expected rejections stay quiet unless the route sets `webhook: true`.
 
+## Step Types
+
+The backends execute exactly these step types. The source compiler and the backend save validator reject any other `type` with `INVALID_STEP_TYPE`:
+
+- Data: `read`, `write`, `delete`, `lookup`, `lookup_many`, `filter`, `random`, `random_select`
+- Logic: `condition`, `assert`, `transform`, `compute`, `response`
+- Shaping: `object`, `array`, `merge`, `sort`, `switch`, `block`
+- Other: `workflow`, `webhook`, `sleep`
+
+The authoritative list is `SupportedTypes` in `src/SboxNetworkStorage.Application/NetworkStorage/Endpoints/EndpointStepExecutor.cs` on the server. The executor also dispatches `workflow`, which is not in that set. The save validator's `SupportedStepTypes` in `src/SboxNetworkStorage.Infrastructure/NetworkStorage/NetworkStorageStepValidator.cs` lists the same 22 types.
+
+`while`, `until`, `foreach`, `call`, `return`, and `return_on` are not executed by any backend, so they are rejected. Use these instead:
+
+- A `condition` with `routes` that send control to an earlier step with `goto`. The executor bounds repeated visits to one step.
+- A `workflow` step to reuse logic.
+- A `routes` entry with `action: return` to finish early.
+
 ## Recursion And Runtime Protection
 
 Recursive calls and reusable logic are bounded by backend limits. Current defaults are:

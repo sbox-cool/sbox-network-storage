@@ -19,8 +19,8 @@ steps:
     collection: players
     key: "{{steamId}}"
   - id: profile_exists
-    type: call
-    target: economy.profile_exists
+    type: workflow
+    workflow: economy.profile_exists
     params:
       player: "{{player}}"
   - id: positive_amount
