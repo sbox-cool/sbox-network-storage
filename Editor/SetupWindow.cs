@@ -270,6 +270,17 @@ public class SetupWindow : PaintedWindow
 			Paint.DrawText( new Rect( pad, y, w, 12 ), "Secret key will not be sent: Base URL must be https:// (http:// only for localhost)", TextFlag.LeftCenter );
 			y += 14;
 		}
+
+		// Game code refuses some hosts (IP literals, loopback on other ports). The Sync Tool still works, so this only warns.
+		if ( !string.IsNullOrEmpty( baseUrlText ) && SyncToolConfig.IsGameClientReachable( baseUrlText, SyncToolConfig.ApiVersion ) == false )
+		{
+			Paint.SetDefaultFont( size: 8 );
+			Paint.SetPen( Color.Orange.WithAlpha( 0.8f ) );
+			Paint.DrawText( new Rect( pad, y, w, 12 ), SyncToolConfig.GameClientUnreachableLine1, TextFlag.LeftCenter );
+			y += 12;
+			Paint.DrawText( new Rect( pad, y, w, 12 ), SyncToolConfig.GameClientUnreachableLine2, TextFlag.LeftCenter );
+			y += 14;
+		}
 		y += 4;
 
 		DrawFieldLabel( ref y, pad, w, "CDN URL" );
@@ -497,6 +508,18 @@ public class SetupWindow : PaintedWindow
 
 		var resp = await SyncToolApi.Validate( publicKey );
 
+		// KEY_UPGRADE_REQUIRED arrives as an HTTP error body or as a 200 body; Validate records the code for both.
+		if ( SyncToolApi.LastErrorCode == "KEY_UPGRADE_REQUIRED" )
+		{
+			_status = "Secret key uses an old format. Generate a new key at sbox.cool.";
+			_statusColor = "red";
+			_testProjectId = "Not checked";
+			_testSecretKey = "Old format — regenerate on dashboard";
+			_testPublicKey = "Not checked";
+			Update();
+			return;
+		}
+
 		if ( !resp.HasValue )
 		{
 			var errDetail = SyncToolApi.LastErrorMessage ?? "Could not reach server";
@@ -512,19 +535,6 @@ public class SetupWindow : PaintedWindow
 
 		var result = resp.Value;
 
-		// Check for KEY_UPGRADE_REQUIRED error
-		if ( SyncToolApi.LastErrorCode == "KEY_UPGRADE_REQUIRED" ||
-		     (result.TryGetProperty( "error", out var errEl ) && errEl.GetString() == "KEY_UPGRADE_REQUIRED") )
-		{
-			_status = "Secret key uses an old format. Generate a new key at sbox.cool.";
-			_statusColor = "red";
-			_testProjectId = "Not checked";
-			_testSecretKey = "Old format — regenerate on dashboard";
-			_testPublicKey = "Not checked";
-			Update();
-			return;
-		}
-
 		if ( result.TryGetProperty( "checks", out var checks ) )
 		{
 			_testProjectId = GetCheckMessage( checks, "projectId" );
@@ -534,7 +544,7 @@ public class SetupWindow : PaintedWindow
 
 		if ( result.TryGetProperty( "project", out var proj ) && proj.ValueKind == JsonValueKind.Object )
 		{
-			_testProjectTitle = proj.TryGetProperty( "title", out var t ) ? t.GetString() : null;
+			_testProjectTitle = proj.TryGetProperty( "title", out var t ) && t.ValueKind == JsonValueKind.String ? t.GetString() : null;
 		}
 
 		// Parse permissions if present
@@ -555,7 +565,9 @@ public class SetupWindow : PaintedWindow
 			{
 				if ( perms.TryGetProperty( kv.Key, out var val ) )
 				{
-					var access = val.GetString() ?? "rw";
+					var access = val.ValueKind == JsonValueKind.Null ? "rw"
+						: val.ValueKind == JsonValueKind.String ? val.GetString()
+						: "unknown";
 					var label = FormatPermissionLabel( access );
 					parts.Add( $"{kv.Value}: {label}" );
 				}
@@ -594,8 +606,8 @@ public class SetupWindow : PaintedWindow
 
 	private static string GetCheckMessage( JsonElement checks, string key )
 	{
-		if ( !checks.TryGetProperty( key, out var check ) ) return "Not checked";
-		var msg = check.TryGetProperty( "message", out var m ) ? m.GetString() : "Unknown";
-		return msg ?? "Unknown";
+		if ( checks.ValueKind != JsonValueKind.Object || !checks.TryGetProperty( key, out var check ) ) return "Not checked";
+		if ( check.ValueKind != JsonValueKind.Object || !check.TryGetProperty( "message", out var m ) || m.ValueKind != JsonValueKind.String ) return "Unknown";
+		return m.GetString() ?? "Unknown";
 	}
 }

@@ -70,6 +70,7 @@ everything below) or create a project on [sboxcool.com](https://sboxcool.com). Y
    **Base URL** to its scheme and host (for example `https://my-game.sboxns.com`, no path or
    trailing slash). Leave **CDN URL** empty unless you run one.
    The editor sends the secret key only to an `https://` Base URL, or to `http://` on localhost or a loopback address. Any other Base URL is refused before a request is sent.
+   If game code cannot reach the Base URL (for example an IP address, or localhost on another port), Setup and the Sync Tool header show a warning. The Sync Tool still works. See [Game reachability](sync-tool.md#game-reachability).
 3. Click **Save Configuration**, then **Test Connection**.
 
 Credentials are saved to `Editor/Network Storage/.env`. The `Editor/` folder is excluded from

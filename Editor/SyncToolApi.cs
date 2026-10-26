@@ -177,12 +177,9 @@ public static class SyncToolApi
 				{
 					var errJson = JsonSerializer.Deserialize<JsonElement>( text, _readOptions );
 					if ( errJson.ValueKind == JsonValueKind.Object ) LastErrorBody = errJson;
-					if ( errJson.TryGetProperty( "error", out var errCode ) )
-						LastErrorCode = errCode.ValueKind == JsonValueKind.Object && errCode.TryGetProperty( "code", out var codeVal )
-							? codeVal.GetString()
-							: errCode.ValueKind == JsonValueKind.String ? errCode.GetString() : null;
-					if ( errJson.TryGetProperty( "message", out var errMsg ) )
-						LastErrorMessage = errMsg.GetString();
+					ReadErrorFields( errJson, out var errCode, out var errMsg );
+					LastErrorCode = errCode;
+					LastErrorMessage = errMsg;
 
 					CaptureStructuredErrors( path, errJson );
 					LogStructuredErrors( path );
@@ -236,12 +233,9 @@ public static class SyncToolApi
 			// Check for validation errors in successful HTTP responses (ok: false)
 			if ( result.TryGetProperty( "ok", out var okProp ) && okProp.ValueKind == JsonValueKind.False )
 			{
-				if ( result.TryGetProperty( "error", out var errCode ) )
-					LastErrorCode = errCode.ValueKind == JsonValueKind.Object && errCode.TryGetProperty( "code", out var codeVal )
-						? codeVal.GetString()
-						: errCode.ValueKind == JsonValueKind.String ? errCode.GetString() : null;
-				if ( result.TryGetProperty( "message", out var errMsg ) )
-					LastErrorMessage = errMsg.GetString();
+				ReadErrorFields( result, out var errCode, out var errMsg );
+				LastErrorCode = errCode;
+				LastErrorMessage = errMsg;
 
 				CaptureStructuredErrors( path, result );
 				LogStructuredErrors( path );
@@ -466,21 +460,37 @@ public static class SyncToolApi
 
 			if ( !response.IsSuccessStatusCode )
 			{
-				LastErrorCode = $"HTTP_{(int)response.StatusCode}";
-				LastErrorMessage = $"Server returned HTTP {(int)response.StatusCode}";
-				Log.Warning( $"[SyncTool] Validate failed: HTTP {(int)response.StatusCode}" );
+				var status = (int)response.StatusCode;
+				JsonElement errBody = default;
+				try
+				{
+					errBody = JsonSerializer.Deserialize<JsonElement>( text, _readOptions );
+				}
+				catch ( JsonException )
+				{
+					// Non-JSON error body: fall back to the HTTP status.
+				}
+
+				ReadErrorFields( errBody, out var errCode, out var errMsg );
+				LastErrorCode = errCode ?? $"HTTP_{status}";
+				LastErrorMessage = errMsg ?? $"Server returned HTTP {status}";
+				Log.Warning( $"[SyncTool] Validate failed: HTTP {status} {LastErrorCode} - {LastErrorMessage}" );
 				return null;
 			}
 
 			var result = JsonSerializer.Deserialize<JsonElement>( text, _readOptions );
-
-			if ( result.TryGetProperty( "error", out var errCode ) )
+			if ( result.ValueKind != JsonValueKind.Object )
 			{
-				LastErrorCode = errCode.ValueKind == JsonValueKind.Object && errCode.TryGetProperty( "code", out var codeVal )
-					? codeVal.GetString()
-					: errCode.ValueKind == JsonValueKind.String ? errCode.GetString() : null;
-				if ( result.TryGetProperty( "message", out var errMsg ) )
-					LastErrorMessage = errMsg.GetString();
+				LastErrorMessage = "Server returned an unexpected response.";
+				Log.Warning( $"[SyncTool] Validate: {LastErrorMessage}" );
+				return null;
+			}
+
+			if ( result.TryGetProperty( "error", out _ ) )
+			{
+				ReadErrorFields( result, out var errCode, out var errMsg );
+				LastErrorCode = errCode;
+				LastErrorMessage = errMsg;
 				Log.Warning( $"[SyncTool] Validate error: {LastErrorCode} - {LastErrorMessage}" );
 			}
 
@@ -488,6 +498,7 @@ public static class SyncToolApi
 		}
 		catch ( Exception ex )
 		{
+			LastErrorMessage = ex.Message;
 			Log.Warning( $"[SyncTool] Validate: {ex.Message}" );
 			return null;
 		}
@@ -837,6 +848,7 @@ public static class SyncToolApi
 
 	private static string GetStringProperty( JsonElement element, params string[] keys )
 	{
+		if ( element.ValueKind != JsonValueKind.Object ) return null;
 		foreach ( var key in keys )
 		{
 			if ( element.TryGetProperty( key, out var value ) && value.ValueKind == JsonValueKind.String )
@@ -844,6 +856,28 @@ public static class SyncToolApi
 		}
 
 		return null;
+	}
+
+	/// <summary>
+	/// Reads the error code and message from a server error body. `error` may be a string or an object with `code`;
+	/// `message` must be a string. Any other shape yields null instead of throwing.
+	/// </summary>
+	private static void ReadErrorFields( JsonElement body, out string code, out string message )
+	{
+		code = null;
+		message = null;
+		if ( body.ValueKind != JsonValueKind.Object )
+			return;
+
+		if ( body.TryGetProperty( "error", out var error ) )
+		{
+			code = error.ValueKind == JsonValueKind.String ? error.GetString()
+				: error.ValueKind == JsonValueKind.Object ? GetStringProperty( error, "code" )
+				: null;
+			message = GetStringProperty( error, "message" );
+		}
+
+		message = GetStringProperty( body, "message" ) ?? message;
 	}
 
 	private static int? GetIntProperty( JsonElement element, params string[] keys )
