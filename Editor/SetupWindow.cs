@@ -156,6 +156,17 @@ public class SetupWindow : PaintedWindow
 			}
 			y += 4;
 		}
+		if ( RuntimeSecurityConfigNotice() is { } securityNotice )
+		{
+			Paint.SetDefaultFont( size: 9 );
+			Paint.SetPen( Color.Red.WithAlpha( 0.95f ) );
+			foreach ( var line in EditorCompatibility.Wrap( $"{securityNotice.Title}: {securityNotice.Message}", w ) )
+			{
+				Paint.DrawText( new Rect( pad, y, w, 14 ), line, TextFlag.LeftCenter );
+				y += 14;
+			}
+			y += 4;
+		}
 
 		DrawSeparator( ref y, w, pad );
 
@@ -366,6 +377,19 @@ public class SetupWindow : PaintedWindow
 		Paint.SetPen( Color.White.WithAlpha( 0.8f ) );
 		Paint.DrawText( new Rect( pad, y, w, 16 ), label, TextFlag.LeftCenter );
 		y += 18;
+	}
+
+	// Reports a refused security config only when the runtime is on the project and API root Setup is configured for,
+	// so a refusal from another project is never shown. Read-only: nothing is refreshed, accepted or reset.
+	private static EditorCompatibility.Notice RuntimeSecurityConfigNotice()
+	{
+		var apiRoot = $"{SyncToolConfig.BaseUrl?.TrimEnd( '/' )}/{SyncToolConfig.ApiVersion?.Trim( '/' )}";
+		if ( NetworkStorage.ProjectId != SyncToolConfig.ProjectId || NetworkStorage.ApiRoot != apiRoot )
+			return null;
+		if ( !NetworkStorage.TryGetSecurityConfigError( out var code, out var message ) )
+			return null;
+
+		return new EditorCompatibility.Notice( "error", $"Security config refused ({code})", message );
 	}
 
 	private void DrawSeparator( ref float y, float w, float pad )

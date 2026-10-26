@@ -126,6 +126,12 @@ rotate without a game update.
 - A config that fails verification refuses every endpoint call, plain or encrypted. Calling
   `Configure` with a different pin, base URL, API version or project drops the held config and
   verifies again.
+- **Diagnose a refused config.** `NetworkStorage.TryGetSecurityConfigError(out string code, out string message)`
+  returns `true` with the refusal code and remediation text while the held config is refused and blocks
+  endpoint calls. It reports only for the project and API root the runtime is configured for, and it never
+  refreshes, accepts or resets a config or returns key material. The Setup window shows the same notice when
+  its project ID and base URL match the runtime. Calls stay blocked until a trusted config loads; the API does
+  not unblock them.
 
 ## Server compatibility status
 
