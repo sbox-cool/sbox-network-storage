@@ -116,6 +116,12 @@ rotate without a game update.
 - A config that fails verification refuses every endpoint call, plain or encrypted. Calling
   `Configure` with a different pin, base URL, API version or project drops the held config and
   verifies again.
+- **Clock skew.** Encrypted requests carry a unix time that the server accepts only inside its replay
+  window (30 to 600 seconds, default 120). The library learns the server's clock from the `Date` header of
+  its responses (a response with an `Age` header is cached, so it is ignored) and from the `serverTime`
+  in an `ENCRYPTED_REQUEST_STALE` refusal, and builds request ids from that clock. A stale refusal is
+  retried once with a fresh id, so a game whose client clock is wrong still makes its calls. The learned
+  offset is clamped to one day, and differences under 5 seconds are treated as zero.
 
 ## Server compatibility status
 

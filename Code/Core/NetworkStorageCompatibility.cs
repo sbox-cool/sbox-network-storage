@@ -51,7 +51,9 @@ public static partial class NetworkStorage
 		{
 			using var timeout = new CancellationTokenSource( TimeSpan.FromSeconds( 5 ) );
 			var headers = new Dictionary<string, string> { ["x-ns-library-version"] = LibraryVersion };
+			var sentAt = DateTimeOffset.UtcNow;
 			using var response = await Http.RequestAsync( $"{baseUrl}/{apiVersion}/server-info", "GET", null, headers, timeout.Token );
+			if ( generation == _compatibilityGeneration ) ObserveServerDateHeader( response, sentAt, DateTimeOffset.UtcNow );
 			if ( generation != _compatibilityGeneration || !response.IsSuccessStatusCode ) return;
 			var raw = await response.Content.ReadAsStringAsync( timeout.Token );
 			if ( generation != _compatibilityGeneration ) return;
@@ -140,7 +142,9 @@ public static partial class NetworkStorage
 		{
 			var generation = _compatibilityGeneration;
 			using var content = createContent?.Invoke();
+			var sentAt = DateTimeOffset.UtcNow;
 			using var response = await send( content );
+			if ( generation == _compatibilityGeneration ) ObserveServerDateHeader( response, sentAt, DateTimeOffset.UtcNow );
 			if ( generation == _compatibilityGeneration ) ObserveCompatibilityHeaders( response );
 			// A 426 carries the server's remediation message in a structured body, which ParseResponse turns
 			// into the endpoint error. Every other HTTP failure keeps the historical exception.
