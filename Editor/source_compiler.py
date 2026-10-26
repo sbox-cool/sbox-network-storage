@@ -37,8 +37,10 @@ RESOURCE_KINDS = {"collection", "endpoint", "workflow", "test", "library"}
 SOURCE_VERSION = 1
 SOURCE_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
 LEGACY_STEP_TYPES = {"read", "write", "delete", "transform", "condition", "assert", "lookup", "lookup_many", "filter", "workflow", "compute", "random", "random_select", "webhook", "response"}
-NATIVE_STEP_TYPES = {"block", "while", "until", "foreach", "call", "return", "return_on", "sleep", "object", "array", "merge", "sort", "switch"}
+NATIVE_STEP_TYPES = {"block", "sleep", "object", "array", "merge", "sort", "switch"}
 CANONICAL_STEP_TYPES = LEGACY_STEP_TYPES | NATIVE_STEP_TYPES
+# Accepted by no backend executor. Both this compiler and the server reject them with INVALID_STEP_TYPE.
+UNSUPPORTED_STEP_TYPES = {"while", "until", "foreach", "call", "return", "return_on"}
 SOURCE_ONLY_KEYS = {"sourceVersion", "kind", "resourceKind", "imports", "libraries", "dslVersion"}
 COMMON_TOP_LEVEL_KEYS = {"sourceVersion", "kind", "resourceKind", "id", "slug", "name", "description", "notes", "imports", "metadata", "definition", "resource", "authoringMode", "sourceFormat", "sourcePath", "sourcePathSystemGenerated"}
 RESOURCE_BODY_KEYS = {
@@ -289,20 +291,12 @@ def validate_steps(steps: Any, source_path: str, pointer: str) -> list[dict[str,
             diags.append(diagnostic("warning", "DUPLICATE_STEP_ID", f"Step id is reused and will map to a unique canonical node: {step_id}.", sourcePath=source_path, sourcePointer=f"{step_pointer}/id"))
         else:
             ids.add(step_id)
+        if step_type in UNSUPPORTED_STEP_TYPES:
+            diags.append(diagnostic("error", "INVALID_STEP_TYPE", f'"{step_type}" steps are not supported by the backend executor. Use a condition with goto routes or a workflow step instead.', sourcePath=source_path, sourcePointer=f"{step_pointer}/type"))
+            continue
         if step_type not in CANONICAL_STEP_TYPES:
             diags.append(diagnostic("error", "INVALID_STEP_TYPE", f"Step type must be one of: {', '.join(sorted(CANONICAL_STEP_TYPES))}.", sourcePath=source_path, sourcePointer=f"{step_pointer}/type"))
             continue
-        if step_type in ("while", "until", "foreach"):
-            if not isinstance(step.get("maxIterations"), int) or step.get("maxIterations") < 1:
-                diags.append(diagnostic("error", "MISSING_MAX_ITERATIONS", f"{step_type} requires maxIterations >= 1.", sourcePath=source_path, sourcePointer=f"{step_pointer}/maxIterations"))
-            if not isinstance(step.get("body"), list):
-                diags.append(diagnostic("error", "MISSING_LOOP_BODY", f"{step_type} requires a body array.", sourcePath=source_path, sourcePointer=f"{step_pointer}/body"))
-        if step_type == "foreach":
-            for key in ("from", "item"):
-                if key not in step:
-                    diags.append(diagnostic("error", "MISSING_FOREACH_FIELD", f"foreach requires {key}.", sourcePath=source_path, sourcePointer=f"{step_pointer}/{key}"))
-        if step_type == "call" and not step.get("target"):
-            diags.append(diagnostic("error", "MISSING_CALL_TARGET", "call requires target.", sourcePath=source_path, sourcePointer=f"{step_pointer}/target"))
         if step_type == "workflow" and not (step.get("workflow") or step.get("target")):
             diags.append(diagnostic("error", "MISSING_WORKFLOW_TARGET", "workflow step requires workflow or target.", sourcePath=source_path, sourcePointer=f"{step_pointer}/workflow"))
         if step_type == "sleep":
@@ -458,7 +452,7 @@ def budget_diagnostics(plan: dict[str, Any], limits: dict[str, int] | None = Non
                 budgetCategory=key,
                 measured=measured,
                 limit=limit,
-                suggestion="Reduce the source graph, split the resource, or lower loop maxIterations.",
+                suggestion="Reduce the source graph or split the resource.",
             ))
     return diags
 
