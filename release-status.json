@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "generatedAt": "2026-10-26T02:43:10.440Z",
+  "generatedAt": "2026-10-26T06:11:48.780Z",
   "library": {
     "published": {
       "revision": 427072,
@@ -14,9 +14,9 @@
       "commit": "9d65d9b057b70b9383cd36236601891e0ac3f1c0",
       "committedAt": "2026-10-26T02:43:01Z",
       "ci": {
-        "conclusion": "pending",
+        "conclusion": "success",
         "runUrl": "https://github.com/sbox-cool/sbox-network-storage/actions/runs/40260470285",
-        "engine": null
+        "engine": "sbox-public@86f70929f44fc5945a04d9b70f1638531f961a2f"
       }
     },
     "pending": [
@@ -73,10 +73,28 @@
       "url": "https://github.com/sbox-cool/sbox-network-storage-server/releases/tag/v0.5.7"
     },
     "main": {
-      "commit": "6c9fe89c75e674f1b0c8179d6358fa16d830b81d",
-      "committedAt": "2026-10-25T00:23:12Z"
+      "commit": "e8625de5db2318b978fb79b83454e4757e6360f5",
+      "committedAt": "2026-10-26T05:30:27Z"
     },
     "pending": [
+      {
+        "number": 248,
+        "title": "Clarify endpoint-only encryption coverage (#242)",
+        "mergedAt": "2026-10-26T05:30:27Z",
+        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/248"
+      },
+      {
+        "number": 246,
+        "title": "Carry serverTime on ENCRYPTED_REQUEST_STALE refusals (#241)",
+        "mergedAt": "2026-10-26T05:13:49Z",
+        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/246"
+      },
+      {
+        "number": 245,
+        "title": "Honour x-ns-write-mode on storage record writes; correct 4xx body docs",
+        "mergedAt": "2026-10-26T05:13:43Z",
+        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/245"
+      },
       {
         "number": 239,
         "title": "Record tagged 0.5.7 engine evidence",
