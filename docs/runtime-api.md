@@ -46,7 +46,7 @@ if ( result.HasValue )
 | `ListRecords` / `CreateRecord` / `RenameRecord` / `DeleteRecord` | Multi-record save slots. |
 | `TrackAnalyticsEvent(eventType, payload?)` | Custom Player Analytics event; the name must be listed in the project's analytics settings. |
 | `NetworkStorageAnalytics.Warning/Error/SessionStart/SessionEnd` | Warnings, caught exceptions and session boundaries on the player timeline. |
-| `LibraryVersion` / `MinServerVersion` | Library SemVer (`1.2.0`) and the oldest supported self-hosted server (`0.4.0`, metadata only). |
+| `LibraryVersion` / `MinServerVersion` | Library SemVer (`1.2.1`, unreleased candidate) and the oldest supported self-hosted server (`0.4.0`, metadata only). |
 | `ServerVersion` / `LibraryStatus` / `OnLibraryStatusChanged` / `HasCapability(name)` | What the server reported; see [server compatibility](#server-compatibility-status). |
 | `SendAsync(NetworkStorageRequest)` | Send any `/v3` (or `api.root`) request and get a `NetworkStorageResult` back. Never throws; see [generic requests](#generic-requests). |
 
