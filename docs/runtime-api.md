@@ -80,8 +80,8 @@ listeners on the same event are skipped, so keep listeners small.
 `NetworkStorage.SendAsync(new NetworkStorageRequest { ... })` sends one request to the storage API and returns a
 `NetworkStorageResult` (`Ok`, `Status`, `Code`, `Message`, `Body`, `RetryAfterSeconds`, `RequestId`). It never throws.
 
-- `Method`: `GET` (default), `POST`, `PUT`, `PATCH` or `DELETE`. `Path` starts with `/`, for example `/storage/{collection}`.
-- `Query`: extra query parameters. `apiKey`, `revisionTarget`, `includeStaged` and `secret` are reserved.
+- `Method`: `GET` (default), `POST`, `PUT`, `PATCH` or `DELETE`. `Path` starts with `/`, for example `/storage/{project}/{collection}/{key}`.
+- `Query`: extra query parameters. `apiKey`, `revisionTarget`, `includeStaged` and `secret-key` are reserved.
 - `Body`: JSON-serialised body for non-GET requests.
 - `Auth`: `Player` (default; the signed-in player's token), `Public` (project key only) or `DedicatedSecret` (dedicated server secret).
 - `IdempotencyKey`: optional, 1 to 128 visible characters; generated when omitted.
@@ -90,6 +90,8 @@ listeners on the same event are skipped, so keep listeners small.
 Refusals before a request is sent use codes `INVALID_REQUEST`, `INVALID_METHOD`, `INVALID_PATH`, `NOT_CONFIGURED`,
 `API_ROOT_UNAVAILABLE`, `DEDICATED_SECRET_REQUIRED` and `DEDICATED_SECRET_UNAVAILABLE`. `/endpoints/...` is refused
 with `USE_CALL_ENDPOINT`; use `CallEndpoint`. `/manage/...` is refused with `UNSUPPORTED_PATH`.
+These checks also apply to percent-encoded route segments. Dot segments and encoded
+separators, queries, fragments or control characters are refused with `INVALID_PATH`.
 
 Calls through the host (proxy mode) wait at most 30 seconds for the host's reply. A timeout is reported as `PROXY_TIMEOUT`; any other proxy failure, including the host changing or disconnecting while the call is in flight, is reported as `PROXY_FAILED`.
 

@@ -17,7 +17,11 @@ public static partial class NetworkStorage
 	public static async Task<JsonElement?> CallEndpointAs( string targetSteamId, string clientToken, string slug, object input = null )
 	{
 		var endpoint = ResolveEndpointReference( slug );
-		ApplyEndpointReferenceConfiguration( endpoint );
+		if ( !ApplyEndpointReferenceConfiguration( endpoint ) )
+		{
+			RecordInvalidEndpoint( endpoint );
+			return null;
+		}
 		slug = endpoint.Slug;
 
 		EnsureConfigured();

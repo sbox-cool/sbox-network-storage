@@ -260,15 +260,29 @@ public static partial class NetworkStorage
 			}
 		}
 
+		// Checks run on decoded segments: "%2e%2e" is a dot segment and "%65ndpoints" is "endpoints" to the server's router.
 		var segments = path.Split( '/' );
-		foreach ( var segment in segments )
+		for ( var i = 0; i < segments.Length; i++ )
 		{
-			if ( segment == "." || segment == ".." )
+			var decoded = Uri.UnescapeDataString( segments[i] );
+			if ( decoded == "." || decoded == ".." )
 			{
 				code = "INVALID_PATH";
 				message = "Path must not contain dot segments.";
 				return false;
 			}
+
+			foreach ( var c in decoded )
+			{
+				if ( c == '/' || c == '\\' || c == '?' || c == '#' || c < ' ' || c == '\u007f' )
+				{
+					code = "INVALID_PATH";
+					message = "Path must not contain an encoded separator, query, fragment, or control character.";
+					return false;
+				}
+			}
+
+			segments[i] = decoded;
 		}
 
 		var first = segments[1];

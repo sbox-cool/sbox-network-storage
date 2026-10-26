@@ -106,6 +106,9 @@ public class NetworkStorageHardeningTests
 			Assert.AreEqual( "INVALID_PATH", ( await NetworkStorage.SendAsync( new NetworkStorageRequest { Path = "/" } ) ).Code );
 			Assert.AreEqual( "INVALID_PATH", ( await NetworkStorage.SendAsync( new NetworkStorageRequest { Path = "storage" } ) ).Code );
 			Assert.AreEqual( "INVALID_PATH", ( await NetworkStorage.SendAsync( new NetworkStorageRequest { Path = "/../storage" } ) ).Code );
+			Assert.AreEqual( "INVALID_PATH", ( await NetworkStorage.SendAsync( new NetworkStorageRequest { Path = "/%2e%2e/storage" } ) ).Code );
+			Assert.AreEqual( "USE_CALL_ENDPOINT", ( await NetworkStorage.SendAsync( new NetworkStorageRequest { Path = "/%65ndpoints/x" } ) ).Code );
+			Assert.AreEqual( "UNSUPPORTED_PATH", ( await NetworkStorage.SendAsync( new NetworkStorageRequest { Path = "/%6Danage/x" } ) ).Code );
 			Assert.AreEqual( "UNSUPPORTED_PATH", ( await NetworkStorage.SendAsync( new NetworkStorageRequest { Path = "/manage/x" } ) ).Code );
 			Assert.AreEqual( "INVALID_METHOD", ( await NetworkStorage.SendAsync( new NetworkStorageRequest { Method = "TRACE", Path = "/storage" } ) ).Code );
 			Assert.AreEqual( "INVALID_REQUEST", ( await NetworkStorage.SendAsync( new NetworkStorageRequest { Path = "/storage", Body = new { a = 1 } } ) ).Code );
