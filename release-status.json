@@ -1,12 +1,12 @@
 {
   "schema": 1,
-  "generatedAt": "2026-10-26T06:11:48.780Z",
+  "generatedAt": "2026-10-26T13:00:04.172Z",
   "library": {
     "published": {
-      "revision": 427072,
-      "version": "1.2.0",
-      "commit": "ddf9b617c0c4fdf26c9c0e91c5cd34fa915b1750",
-      "publishedAt": "2026-10-20T02:16:12.100Z",
+      "revision": 429205,
+      "version": "1.2.1",
+      "commit": "a49ac7bca8b27559382f623af83a72d7dde8f0dc",
+      "publishedAt": "2026-10-26T10:02:24.500Z",
       "url": "https://sbox.game/sboxcool/network-storage"
     },
     "main": {
@@ -15,43 +15,12 @@
       "committedAt": "2026-10-26T02:43:01Z",
       "ci": {
         "conclusion": "success",
-        "runUrl": "https://github.com/sbox-cool/sbox-network-storage/actions/runs/40260470285",
-        "engine": "sbox-public@86f70929f44fc5945a04d9b70f1638531f961a2f"
+        "runUrl": "https://github.com/sbox-cool/sbox-network-storage/actions/runs/40307278089",
+        "engine": "sbox-public@758800ce44dae4a38dfaca4058719626d3abc9fa"
       }
     },
-    "pending": [
-      {
-        "number": 83,
-        "title": "Learn the server clock for encrypted request ids",
-        "mergedAt": "2026-10-26T02:43:01Z",
-        "url": "https://github.com/sbox-cool/sbox-network-storage/pull/83"
-      },
-      {
-        "number": 82,
-        "title": "Reject unsupported loop/call/return step types in source authoring (#81)",
-        "mergedAt": "2026-10-26T02:29:50Z",
-        "url": "https://github.com/sbox-cool/sbox-network-storage/pull/82"
-      },
-      {
-        "number": 77,
-        "title": "Editor and library review backlog: #65 #66 #67 #68 #69 #75",
-        "mergedAt": "2026-10-23T23:39:00Z",
-        "url": "https://github.com/sbox-cool/sbox-network-storage/pull/77"
-      },
-      {
-        "number": 76,
-        "title": "fix(runtime): library runtime review backlog (#70-#74)",
-        "mergedAt": "2026-10-23T23:26:46Z",
-        "url": "https://github.com/sbox-cool/sbox-network-storage/pull/76"
-      },
-      {
-        "number": 64,
-        "title": "docs: compact README; move guides into docs/",
-        "mergedAt": "2026-10-23T06:15:29Z",
-        "url": "https://github.com/sbox-cool/sbox-network-storage/pull/64"
-      }
-    ],
-    "pendingSince": "2026-10-23T06:15:29Z",
+    "pending": [],
+    "pendingSince": null,
     "installMain": {
       "zipUrl": "https://github.com/sbox-cool/sbox-network-storage/archive/refs/heads/main.zip",
       "docsUrl": "https://github.com/sbox-cool/sbox-network-storage#using-unreleased-features-main"
@@ -73,10 +42,28 @@
       "url": "https://github.com/sbox-cool/sbox-network-storage-server/releases/tag/v0.5.7"
     },
     "main": {
-      "commit": "e8625de5db2318b978fb79b83454e4757e6360f5",
-      "committedAt": "2026-10-26T05:30:27Z"
+      "commit": "6579827ea63f5a5231e21acf86d2528bd7ce1bbc",
+      "committedAt": "2026-10-26T07:57:38Z"
     },
     "pending": [
+      {
+        "number": 250,
+        "title": "Record exact 1.2.1 candidate engine evidence",
+        "mergedAt": "2026-10-26T07:57:38Z",
+        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/250"
+      },
+      {
+        "number": 249,
+        "title": "e2e: wait for the served signing key to change before rotation probes (#240)",
+        "mergedAt": "2026-10-26T07:15:28Z",
+        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/249"
+      },
+      {
+        "number": 247,
+        "title": "Publish announced signing-key rotations; add sbox-ns security rotate-signing-key (#240, #153)",
+        "mergedAt": "2026-10-26T06:22:05Z",
+        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/247"
+      },
       {
         "number": 248,
         "title": "Clarify endpoint-only encryption coverage (#242)",
