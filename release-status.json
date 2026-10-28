@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "generatedAt": "2026-10-28T01:20:24.337Z",
+  "generatedAt": "2026-10-28T08:29:06.139Z",
   "library": {
     "published": {
       "revision": 429205,
@@ -42,10 +42,16 @@
       "url": "https://github.com/sbox-cool/sbox-network-storage-server/releases/tag/v0.5.7"
     },
     "main": {
-      "commit": "6579827ea63f5a5231e21acf86d2528bd7ce1bbc",
-      "committedAt": "2026-10-26T07:57:38Z"
+      "commit": "584fa97c3b9161692634601a9ef1c4f4ffa51a93",
+      "committedAt": "2026-10-28T07:04:13Z"
     },
     "pending": [
+      {
+        "number": 255,
+        "title": "Add MCP prompt for game analytics integration",
+        "mergedAt": "2026-10-28T07:04:13Z",
+        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/255"
+      },
       {
         "number": 250,
         "title": "Record exact 1.2.1 candidate engine evidence",
