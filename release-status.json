@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "generatedAt": "2026-11-03T02:57:13.379Z",
+  "generatedAt": "2026-11-03T05:35:47.610Z",
   "library": {
     "published": {
       "revision": 429205,
@@ -10,17 +10,24 @@
       "url": "https://sbox.game/sboxcool/network-storage"
     },
     "main": {
-      "version": "1.2.0",
-      "commit": "9d65d9b057b70b9383cd36236601891e0ac3f1c0",
-      "committedAt": "2026-10-26T02:43:01Z",
+      "version": "1.2.1",
+      "commit": "085ca2916500aba5715293de9161e17c365cf56d",
+      "committedAt": "2026-11-03T05:35:37Z",
       "ci": {
-        "conclusion": "success",
-        "runUrl": "https://github.com/sbox-cool/sbox-network-storage/actions/runs/41447588782",
-        "engine": "sbox-public@ff86b59a76d863c17520cab02e17e034f825b068"
+        "conclusion": "pending",
+        "runUrl": "https://github.com/sbox-cool/sbox-network-storage/actions/runs/41584818065",
+        "engine": null
       }
     },
-    "pending": [],
-    "pendingSince": null,
+    "pending": [
+      {
+        "number": 105,
+        "title": "1.2.1: complete library backlog fixes for native Windows testing",
+        "mergedAt": "2026-11-03T05:35:37Z",
+        "url": "https://github.com/sbox-cool/sbox-network-storage/pull/105"
+      }
+    ],
+    "pendingSince": "2026-11-03T05:35:37Z",
     "installMain": {
       "zipUrl": "https://github.com/sbox-cool/sbox-network-storage/archive/refs/heads/main.zip",
       "docsUrl": "https://github.com/sbox-cool/sbox-network-storage#using-unreleased-features-main"
@@ -42,10 +49,34 @@
       "url": "https://github.com/sbox-cool/sbox-network-storage-server/releases/tag/v0.5.7"
     },
     "main": {
-      "commit": "46092eb1998f429e73139282dbe3883eb2d6d180",
-      "committedAt": "2026-11-03T02:43:04Z"
+      "commit": "c1c34c29d8b008458aa8948707e8d4c552aa1e11",
+      "committedAt": "2026-11-03T04:30:55Z"
     },
     "pending": [
+      {
+        "number": 263,
+        "title": "Document YAML correction in 0.5.8",
+        "mergedAt": "2026-11-03T04:30:55Z",
+        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/263"
+      },
+      {
+        "number": 259,
+        "title": "Bump Microsoft.AspNetCore.Mvc.Testing and 10 others",
+        "mergedAt": "2026-11-03T04:02:39Z",
+        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/259"
+      },
+      {
+        "number": 254,
+        "title": "Preserve case-distinct YAML keys in sync preflight",
+        "mergedAt": "2026-11-03T04:01:48Z",
+        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/254"
+      },
+      {
+        "number": 262,
+        "title": "Prepare server 0.5.8 release notes",
+        "mergedAt": "2026-11-03T03:24:25Z",
+        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/262"
+      },
       {
         "number": 260,
         "title": "Bump AWSSDK.S3 from 4.0.104.6 to 4.0.104.8",
