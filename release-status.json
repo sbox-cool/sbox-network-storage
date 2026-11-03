@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "generatedAt": "2026-11-02T20:46:13.061Z",
+  "generatedAt": "2026-11-03T02:57:13.379Z",
   "library": {
     "published": {
       "revision": 429205,
@@ -42,10 +42,22 @@
       "url": "https://github.com/sbox-cool/sbox-network-storage-server/releases/tag/v0.5.7"
     },
     "main": {
-      "commit": "584fa97c3b9161692634601a9ef1c4f4ffa51a93",
-      "committedAt": "2026-10-28T07:04:13Z"
+      "commit": "46092eb1998f429e73139282dbe3883eb2d6d180",
+      "committedAt": "2026-11-03T02:43:04Z"
     },
     "pending": [
+      {
+        "number": 260,
+        "title": "Bump AWSSDK.S3 from 4.0.104.6 to 4.0.104.8",
+        "mergedAt": "2026-11-03T02:43:05Z",
+        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/260"
+      },
+      {
+        "number": 261,
+        "title": "Bump JsonSchema.Net from 9.4.1 to 9.5.0",
+        "mergedAt": "2026-11-03T02:42:59Z",
+        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/261"
+      },
       {
         "number": 255,
         "title": "Add MCP prompt for game analytics integration",
