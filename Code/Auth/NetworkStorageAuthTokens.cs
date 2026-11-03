@@ -29,7 +29,11 @@ public static partial class NetworkStorage
 	public static async Task<bool> EnsureEndpointAuthAsync( string slug )
 	{
 		var endpoint = ResolveEndpointReference( slug );
-		ApplyEndpointReferenceConfiguration( endpoint );
+		if ( !ApplyEndpointReferenceConfiguration( endpoint ) )
+		{
+			RecordInvalidEndpoint( endpoint );
+			return false;
+		}
 		slug = endpoint.Slug;
 
 		EnsureConfigured();

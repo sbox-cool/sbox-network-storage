@@ -219,7 +219,7 @@ public static partial class SyncToolConfig
 			using var json = JsonDocument.Parse( sourceText, new JsonDocumentOptions { CommentHandling = JsonCommentHandling.Skip, AllowTrailingCommas = true } );
 			root = json.RootElement.ValueKind == JsonValueKind.Object
 				? (Dictionary<string, object>)JsonElementToObject( json.RootElement )
-				: new Dictionary<string, object>( StringComparer.OrdinalIgnoreCase );
+				: new Dictionary<string, object>();
 		}
 		else
 		{
@@ -227,6 +227,10 @@ public static partial class SyncToolConfig
 			var index = 0;
 			root = ParseYamlMap( sourcePath, lines, ref index, 0 );
 		}
+
+		// Reserved top-level headers (kind, id, sourceText, ...) match case-insensitively. Nested maps stay
+		// case-sensitive, so keys such as Foo and foo in a schema remain distinct, as the server stores them.
+		root = CaseInsensitiveCopy( root );
 
 		if ( root.TryGetValue( "sourceText", out var embeddedSourceTextValue )
 			&& embeddedSourceTextValue is string embeddedSourceText
@@ -304,7 +308,7 @@ public static partial class SyncToolConfig
 		switch ( element.ValueKind )
 		{
 			case JsonValueKind.Object:
-				var map = new Dictionary<string, object>( StringComparer.OrdinalIgnoreCase );
+				var map = new Dictionary<string, object>( StringComparer.Ordinal );
 				foreach ( var property in element.EnumerateObject() )
 					map[property.Name] = JsonElementToObject( property.Value );
 				return map;
@@ -321,6 +325,13 @@ public static partial class SyncToolConfig
 			default:
 				return null;
 		}
+	}
+
+	private static Dictionary<string, object> CaseInsensitiveCopy( Dictionary<string, object> source )
+	{
+		var copy = new Dictionary<string, object>( StringComparer.OrdinalIgnoreCase );
+		foreach ( var pair in source ) copy[pair.Key] = pair.Value;
+		return copy;
 	}
 
 	private static Dictionary<string, object> UnwrapSourceBody( string kind, Dictionary<string, object> source )
@@ -595,7 +606,7 @@ public static partial class SyncToolConfig
 
 	private static Dictionary<string, object> ParseYamlMap( string absolutePath, string[] lines, ref int index, int indent )
 	{
-		var result = new Dictionary<string, object>( StringComparer.OrdinalIgnoreCase );
+		var result = new Dictionary<string, object>( StringComparer.Ordinal );
 
 		while ( index < lines.Length )
 		{
@@ -630,7 +641,7 @@ public static partial class SyncToolConfig
 			else if ( string.IsNullOrEmpty( valueText ) )
 			{
 				var child = ParseYamlNode( absolutePath, lines, ref index, indent + 2 );
-				result[key] = child ?? new Dictionary<string, object>( StringComparer.OrdinalIgnoreCase );
+				result[key] = child ?? new Dictionary<string, object>( StringComparer.Ordinal );
 			}
 			else
 			{
@@ -669,7 +680,7 @@ public static partial class SyncToolConfig
 			if ( string.IsNullOrEmpty( itemText ) )
 			{
 				var child = ParseYamlNode( absolutePath, lines, ref index, indent + 2 );
-				result.Add( child ?? new Dictionary<string, object>( StringComparer.OrdinalIgnoreCase ) );
+				result.Add( child ?? new Dictionary<string, object>( StringComparer.Ordinal ) );
 			}
 			else if ( TryParseInlineMapEntry( itemText, out var inlineMap ) )
 			{
@@ -754,7 +765,7 @@ public static partial class SyncToolConfig
 	private static object ParseYamlScalar( string value )
 	{
 		if ( value == "{}" )
-			return new Dictionary<string, object>( StringComparer.OrdinalIgnoreCase );
+			return new Dictionary<string, object>( StringComparer.Ordinal );
 		if ( value == "[]" )
 			return new List<object>();
 		if ( LooksLikeFlowMap( value ) )
@@ -787,11 +798,11 @@ public static partial class SyncToolConfig
 		if ( colon <= 0 )
 			return false;
 
-		map = new Dictionary<string, object>( StringComparer.OrdinalIgnoreCase );
+		map = new Dictionary<string, object>( StringComparer.Ordinal );
 		var key = value[..colon].Trim();
 		var valueText = value[(colon + 1)..].Trim();
 		map[key] = string.IsNullOrEmpty( valueText )
-			? new Dictionary<string, object>( StringComparer.OrdinalIgnoreCase )
+			? new Dictionary<string, object>( StringComparer.Ordinal )
 			: ParseYamlScalar( valueText );
 		return true;
 	}
@@ -811,7 +822,7 @@ public static partial class SyncToolConfig
 
 	private static Dictionary<string, object> ParseFlowMap( string value )
 	{
-		var result = new Dictionary<string, object>( StringComparer.OrdinalIgnoreCase );
+		var result = new Dictionary<string, object>( StringComparer.Ordinal );
 		var inner = value[1..^1].Trim();
 		if ( string.IsNullOrWhiteSpace( inner ) )
 			return result;

@@ -432,6 +432,18 @@ public partial class SyncToolWindow : PaintedWindow
 		Paint.DrawText( new Rect( pad, y, w, 14 ), isHosted ? $"Server: {baseUrl}" : $"Server: {baseUrl} (self-hosted)", TextFlag.LeftCenter );
 		y += 18;
 
+		// Game code refuses some hosts. This only warns; the Sync Tool itself still works.
+		if ( SyncToolConfig.IsGameClientReachable( baseUrl, SyncToolConfig.ApiVersion ) == false )
+		{
+			Paint.SetDefaultFont( size: 8 );
+			Paint.SetPen( Color.Orange.WithAlpha( 0.85f ) );
+			Paint.DrawText( new Rect( pad, y, w, 12 ), SyncToolConfig.GameClientUnreachableLine1, TextFlag.LeftCenter );
+			y += 12;
+			Paint.DrawText( new Rect( pad, y, w, 12 ), SyncToolConfig.GameClientUnreachableLine2, TextFlag.LeftCenter );
+			y += 14;
+			Paint.SetDefaultFont( size: 9 );
+		}
+
 		if ( !string.IsNullOrEmpty( SyncToolApi.LastRequestSummary ) )
 		{
 			Paint.SetPen( Color.White.WithAlpha( 0.55f ) );

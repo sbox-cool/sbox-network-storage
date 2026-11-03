@@ -46,6 +46,24 @@ internal static partial class NetworkStorageSecuritySignature
 		return VerifyRsaSha256Pkcs1( digest, signature, modulus, exponent );
 	}
 
+	// Domain label the previous signing key signs over, so a rotation statement cannot be replayed as a config signature.
+	private const string SigningKeyRotationDomain = "sboxcool.network-storage.signing-key-rotation.v1";
+
+	// Verifies a rotation statement against the key it replaces. The signed message is the domain label, a newline, and the
+	// statement's canonical JSON without its own `signature`. Field and expiry checks belong to the caller.
+	public static bool VerifySigningKeyRotation( JsonElement statement, byte[] previousModulus, byte[] previousExponent )
+	{
+		if ( !statement.TryGetProperty( "signature", out var signatureProp ) || signatureProp.ValueKind != JsonValueKind.String )
+			return false;
+
+		var signature = Base64UrlDecode( signatureProp.GetString() );
+		if ( previousModulus.Length < NetworkStorageRsaKey.MinSigningModulusBytes || previousExponent.Length == 0 || signature.Length == 0 )
+			return false;
+
+		var digest = Sha256( Encoding.UTF8.GetBytes( SigningKeyRotationDomain + "\n" + StableStringifyWithoutSignature( statement ) ) );
+		return VerifyRsaSha256Pkcs1( digest, signature, previousModulus, previousExponent );
+	}
+
 	private static bool VerifyRsaSha256Pkcs1( byte[] digest, byte[] signature, byte[] modulus, byte[] exponent )
 	{
 		var keyBytes = modulus.Length;

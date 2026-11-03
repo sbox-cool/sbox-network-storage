@@ -358,7 +358,7 @@ public static class NetworkStoragePackageInfo
 		// Fire event when status materially changes
 		if ( IsOutdatedRevision != wasOutdated || GraceExpired != wasGraceExpired || RevisionAction != wasAction )
 		{
-			OnRevisionStatusChanged?.Invoke( new RevisionStatusInfo
+			NetworkStorage.InvokeSafely( OnRevisionStatusChanged, new RevisionStatusInfo
 			{
 				IsOutdated = IsOutdatedRevision,
 				GraceExpired = GraceExpired,
@@ -375,7 +375,7 @@ public static class NetworkStoragePackageInfo
 				PolicyShowPopupOnce = PolicyShowPopupOnce,
 				PolicyShowDefaultMessage = PolicyShowDefaultMessage,
 				EnforcementMode = EnforcementMode
-			} );
+			}, nameof( OnRevisionStatusChanged ) );
 		}
 	}
 	
@@ -403,7 +403,7 @@ public static class NetworkStoragePackageInfo
 		// Fire the general revision status change event so existing handlers see the update
 		if ( IsOutdatedRevision != wasOutdated || GraceExpired != wasGraceExpired )
 		{
-			OnRevisionStatusChanged?.Invoke( new RevisionStatusInfo
+			NetworkStorage.InvokeSafely( OnRevisionStatusChanged, new RevisionStatusInfo
 			{
 				IsOutdated = IsOutdatedRevision,
 				GraceExpired = GraceExpired,
@@ -412,7 +412,7 @@ public static class NetworkStoragePackageInfo
 				Message = RevisionMessage,
 				PlayerRevision = RuntimeRevisionId,
 				CurrentRevision = ServerCurrentRevision,
-			} );
+			}, nameof( OnRevisionStatusChanged ) );
 		}
 	}
 }

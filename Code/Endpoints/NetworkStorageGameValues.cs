@@ -22,18 +22,22 @@ public static partial class NetworkStorage
 			var headers = BuildPublicHeaders();
 			if ( NetworkStorageLogConfig.LogRequests )
 				NetLog.Request( "game-values", $"GET {ApiRoot}/values/{ProjectId}" );
-			var result = await RequestStringAsync(url, "GET", null, headers);
+			var reply = await SendRawAsync( url, "GET", null, headers );
 			if ( NetworkStorageLogConfig.LogResponses )
-				Log.Info( $"[NetworkStorage] game-values → {TruncateJson( result, 300 )}" );
-			var parsed = ParseResponse( "game-values", result );
+				Log.Info( $"[NetworkStorage] game-values → HTTP {reply.Status} {TruncateJson( reply.Body ?? reply.TransportError ?? "", 300 )}" );
+			if ( !reply.Ok )
+			{
+				RecordReplyFailure( "game-values", reply, "REQUEST_FAILED" );
+				return null;
+			}
+			var parsed = ParseResponse( "game-values", reply.Body );
 			if ( parsed.HasValue && NetworkStorageLogConfig.LogResponses )
-				NetLog.Response( "game-values", $"OK ({result.Length} bytes)" );
+				NetLog.Response( "game-values", $"OK ({(reply.Body ?? "").Length} bytes)" );
 			return parsed;
 		}
 		catch ( Exception ex )
 		{
-			RecordEndpointError( "game-values", ex is System.Net.Http.HttpRequestException { StatusCode: System.Net.HttpStatusCode.TooManyRequests }
-				? "RATE_LIMITED" : "REQUEST_FAILED", ex.Message );
+			RecordEndpointError( "game-values", "REQUEST_FAILED", ex.Message );
 			if ( NetworkStorageLogConfig.LogErrors )
 			{
 				Log.Warning( $"[NetworkStorage] GameValues: {ex.Message}" );

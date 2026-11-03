@@ -38,7 +38,7 @@ public static class NetworkStorageExtensions
 	public static List<string> ReadStringList( this JsonElement el, string key )
 	{
 		var list = new List<string>();
-		if ( !el.TryGetProperty( key, out var arr ) || arr.ValueKind != JsonValueKind.Array )
+		if ( el.ValueKind != JsonValueKind.Object || !el.TryGetProperty( key, out var arr ) || arr.ValueKind != JsonValueKind.Array )
 			return list;
 
 		foreach ( var item in arr.EnumerateArray() )
@@ -56,7 +56,7 @@ public static class NetworkStorageExtensions
 	public static Dictionary<string, T> ReadDictionary<T>( this JsonElement el, string key, Func<JsonElement, T> converter )
 	{
 		var dict = new Dictionary<string, T>();
-		if ( !el.TryGetProperty( key, out var obj ) || obj.ValueKind != JsonValueKind.Object )
+		if ( el.ValueKind != JsonValueKind.Object || !el.TryGetProperty( key, out var obj ) || obj.ValueKind != JsonValueKind.Object )
 			return dict;
 
 		foreach ( var prop in obj.EnumerateObject() )
@@ -74,7 +74,7 @@ public static class NetworkStorageExtensions
 	public static List<T> ReadList<T>( this JsonElement el, string key, Func<JsonElement, T> converter )
 	{
 		var list = new List<T>();
-		if ( !el.TryGetProperty( key, out var arr ) || arr.ValueKind != JsonValueKind.Array )
+		if ( el.ValueKind != JsonValueKind.Object || !el.TryGetProperty( key, out var arr ) || arr.ValueKind != JsonValueKind.Array )
 			return list;
 
 		foreach ( var item in arr.EnumerateArray() )

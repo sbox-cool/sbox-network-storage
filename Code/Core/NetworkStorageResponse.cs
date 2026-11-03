@@ -62,7 +62,11 @@ public static partial class NetworkStorage
 			return null;
 		}
 
-		// ── Error detection (multiple patterns for robustness) ──
+		// Only an object carries envelope fields. Arrays and scalars are game data and are returned unchanged.
+		if ( json.ValueKind != JsonValueKind.Object )
+			return json;
+
+		// ── Error detection ──
 
 		// Update revision status before error handling too. Revision-expired
 		// responses intentionally return ok:false but still carry _revisionStatus.
@@ -74,52 +78,28 @@ public static partial class NetworkStorage
 			if ( statusData.HasValue && statusData.Value.RevisionOutdated )
 			{
 				firedRevisionStatusOutdated = true;
-				OnRevisionOutdated?.Invoke( statusData.Value );
+				InvokeSafely( OnRevisionOutdated, statusData.Value, nameof( OnRevisionOutdated ) );
 			}
 		}
 
-		// 1) Explicit ok: false
-		if ( json.TryGetProperty( "ok", out var ok ) && ok.ValueKind == JsonValueKind.False )
+		// ok:true marks the body as data, so error-shaped fields inside it are not failures.
+		var okKind = json.TryGetProperty( "ok", out var ok ) ? ok.ValueKind : JsonValueKind.Undefined;
+
+		// 1) Explicit ok: false, or an error object / error string without ok:true
+		if ( okKind == JsonValueKind.False ||
+			( okKind != JsonValueKind.True && json.TryGetProperty( "error", out var errProp ) &&
+				( errProp.ValueKind == JsonValueKind.Object || errProp.ValueKind == JsonValueKind.String ) ) )
 		{
 			LogServerError( slug, json );
 			return null;
 		}
 
-		// 2) Error object without ok field (legacy / edge cases)
-		if ( json.TryGetProperty( "error", out var errProp ) )
+		// 2) HTTP error status forwarded as { status: 4xx/5xx }
+		if ( okKind != JsonValueKind.True && json.TryGetProperty( "status", out var status ) &&
+			status.ValueKind == JsonValueKind.Number && status.TryGetInt32( out var statusCode ) && statusCode >= 400 )
 		{
-			// { error: { code, message } } — structured error
-			if ( errProp.ValueKind == JsonValueKind.Object )
-			{
-				// Only treat as error if there's no ok:true (some responses include error metadata alongside success)
-				if ( !json.TryGetProperty( "ok", out var okCheck ) || okCheck.ValueKind != JsonValueKind.True )
-				{
-					LogServerError( slug, json );
-					return null;
-				}
-			}
-			// { error: "string message" } — simple error
-			else if ( errProp.ValueKind == JsonValueKind.String )
-			{
-				if ( NetworkStorageLogConfig.LogErrors )
-				{
-					Log.Warning( $"[NetworkStorage] {slug}: {errProp.GetString()}" );
-					NetLog.Error( slug, errProp.GetString() );
-				}
-				RecordEndpointError( slug, errProp.GetString() ?? "UNKNOWN", "" );
-				return null;
-			}
-		}
-
-		// 3) HTTP error status forwarded as { status: 4xx/5xx }
-		if ( json.TryGetProperty( "status", out var status ) && status.ValueKind == JsonValueKind.Number )
-		{
-			var statusCode = status.GetInt32();
-			if ( statusCode >= 400 )
-			{
-				LogServerError( slug, json );
-				return null;
-			}
+			LogServerError( slug, json );
+			return null;
 		}
 
 		// Check for load-profile revision block and fire outdated event
@@ -130,8 +110,8 @@ public static partial class NetworkStorage
 				NetworkStorage.FireRevisionOutdated( data.Value );
 		}
 
-		// Server wraps endpoint responses in { ok, body, timing } — unwrap body if present
-		if ( json.TryGetProperty( "body", out var body ) && body.ValueKind == JsonValueKind.Object )
+		// Server wraps endpoint responses in { ok, body, timing }. Unwrap only that envelope; any other body is data.
+		if ( okKind == JsonValueKind.True && json.TryGetProperty( "timing", out _ ) && json.TryGetProperty( "body", out var body ) )
 			return body;
 
 		return json;
@@ -163,6 +143,22 @@ public static partial class NetworkStorage
 			ServerTime = serverTime
 		};
 		NetworkStorageAnalyticsRuntime.RecordEndpointDiagnostic( slug, ok: false, code: safeCode, message: safeMessage );
+	}
+
+	/// <summary>
+	/// Records a validation error under the call's key and under its code (<c>INVALID_ENDPOINT</c>, <c>INVALID_QUERY</c>,
+	/// <c>CAPABILITY_UNAVAILABLE</c>), so a call without a usable key, such as a blank endpoint reference, stays readable.
+	/// </summary>
+	private static void RecordEndpointErrorUnderCode( string slug, string code, string message )
+	{
+		if ( string.IsNullOrWhiteSpace( slug ) )
+		{
+			RecordEndpointError( code, code, message );
+			return;
+		}
+
+		RecordEndpointError( slug, code, message );
+		_lastEndpointErrors[code] = new EndpointErrorInfo { Code = code, Message = message ?? "" };
 	}
 
 	private sealed class EndpointErrorInfo

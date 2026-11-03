@@ -63,7 +63,7 @@ public class NetworkStorageRateLimitTests
 		var received = new List<string>();
 		var sent = new List<HttpContent>();
 
-		var body = await NetworkStorage.SendWithRetriesAsync( "POST", () => new StringContent( payload ),
+		var reply = await NetworkStorage.SendWithRetriesAsync( "POST", () => new StringContent( payload ),
 			async content =>
 			{
 				// Like the engine, each send consumes and disposes the request body it was given.
@@ -76,7 +76,8 @@ public class NetworkStorageRateLimitTests
 					: new HttpResponseMessage( HttpStatusCode.OK ) { Content = new StringContent( accepted ) };
 			} );
 
-		Assert.AreEqual( accepted, body );
+		Assert.AreEqual( 200, reply.Status );
+		Assert.AreEqual( accepted, reply.Body );
 		Assert.AreEqual( 2, received.Count );
 		Assert.AreEqual( payload, received[0] );
 		Assert.AreEqual( payload, received[1] );

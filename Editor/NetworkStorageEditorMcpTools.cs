@@ -47,7 +47,7 @@ public static class NetworkStorageEditorMcpTools
 			};
 		}
 
-		var httpAllowed = HttpAllowedFor( SyncToolConfig.BaseUrl, SyncToolConfig.ApiVersion );
+		var httpAllowed = SyncToolConfig.IsGameClientReachable( SyncToolConfig.BaseUrl, SyncToolConfig.ApiVersion );
 
 		return new
 		{
@@ -486,18 +486,6 @@ public static class NetworkStorageEditorMcpTools
 		el.ValueKind == JsonValueKind.Object && el.TryGetProperty( prop, out var v )
 			? JsonNode.Parse( v.GetRawText() )
 			: null;
-
-	private static bool? HttpAllowedFor( string baseUrl, string apiVersion )
-	{
-		try
-		{
-			return Http.IsAllowed( new Uri( $"{baseUrl}/{apiVersion}/server-info" ) );
-		}
-		catch ( Exception )
-		{
-			return null;
-		}
-	}
 
 	private static Dictionary<string, object> ScalarFields( JsonElement el )
 	{

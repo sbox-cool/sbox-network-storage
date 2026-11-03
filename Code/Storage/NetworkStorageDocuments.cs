@@ -9,8 +9,10 @@ public static partial class NetworkStorage
 	// ── Collections ──
 
 	/// <summary>
-	/// Read a document from a collection.
-	/// If documentId is null, uses the current player's Steam ID.
+	/// Read a document from a collection and return the stored JSON value exactly as the server sent it. Nothing is
+	/// unwrapped: a top-level array, or a key named <c>ok</c>, <c>error</c> or <c>body</c>, is document data.
+	/// If documentId is null, uses the current player's Steam ID. Returns null when the document is missing or the request
+	/// failed; the reason is reported by <see cref="TryGetLastEndpointError"/> under "storage".
 	/// </summary>
 	public static async Task<JsonElement?> GetDocument( string collectionId, string documentId = null )
 	{
@@ -23,9 +25,10 @@ public static partial class NetworkStorage
 		{
 			return await GetDocumentViaProxy( collectionId, documentId );
 		}
+
+		var docId = documentId ?? Game.SteamId.ToString();
 		try
 		{
-			var docId = documentId ?? Game.SteamId.ToString();
 			var path = $"/storage/{EscapeRouteSegment( ProjectId )}/{EscapeRouteSegment( collectionId )}/{EscapeRouteSegment( docId )}";
 			var usesDedicatedSecret = TryBuildDedicatedStorageHeaders( out var headers );
 			if ( !usesDedicatedSecret )
@@ -38,29 +41,32 @@ public static partial class NetworkStorage
 
 			if ( NetworkStorageLogConfig.LogRequests )
 				NetLog.Request( "storage", $"GET {collectionId}/{docId}" );
-			var result = await RequestStringAsync(url, "GET", null, headers);
+			var reply = await SendRawAsync( url, "GET", null, headers );
+			if ( reply.Status == 404 )
+			{
+				RecordStorageNotFound( $"{collectionId}/{docId}" );
+				return null;
+			}
+			if ( !reply.Ok )
+			{
+				RecordReplyFailure( "storage", reply, "REQUEST_FAILED" );
+				return null;
+			}
+			if ( !TryReadRawDocument( reply, out var document, out var code, out var message ) )
+			{
+				RecordFailure( "storage", code, message );
+				return null;
+			}
 			if ( NetworkStorageLogConfig.LogResponses )
-				Log.Info( $"[NetworkStorage] storage → {TruncateJson( result, 300 )}" );
-			var parsed = ParseResponse( "storage", result );
-			if ( parsed.HasValue && NetworkStorageLogConfig.LogResponses )
-				NetLog.Response( "storage", $"OK ({result.Length} bytes)" );
-			return parsed;
+			{
+				Log.Info( $"[NetworkStorage] storage → {TruncateJson( reply.Body ?? "", 300 )}" );
+				NetLog.Response( "storage", $"OK ({reply.Body?.Length ?? 0} bytes)" );
+			}
+			return document;
 		}
 		catch ( Exception ex )
 		{
-			if ( IsHttpNotFoundException( ex ) )
-			{
-				RecordStorageNotFound( $"{collectionId}/{documentId ?? Game.SteamId.ToString()}" );
-				return null;
-			}
-
-			if ( NetworkStorageLogConfig.LogErrors )
-			{
-				Log.Warning( $"[NetworkStorage] GetDocument: {ex.Message}" );
-				NetLog.Error( "storage", ex.Message );
-			}
-			RecordEndpointError( "storage", ex is System.Net.Http.HttpRequestException { StatusCode: System.Net.HttpStatusCode.TooManyRequests }
-				? "RATE_LIMITED" : "REQUEST_FAILED", ex.Message );
+			RecordFailure( "storage", "REQUEST_FAILED", ex.Message );
 			return null;
 		}
 	}

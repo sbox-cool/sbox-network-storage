@@ -6,6 +6,12 @@ namespace Sandbox;
 
 public static partial class NetworkStorage
 {
+	/// <summary>A relayed endpoint call. Body is the server's reply text; Parsed is set only for the same-account shortcut.</summary>
+	internal readonly record struct EndpointRead( string Slug, string Body, JsonElement? Parsed, string ErrorCode, string ErrorMessage );
+
+	/// <summary>A relayed document read. DocumentJson is the stored JSON, unchanged.</summary>
+	internal readonly record struct DocumentRead( string DocumentJson, string ErrorCode, string ErrorMessage );
+
 	// ── Host "On Behalf Of" Methods ──
 
 	/// <summary>
@@ -16,13 +22,36 @@ public static partial class NetworkStorage
 	/// </summary>
 	public static async Task<JsonElement?> CallEndpointAs( string targetSteamId, string clientToken, string slug, object input = null )
 	{
+		var read = await ReadEndpointAs( targetSteamId, clientToken, slug, input );
+		if ( read.Parsed.HasValue ) return read.Parsed;
+		if ( read.Body is null ) return null;
+
+		// The host has no key for a sealed response, so it relays the ciphertext for the requesting client to open.
+		if ( TryRelaySealedResponse( read.Body, out var relayed ) ) return relayed;
+
+		var parsed = ParseResponse( read.Slug, read.Body );
+		if ( parsed.HasValue && NetworkStorageLogConfig.LogResponses )
+			NetLog.Response( read.Slug, TruncateJson( parsed.Value ) );
+		return parsed;
+	}
+
+	/// <summary>
+	/// Calls an endpoint on behalf of another player and returns the server's reply text unparsed, so a proxy can relay it.
+	/// A failure carries the code and message the host recorded.
+	/// </summary>
+	internal static async Task<EndpointRead> ReadEndpointAs( string targetSteamId, string clientToken, string slug, object input = null )
+	{
 		var endpoint = ResolveEndpointReference( slug );
-		ApplyEndpointReferenceConfiguration( endpoint );
+		if ( !ApplyEndpointReferenceConfiguration( endpoint ) )
+		{
+			RecordInvalidEndpoint( endpoint );
+			return new EndpointRead( slug, null, null, "INVALID_ENDPOINT", $"'{slug}' is not a valid endpoint reference." );
+		}
 		slug = endpoint.Slug;
 
 		EnsureConfigured();
 		ClearLastEndpointError( slug );
-		if ( !await RequireCapabilityAsync( "endpoints", slug ) ) return null;
+		if ( !await RequireCapabilityAsync( "endpoints", slug ) ) return LastEndpointFailure( slug );
 
 		// A client-sealed request must be relayed unchanged, even when both editor instances share a Steam account.
 		var sealedInput = input is JsonElement element && element.ValueKind == JsonValueKind.Object
@@ -31,7 +60,10 @@ public static partial class NetworkStorage
 		{
 			if ( NetworkStorageLogConfig.LogProxy )
 				Log.Info( $"[NetworkStorage] {slug} same-account shortcut (targetSteamId == hostSteamId), calling directly" );
-			return await CallEndpoint( slug, input );
+			var direct = await CallEndpoint( slug, input );
+			return direct.HasValue
+				? new EndpointRead( slug, direct.Value.GetRawText(), direct, null, null )
+				: LastEndpointFailure( slug );
 		}
 
 		string url = null;
@@ -41,7 +73,7 @@ public static partial class NetworkStorage
 			var routePath = $"/endpoints/{ProjectId}/{EscapeRouteSegment( slug )}";
 			var usesDedicatedSecret = ShouldUseDedicatedServerSecret( endpoint );
 			if ( !usesDedicatedSecret && TryRejectDedicatedServerPlayerAuth( slug ) )
-				return null;
+				return LastEndpointFailure( slug );
 
 			var headers = usesDedicatedSecret ? BuildPublicHeaders() : await BuildAuthHeaders();
 			if ( usesDedicatedSecret )
@@ -62,9 +94,10 @@ public static partial class NetworkStorage
 			if ( refusal is not null )
 			{
 				RecordEndpointError( slug, refusal.Code, refusal.Message );
-				return null;
+				return LastEndpointFailure( slug );
 			}
-			string result;
+
+			RawReply reply;
 			if ( input is not null )
 			{
 				bodyJson = JsonSerializer.Serialize( input );
@@ -73,7 +106,7 @@ public static partial class NetworkStorage
 					NetLog.Request( slug, $"POST (as {targetSteamId}) {bodyJson}" );
 					Log.Info( $"[NetworkStorage] {slug} request: POST (as {targetSteamId}) {ApiRoot}{routePath} body={bodyJson}" );
 				}
-				result = await RequestStringAsync(url, "POST", () => Http.CreateJsonContent( input ), headers);
+				reply = await SendRawContentAsync( url, "POST", () => Http.CreateJsonContent( input ), headers );
 			}
 			else
 			{
@@ -83,47 +116,35 @@ public static partial class NetworkStorage
 					var message = $"Encrypted requests are required, and an on-behalf call without input would be sent as GET. Call {slug} from the player's own client, which encrypts its request.";
 					Log.Warning( $"[NetworkStorage] {slug} (as {targetSteamId}): {message}" );
 					RecordEndpointError( slug, "ENCRYPTION_REQUIRES_POST", message );
-					return null;
+					return LastEndpointFailure( slug );
 				}
 				if ( NetworkStorageLogConfig.LogRequests )
 				{
 					NetLog.Request( slug, $"GET (as {targetSteamId})" );
 					Log.Info( $"[NetworkStorage] {slug} request: GET (as {targetSteamId}) {ApiRoot}/endpoints/{ProjectId}/{slug}" );
 				}
-				result = await RequestStringAsync(url, "GET", null, headers);
+				reply = await SendRawAsync( url, "GET", null, headers );
 			}
 
-			if ( NetworkStorageLogConfig.LogResponses )
-				Log.Info( $"[NetworkStorage] {slug} (as {targetSteamId}) → {result}" );
-			// The host has no key for a sealed response, so it relays the ciphertext for the requesting client to open.
-			if ( TryRelaySealedResponse( result, out var relayed ) )
-				return relayed;
-			var parsed = ParseResponse( slug, result );
-			if ( parsed.HasValue && NetworkStorageLogConfig.LogResponses )
-				NetLog.Response( slug, TruncateJson( parsed.Value ) );
-			return parsed;
-		}
-		catch ( System.Net.Http.HttpRequestException httpEx )
-		{
-			var status = httpEx.StatusCode.HasValue ? $"{(int)httpEx.StatusCode.Value} {httpEx.StatusCode.Value}" : "unknown";
-			if ( NetworkStorageLogConfig.LogErrors )
+			if ( reply.Ok )
 			{
-				Log.Warning( $"[NetworkStorage] {slug} (as {targetSteamId}) FAILED — HTTP {status}" );
-				Log.Warning( $"[NetworkStorage]   URL: {ApiRoot}/endpoints/{ProjectId}/{slug}" );
-				Log.Warning( $"[NetworkStorage]   Method: {( input is not null ? "POST" : "GET" )}" );
-				if ( bodyJson != null )
-					Log.Warning( $"[NetworkStorage]   Body: {bodyJson}" );
-				NetLog.Error( slug, $"HTTP {status}" );
+				if ( NetworkStorageLogConfig.LogResponses )
+					Log.Info( $"[NetworkStorage] {slug} (as {targetSteamId}) → {reply.Body}" );
+				return new EndpointRead( slug, reply.Body, null, null, null );
 			}
-			RecordEndpointError( slug, httpEx.StatusCode == System.Net.HttpStatusCode.TooManyRequests ? "RATE_LIMITED" : "HTTP_ERROR", $"HTTP {status}" );
-			return null;
+
+			// A server error body names its own failure, so relay it. Otherwise report the host's failure.
+			RecordReplyFailure( slug, reply, "HTTP_ERROR" );
+			return !string.IsNullOrEmpty( reply.Body ) && ReadErrorCode( reply.Body ) is not null
+				? new EndpointRead( slug, reply.Body, null, null, null )
+				: LastEndpointFailure( slug );
 		}
 		catch ( Exception ex )
 		{
 			if ( NetworkStorageLogConfig.LogErrors )
 			{
 				Log.Warning( $"[NetworkStorage] {slug} (as {targetSteamId}) FAILED — {ex.Message}" );
-				Log.Warning( $"[NetworkStorage]   URL: {ApiRoot}/endpoints/{ProjectId}/{slug}" );
+				Log.Warning( $"[NetworkStorage]   URL: {url}" );
 				Log.Warning( $"[NetworkStorage]   Method: {( input is not null ? "POST" : "GET" )}" );
 				if ( bodyJson != null )
 					Log.Warning( $"[NetworkStorage]   Body: {bodyJson}" );
@@ -131,8 +152,15 @@ public static partial class NetworkStorage
 				NetLog.Error( slug, ex.Message );
 			}
 			RecordEndpointError( slug, "REQUEST_FAILED", ex.Message );
-			return null;
+			return LastEndpointFailure( slug );
 		}
+	}
+
+	/// <summary>The error recorded for a slug as a failed read. Falls back to REQUEST_FAILED when nothing was recorded.</summary>
+	private static EndpointRead LastEndpointFailure( string slug )
+	{
+		TryGetLastEndpointError( slug, out var code, out var message );
+		return new EndpointRead( slug, null, null, code ?? "REQUEST_FAILED", message ?? "The endpoint call failed." );
 	}
 
 	/// <summary>
@@ -141,16 +169,27 @@ public static partial class NetworkStorage
 	/// </summary>
 	public static async Task<JsonElement?> GetDocumentAs( string targetSteamId, string clientToken, string collectionId, string documentId = null )
 	{
+		var read = await ReadDocumentAs( targetSteamId, clientToken, collectionId, documentId );
+		return read.DocumentJson is null ? null : JsonSerializer.Deserialize<JsonElement>( read.DocumentJson );
+	}
+
+	/// <summary>
+	/// Reads a document on behalf of another player and returns the stored JSON unchanged, so a proxy can relay it.
+	/// Stored data is not a server reply, so it is never unwrapped or checked for ok/error fields.
+	/// </summary>
+	internal static async Task<DocumentRead> ReadDocumentAs( string targetSteamId, string clientToken, string collectionId, string documentId = null )
+	{
 		EnsureConfigured();
 		ClearLastEndpointError( "storage" );
-		if ( !await RequireCapabilityAsync( "records", "storage" ) ) return null;
+		if ( !await RequireCapabilityAsync( "records", "storage" ) ) return LastStorageFailure();
 
 		// Same-machine shortcut: same Steam account as host, call directly
 		if ( targetSteamId == Game.SteamId.ToString() )
 		{
 			if ( NetworkStorageLogConfig.LogProxy )
 				Log.Info( $"[NetworkStorage] storage/{collectionId} same-account shortcut, calling directly" );
-			return await GetDocument( collectionId, documentId );
+			var direct = await GetDocument( collectionId, documentId );
+			return direct.HasValue ? new DocumentRead( direct.Value.GetRawText(), null, null ) : LastStorageFailure();
 		}
 
 		try
@@ -159,7 +198,7 @@ public static partial class NetworkStorage
 			var path = $"/storage/{EscapeRouteSegment( ProjectId )}/{EscapeRouteSegment( collectionId )}/{EscapeRouteSegment( docId )}";
 			var usesDedicatedSecret = TryBuildDedicatedStorageHeaders( out var headers );
 			if ( !usesDedicatedSecret && TryRejectDedicatedServerPlayerAuth( "storage" ) )
-				return null;
+				return LastStorageFailure();
 
 			if ( usesDedicatedSecret )
 			{
@@ -177,29 +216,39 @@ public static partial class NetworkStorage
 
 			if ( NetworkStorageLogConfig.LogRequests )
 				NetLog.Request( "storage", $"GET (as {targetSteamId}) {collectionId}/{docId}" );
-			var result = await RequestStringAsync(url, "GET", null, headers);
+			var reply = await SendRawAsync( url, "GET", null, headers );
+			if ( !reply.Ok )
+			{
+				RecordReplyFailure( "storage", reply, reply.Status == 404 ? "NOT_FOUND" : "REQUEST_FAILED" );
+				return LastStorageFailure();
+			}
+
+			if ( !TryReadRawDocument( reply, out var document, out var code, out var message ) )
+			{
+				RecordEndpointError( "storage", code, message );
+				return new DocumentRead( null, code, message );
+			}
+
 			if ( NetworkStorageLogConfig.LogResponses )
-				Log.Info( $"[NetworkStorage] storage (as {targetSteamId}) → {TruncateJson( result, 300 )}" );
-			var parsed = ParseResponse( "storage", result );
-			if ( parsed.HasValue && NetworkStorageLogConfig.LogResponses )
-				NetLog.Response( "storage", $"OK ({result.Length} bytes)" );
-			return parsed;
+				Log.Info( $"[NetworkStorage] storage (as {targetSteamId}) → {TruncateJson( reply.Body, 300 )}" );
+			return new DocumentRead( document.GetRawText(), null, null );
 		}
 		catch ( Exception ex )
 		{
-			if ( IsHttpNotFoundException( ex ) )
-			{
-				RecordStorageNotFound( $"{collectionId}/{documentId ?? targetSteamId}" );
-				return null;
-			}
-
 			if ( NetworkStorageLogConfig.LogErrors )
 			{
-				Log.Warning( $"[NetworkStorage] GetDocumentAs({targetSteamId}): {ex.Message}" );
+				Log.Warning( $"[NetworkStorage] ReadDocumentAs({targetSteamId}): {ex.Message}" );
 				NetLog.Error( "storage", ex.Message );
 			}
 			RecordEndpointError( "storage", "REQUEST_FAILED", ex.Message );
-			return null;
+			return LastStorageFailure();
 		}
+	}
+
+	/// <summary>The error recorded for the storage slot as a failed read. Falls back to REQUEST_FAILED when nothing was recorded.</summary>
+	private static DocumentRead LastStorageFailure()
+	{
+		TryGetLastEndpointError( "storage", out var code, out var message );
+		return new DocumentRead( null, code ?? "REQUEST_FAILED", message ?? "The document read failed." );
 	}
 }

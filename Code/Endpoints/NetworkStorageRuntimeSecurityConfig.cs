@@ -28,6 +28,22 @@ public static partial class NetworkStorage
 	public static string RuntimeSecurityConfigSource => _runtimeSecurityConfig?.Source ?? "not-loaded";
 	public static string LastSecurityConfigDiagnostics => BuildSecurityConfigDiagnostics();
 
+	// Read-only. Returns true with the stable error code and remediation text when the held security config was refused,
+	// which blocks endpoint calls. It is only reported for the project it was refused for, and it never refreshes,
+	// accepts or resets a config or exposes key material.
+	public static bool TryGetSecurityConfigError( out string code, out string message )
+	{
+		code = "";
+		message = "";
+		var runtime = _runtimeSecurityConfig;
+		if ( runtime is null || runtime.Trusted || string.IsNullOrEmpty( runtime.RefusalCode ) || runtime.ProjectId != ProjectId )
+			return false;
+
+		code = runtime.RefusalCode;
+		message = runtime.RefusalMessage;
+		return true;
+	}
+
 	public static bool IsSecurityConfigMismatchCode( string code )
 		=> !string.IsNullOrWhiteSpace( code )
 			&& code.StartsWith( "SECURITY_", StringComparison.OrdinalIgnoreCase );

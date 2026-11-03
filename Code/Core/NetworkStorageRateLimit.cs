@@ -36,31 +36,65 @@ public static partial class NetworkStorage
 	}
 
 	/// <summary>
-	/// Seconds to wait before retrying: the Retry-After header, else the body's <c>retryAfterSec</c>, else the default.
-	/// A header or body value that is missing, negative or not a number is ignored.
+	/// True for a 503 that carries Retry-After on a read: the server's own "try again" signal. Writes never retry here,
+	/// because the server cannot tell from a 503 whether the earlier attempt was applied.
+	/// </summary>
+	internal static bool IsRetryableUnavailable( string method, int statusCode, string retryAfterHeader )
+		=> statusCode == 503 && !string.IsNullOrWhiteSpace( retryAfterHeader ) && string.Equals( method, "GET", StringComparison.OrdinalIgnoreCase );
+
+	/// <summary>
+	/// Seconds to wait before retrying: the Retry-After header, else the body's <c>retryAfterSeconds</c> (the field the
+	/// server sends), else the legacy <c>retryAfterSec</c>, else the default. A value that is missing, negative or not a
+	/// number is ignored.
 	/// </summary>
 	internal static double RateLimitDelaySeconds( string retryAfterHeader, string body )
 	{
 		if ( double.TryParse( retryAfterHeader, NumberStyles.Float, CultureInfo.InvariantCulture, out var headerSeconds ) && headerSeconds >= 0 )
 			return headerSeconds;
 
-		var bodySeconds = ReadRoot<double?>( body, root => root.TryGetProperty( "retryAfterSec", out var r ) && r.ValueKind == JsonValueKind.Number && r.TryGetDouble( out var d ) ? d : null, null );
+		var bodySeconds = ReadBodySeconds( body, "retryAfterSeconds" ) ?? ReadBodySeconds( body, "retryAfterSec" );
 		return bodySeconds is >= 0 ? bodySeconds.Value : DefaultRateLimitWaitSeconds;
 	}
+
+	private static double? ReadBodySeconds( string body, string property )
+		=> ReadRoot<double?>( body, root => root.TryGetProperty( property, out var r ) && r.ValueKind == JsonValueKind.Number && r.TryGetDouble( out var d ) && d >= 0 ? d : null, null );
 
 	private static string RetryAfterHeader( HttpResponseMessage response )
 		=> response.Headers.TryGetValues( "Retry-After", out var values ) ? values.FirstOrDefault() : null;
 
-	/// <summary>The error code of a JSON error body: <c>error.code</c> or a plain <c>error</c> string.</summary>
+	/// <summary>
+	/// The error code of a JSON error body: <c>error.code</c>, or a plain <c>error</c> string when that string is a code
+	/// token (UPPER_SNAKE). A sentence in <c>error</c> is a message, never a code.
+	/// </summary>
 	private static string ReadErrorCode( string body )
 		=> ReadRoot<string>( body, root =>
 		{
 			if ( !root.TryGetProperty( "error", out var error ) ) return null;
-			if ( error.ValueKind == JsonValueKind.String ) return error.GetString();
+			if ( error.ValueKind == JsonValueKind.String ) return IsErrorCodeToken( error.GetString() ) ? error.GetString() : null;
 			return error.ValueKind == JsonValueKind.Object && error.TryGetProperty( "code", out var code ) && code.ValueKind == JsonValueKind.String
 				? code.GetString()
 				: null;
 		}, null );
+
+	/// <summary>
+	/// The human message of a JSON error body: <c>error.message</c>, a sentence in <c>error</c> that is not a code, the
+	/// top-level <c>message</c>, or <c>detail</c>. Null when none is present or the value is blank.
+	/// </summary>
+	private static string ReadErrorMessage( string body )
+	{
+		var text = ReadRoot<string>( body, root =>
+		{
+			if ( root.TryGetProperty( "error", out var error ) )
+			{
+				if ( error.ValueKind == JsonValueKind.Object && error.TryGetProperty( "message", out var nested ) && nested.ValueKind == JsonValueKind.String )
+					return nested.GetString();
+				if ( error.ValueKind == JsonValueKind.String && !IsErrorCodeToken( error.GetString() ) ) return error.GetString();
+			}
+			if ( root.TryGetProperty( "message", out var message ) && message.ValueKind == JsonValueKind.String ) return message.GetString();
+			return root.TryGetProperty( "detail", out var detail ) && detail.ValueKind == JsonValueKind.String ? detail.GetString() : null;
+		}, null );
+		return string.IsNullOrWhiteSpace( text ) ? null : text;
+	}
 
 	private static T ReadRoot<T>( string body, Func<JsonElement, T> read, T fallback )
 	{

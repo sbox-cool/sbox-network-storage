@@ -10,7 +10,7 @@ public static partial class NetworkStorage
 	private const int SecurityConfigRetryDelaySeconds = 60;
 
 	// A config that was received but cannot be trusted. Code is the stable error code; Message is for logs.
-	private sealed record SecurityConfigRefusal( string Code, string Message );
+	internal sealed record SecurityConfigRefusal( string Code, string Message );
 
 	private static async Task<bool> LoadRuntimeSecurityConfigAsync( string reason, bool forceRefresh )
 	{
@@ -84,7 +84,7 @@ public static partial class NetworkStorage
 				return false;
 			}
 
-			refusal = CheckSecurityConfigTrust( config, out var firstUseKey );
+			refusal = CheckSecurityConfigTrust( config, out var keyToRecord );
 			if ( refusal is not null )
 				return false;
 
@@ -113,8 +113,8 @@ public static partial class NetworkStorage
 				Trusted = true,
 				EncryptionKey = encryptionKey
 			};
-			if ( firstUseKey is not null )
-				RememberTrustedSigningKey( ApiRoot, firstUseKey );
+			if ( keyToRecord is not null )
+				RememberTrustedSigningKey( ApiRoot, keyToRecord );
 			return true;
 		}
 		catch ( Exception ex )
@@ -124,16 +124,17 @@ public static partial class NetworkStorage
 		}
 	}
 
-	// Decides whether a signed config may be used. Returns null when trusted. A key learned on first use is returned in
-	// `firstUse`; the caller records it only after the whole config has been accepted.
-	private static SecurityConfigRefusal CheckSecurityConfigTrust( JsonElement config, out TrustedSigningKey firstUse )
+	// Decides whether a signed config may be used. Returns null when trusted. A key learned on first use, or reached by an
+	// announced rotation, is returned in `keyToRecord`; the caller records it only after the whole config has been accepted.
+	private static SecurityConfigRefusal CheckSecurityConfigTrust( JsonElement config, out TrustedSigningKey keyToRecord )
 	{
-		firstUse = null;
+		keyToRecord = null;
 		if ( !NetworkStorageSecuritySignature.TryReadSigningKey( config, out var modulus, out var exponent ) )
 			return new SecurityConfigRefusal( "ENCRYPTION_CONFIG_UNVERIFIED", "security config has no usable signing key" );
 
 		// The config is verified with the key it carries. A pin, or the key trusted for this API root, must name that key.
 		var embedded = new TrustedSigningKey( NetworkStorageRsaKey.Fingerprint( modulus, exponent ), modulus, exponent );
+		var rotatedFrom = "";
 		if ( SecuritySigningKeyPin.Length > 0 )
 		{
 			if ( embedded.Fingerprint != SecuritySigningKeyPin )
@@ -141,17 +142,28 @@ public static partial class NetworkStorage
 		}
 		else if ( !TrustedSigningKeys.TryGetValue( ApiRoot, out var stored ) )
 		{
-			firstUse = embedded;
+			keyToRecord = embedded;
 		}
 		else if ( stored.Fingerprint != embedded.Fingerprint )
 		{
-			Log.Warning( $"[NetworkStorage] server signing key for {ApiRoot} changed from {stored.Fingerprint} to {embedded.Fingerprint}. Refusing the replacement; verify the server identity before changing its pin or local trust store." );
-			return new SecurityConfigRefusal( "ENCRYPTION_SIGNING_KEY_CHANGED", "security config signing key differs from the key trusted on first use" );
+			// Only a rotation statement signed by the trusted key may move trust. Any other replacement is refused.
+			var refusal = FollowSigningKeyRotations( config, stored, embedded );
+			if ( refusal is not null )
+			{
+				Log.Warning( $"[NetworkStorage] server signing key for {ApiRoot} changed from {stored.Fingerprint} to {embedded.Fingerprint}: {refusal.Message}. Refusing the replacement; verify the server identity before changing its pin or local trust store." );
+				return refusal;
+			}
+
+			rotatedFrom = stored.Fingerprint;
+			keyToRecord = embedded;
 		}
 
-		return NetworkStorageSecuritySignature.VerifySecurityConfigSignature( config, embedded.Modulus, embedded.Exponent )
-			? null
-			: new SecurityConfigRefusal( "ENCRYPTION_CONFIG_UNVERIFIED", "security config signature did not verify with its signing key" );
+		if ( !NetworkStorageSecuritySignature.VerifySecurityConfigSignature( config, embedded.Modulus, embedded.Exponent ) )
+			return new SecurityConfigRefusal( "ENCRYPTION_CONFIG_UNVERIFIED", "security config signature did not verify with its signing key" );
+
+		if ( rotatedFrom.Length > 0 )
+			Log.Info( $"[NetworkStorage] server signing key for {ApiRoot} rotated from {rotatedFrom} to {embedded.Fingerprint} by an announced rotation." );
+		return null;
 	}
 
 	// A received config was refused. A trusted config is kept; otherwise the refusal is recorded so encrypted calls stop
