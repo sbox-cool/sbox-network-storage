@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "generatedAt": "2026-11-06T06:53:51.434Z",
+  "generatedAt": "2026-11-06T15:02:04.969Z",
   "library": {
     "published": {
       "revision": 429205,
@@ -15,8 +15,8 @@
       "committedAt": "2026-11-03T05:35:37Z",
       "ci": {
         "conclusion": "success",
-        "runUrl": "https://github.com/sbox-cool/sbox-network-storage/actions/runs/42029254534",
-        "engine": "sbox-public@7c53b2a4fa32cd1a75a5a32a05b43c737d662d83"
+        "runUrl": "https://github.com/sbox-cool/sbox-network-storage/actions/runs/42217280609",
+        "engine": "sbox-public@5f58ad535a72005c44775840f24b1858e73963b0"
       }
     },
     "pending": [
@@ -44,28 +44,22 @@
   },
   "server": {
     "latestRelease": {
-      "version": "0.5.9",
-      "publishedAt": "2026-11-05T10:13:02Z",
-      "url": "https://github.com/sbox-cool/sbox-network-storage-server/releases/tag/v0.5.9"
+      "version": "0.5.10",
+      "publishedAt": "2026-11-06T09:44:56Z",
+      "url": "https://github.com/sbox-cool/sbox-network-storage-server/releases/tag/v0.5.10"
     },
     "main": {
-      "commit": "ed27d855a42fdfb7d58dd5fa42839a83af952975",
-      "committedAt": "2026-11-05T11:15:33Z"
+      "commit": "4144a0e2a770beda06ee1e6d44352a673e9eb9ad",
+      "committedAt": "2026-11-06T12:10:45Z"
     },
     "pending": [
       {
-        "number": 267,
-        "title": "Prepare 0.5.10 release notes",
-        "mergedAt": "2026-11-05T11:15:33Z",
-        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/267"
-      },
-      {
-        "number": 266,
-        "title": "Export every stored record, ledger entry and global record",
-        "mergedAt": "2026-11-05T11:03:44Z",
-        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/266"
+        "number": 268,
+        "title": "Allow a project to publish no analytics allowlist (hosted parity)",
+        "mergedAt": "2026-11-06T12:10:45Z",
+        "url": "https://github.com/sbox-cool/sbox-network-storage-server/pull/268"
       }
     ],
-    "pendingSince": "2026-11-05T11:03:44Z"
+    "pendingSince": "2026-11-06T12:10:45Z"
   }
 }
