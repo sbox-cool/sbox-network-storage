@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "generatedAt": "2026-11-11T14:27:34.090Z",
+  "generatedAt": "2026-11-11T21:56:33.789Z",
   "library": {
     "published": {
       "revision": 429205,
@@ -40,7 +40,7 @@
       "url": "https://github.com/Facepunch/sbox-public/tree/26.10.27"
     },
     "libraryBehind": true,
-    "daysBehind": 14
+    "daysBehind": 15
   },
   "server": {
     "latestRelease": {
