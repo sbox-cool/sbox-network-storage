@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "generatedAt": "2026-11-11T06:15:03.146Z",
+  "generatedAt": "2026-11-11T14:27:34.090Z",
   "library": {
     "published": {
       "revision": 429205,
@@ -15,8 +15,8 @@
       "committedAt": "2026-11-03T05:35:37Z",
       "ci": {
         "conclusion": "success",
-        "runUrl": "https://github.com/sbox-cool/sbox-network-storage/actions/runs/42819734307",
-        "engine": "sbox-public@c4d97b337ad2246111fd09fa48b5ce4b5e68e37c"
+        "runUrl": "https://github.com/sbox-cool/sbox-network-storage/actions/runs/43017172138",
+        "engine": "sbox-public@dea7c2d29d264e4f82754a60c898cfb3626c7604"
       }
     },
     "pending": [
@@ -44,13 +44,13 @@
   },
   "server": {
     "latestRelease": {
-      "version": "0.5.13",
-      "publishedAt": "2026-11-11T05:32:55Z",
-      "url": "https://github.com/sbox-cool/sbox-network-storage-server/releases/tag/v0.5.13"
+      "version": "0.5.14",
+      "publishedAt": "2026-11-11T07:39:01Z",
+      "url": "https://github.com/sbox-cool/sbox-network-storage-server/releases/tag/v0.5.14"
     },
     "main": {
-      "commit": "5f13c2f270d119b1c58bcf254b4029739f2d2366",
-      "committedAt": "2026-11-11T04:56:29Z"
+      "commit": "1a990276fc373a296e8af3bd9b98fdda9a43e2e1",
+      "committedAt": "2026-11-11T07:11:43Z"
     },
     "pending": [],
     "pendingSince": null
