@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "generatedAt": "2026-11-25T12:51:28.637Z",
+  "generatedAt": "2026-11-25T22:30:27.189Z",
   "library": {
     "published": {
       "revision": 429205,
@@ -14,9 +14,9 @@
       "commit": "085ca2916500aba5715293de9161e17c365cf56d",
       "committedAt": "2026-11-03T05:35:37Z",
       "ci": {
-        "conclusion": "success",
-        "runUrl": "https://github.com/sbox-cool/sbox-network-storage/actions/runs/45422430957",
-        "engine": "sbox-public@d5daa21ac8cd2369ee9f43317aea5989b79ea17b"
+        "conclusion": "failure",
+        "runUrl": "https://github.com/sbox-cool/sbox-network-storage/actions/runs/45638636485",
+        "engine": "sbox-public@7bcda63cc5b1a7e8e859e76d96be8cc59db0b912"
       }
     },
     "pending": [
@@ -35,12 +35,12 @@
   },
   "engine": {
     "latest": {
-      "version": "26.10.27",
-      "date": "2026-10-27T20:08:01Z",
-      "url": "https://github.com/Facepunch/sbox-public/tree/26.10.27"
+      "version": "26.11.24",
+      "date": "2026-11-24T22:12:51Z",
+      "url": "https://github.com/Facepunch/sbox-public/tree/26.11.24"
     },
     "libraryBehind": true,
-    "daysBehind": 28
+    "daysBehind": 1
   },
   "server": {
     "latestRelease": {
