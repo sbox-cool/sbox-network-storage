@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "generatedAt": "2026-11-26T05:01:40.621Z",
+  "generatedAt": "2026-11-26T15:13:21.422Z",
   "library": {
     "published": {
       "revision": 429205,
@@ -15,8 +15,8 @@
       "committedAt": "2026-11-03T05:35:37Z",
       "ci": {
         "conclusion": "failure",
-        "runUrl": "https://github.com/sbox-cool/sbox-network-storage/actions/runs/45638636485",
-        "engine": "sbox-public@7bcda63cc5b1a7e8e859e76d96be8cc59db0b912"
+        "runUrl": "https://github.com/sbox-cool/sbox-network-storage/actions/runs/45837304189",
+        "engine": "sbox-public@1e551e0dcbdc7d120e620d943adba71af037138e"
       }
     },
     "pending": [
